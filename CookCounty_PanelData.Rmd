@@ -1,0 +1,1166 @@
+---
+title: "Revenue Elasticity for Cook County Municipalities"
+author: "Alea Wilbur"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    theme: flatly
+    toc: true
+    toc_float: true
+    df_print: paged
+    code_folding: hide
+---
+
+```{r setup, include = FALSE, message = FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+
+
+library(tidyverse)
+library(DBI)
+#library(data.table)
+#library(ggspatial)
+#library(gstat)
+#library(here)
+#library(httr)
+#library(jsonlite)
+library(ptaxsim)
+#library(sf)
+library(stars)
+#library(glue)
+library(lmtest)
+library(huxtable) # for summ() and regression output formatting
+# Create the DB connection with the default name expected by PTAXSIM functions
+library(jtools)
+library(plm) #for fixed effects
+library(modelsummary)
+
+
+ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "./ptaxsim.db/ptaxsim-2021.0.4.db")
+
+
+#set_summ_defaults(digits = 2, pvals = FALSE, robust = "HC3" )
+
+# made from 3_Exemption_Details.Rmd file.
+pct_res <- read_csv("3_exemption_details_output-residential_percent.csv")
+
+# Data notes for pct_res: 
+# muni av and eav are calculated from the pin data table in ptaxsim. It is BEFORE exemptions and includes any EAV that is above the frozen TIF EAV, frozen EAV, and EAV outside of TIF tax codes.
+# percentages for land use are also before exemptions and do not consider any EAV that would go to a TIF increment
+
+```
+
+From agency.R code in ptaxsim Gitlab "The levy of each jurisdiction is reported by the Cook County Clerk's Office. URL here: <https://www.cookcountyclerkil.gov/service/tax-extension-and-rates>
+
+
+
+Tax system notes:
+
+-   EAV from tax_bill() command is the EAV before exemptions are removed. Think of it like the "starting point" before it is manipulated at all.\
+-   That is different than the EAV from the clerk office on PDFs (which is after exemptions and tif increments)  
+- Exemptions lower tax bills by reducing the equalized assessed value of your property.  
+- Taxing District tax levy / taxable value in the district = District Tax Rate   
+- Number of taxing districts includes any district which has levied at some point in the past and has not been terminated by its governing jurisdiction plus TIFs   
+- Chicago general composite rate does not include special districts such as mosquito abatement, special service areas, or home equity assurance district  
+- PTELL = Property Tax Extension Law Limit.  
+
+- Assessed value as equalized (AVE) = (assessed value \* equalization factor)    
+- People can appeal their assessed values (assessed value is 10% of market value for residential)  
+- Taxable Value of property = Equalized Assessed Value (EAV) = "assessed value as equalized"-exemptions  
+
+
+Goal: Estimate the revenue elasticity of the property tax base.
+
+Theory: Revenue elasticity of the tax base might be equal to zero at least in expected value (all else being equal).
+
+- beta = dtaxlevy/dEAV   
+- Beta = (change in tax levy)/(change in EAV)   
+- (%change/%change=elasticity)  
+
+
+
+Need:
+
+-  Taxable EAV for every taxing body in every year - comes from agency_info dt in ptaxsim. These values are after exemptions are deducted and exclude any eav above the frozen eav in any TIF tax codes. This is the taxable base. 
+
+-   Tax Levy for every taxing body in every year
+    -   Levies = tax extensions. Total dollar amount each taxing agency decides to collect from property owners in its district.
+    
+    
+Fixed Effect Model notes: you must set robust to either "HC1", "HC2", or "HC3" in order to have clustered standard errors. Stata and R have different defaults for robust standard errors so the adjusted R-squared and standard errors are different for coefficients if replicating in R vs Stata.
+
+
+
+# Data Gathering and Cleaning
+
+## Muni districts
+
+```{r agency-dt}
+# has EAV values, extensions by agency_num
+agency_dt <- DBI::dbGetQuery(
+  ptaxsim_db_conn,
+  "SELECT *
+  FROM agency
+  "
+) %>%
+  mutate(first6 = str_sub(agency_num,1,6),
+         first5 = str_sub(agency_num,1,5)
+         ) %>%
+mutate(year = as.character(year))
+
+
+
+# grabs all unique muni names. Would be needed if creating a loop for calculating all munis
+# municipality names and their agency number
+
+
+muni_agency_names <- DBI::dbGetQuery(
+  ptaxsim_db_conn,
+  "SELECT DISTINCT agency_num, agency_name, minor_type
+  FROM agency_info
+  WHERE minor_type = 'MUNI'
+  OR agency_num = '020060000'
+  "
+  ) %>% 
+  mutate(first6 = str_sub(agency_num,1,6),
+         first5 = str_sub(agency_num,1,5)
+         ) %>%
+  select(-minor_type)
+
+
+```
+
+
+```{r triads}
+# took from one of Josh files. Made pivot table of his agencies and their triad 
+# then saved the info as a csv on my computer named muni_agency_triads
+triads <-  read_csv("muni_agency_triads.csv") 
+
+
+# has binary variable for if it was a reassessment year or not. 
+# Manually created based on the 3 year rotation used for reassessments.
+reassessment_years <- read_csv("triad_reassessment_years.csv")
+
+reassessments_long <- reassessment_years %>% pivot_longer(cols = c(`2006`:`2021`), names_to = "year", values_to = "reassess_year")
+
+```
+
+
+```{r}
+# all_taxing_agencies %>% filter(minor_type == "TOWNSHIP")
+
+# North <- c("020010000", "020070000", "020080000", "020090000", "020110000","020130000", "020140000", "020150000", "020160000","020170000", "020200000", "020260000", "020290000" )
+# 
+# South <- c("020020000", "020030000","020040000","020050000", "020060000", "020100000", "020120000", "020180000", "020190000", "020210000", "020220000", "020230000","020240000", "020250000", "020270000", "020280000", "020300000") 
+# 
+# # Chicago townships include Hyde Park, Jefferson, Lake, Lakeview, North Chicago, Rogers Park, South Chicago, West Chicago.
+# Chicago <- c("030210000")
+
+# 
+# muni_agency_names <- muni_agency_names %>% 
+#   mutate(agency_num = as.character(agency_num) )%>%
+#   mutate(
+#     triad = ifelse(agency_num %in% North, "North", "")) %>%
+#   mutate(
+#     triad = ifelse(agency_num %in% South, "South", triad),
+#     triad = ifelse(agency_num %in% Chicago, "Chicago", triad))
+
+
+muni_agency_names <- muni_agency_names %>% left_join(triads)
+
+table(muni_agency_names$triad)
+
+
+```
+
+```{r agency_info-dt}
+# all agency names, numbers, and types
+# includes TIF and non-TIF agencies
+all_taxing_agencies <- DBI::dbGetQuery(
+  ptaxsim_db_conn,
+  "SELECT agency_num, agency_name, major_type, minor_type
+  FROM agency_info
+  "
+)
+
+
+all_taxing_agencies <- all_taxing_agencies %>%
+  mutate(first6 = str_sub(agency_num,1,6),
+        first5 = str_sub(agency_num,1,5)
+         )
+
+
+all_taxing_agencies <- all_taxing_agencies %>%
+left_join(muni_agency_names, by = c("first6", "first5")) %>%
+ rename(muni_name =  agency_name.y,
+        muni_num = agency_num.y,
+        agency_name = agency_name.x,
+        agency_num = agency_num.x) 
+
+```
+
+
+```{r}
+agency_dt <- left_join(agency_dt, all_taxing_agencies, by = c("agency_num", "first5", "first6"))
+
+agency_dt <- left_join(agency_dt, reassessments_long, by = c("triad" = "Triad", "year"))
+
+agency_dt <- left_join( agency_dt, pct_res)
+```
+
+
+
+```{r agency_info-dt2}
+# add taxing agency names and agency type to data table that has eav and extension values
+agency_data <- agency_dt %>% 
+  #right_join(agency_dt, all_taxing_agencies, by = c("first6", "first5", "agency_num")  ) %>%
+  mutate(first2 = str_sub(agency_num, 1,2),
+         last2 = str_sub(agency_num,8,9),
+         in_SSA = ifelse(minor_type == "SSA", 1,0),
+         in_chicago = ifelse(str_detect(agency_name, "CHICAGO"),1,0)) %>%
+  select(-c(cty_dupage_eav:cty_livingston_eav)) 
+
+agency_data <- agency_data %>% 
+  mutate(cty_cook_eav = as.numeric(cty_cook_eav), # EAV after exemptions
+         total_final_levy = as.numeric(total_final_levy), # value that matches Clerk Office PDF for Levy
+         cty_cook_eav = ifelse(cty_cook_eav < 1, NA, cty_cook_eav), # Code as missing so Log() doesn't make -Inf
+         total_final_levy = ifelse(total_final_levy <1, NA, total_final_levy)) %>%
+  mutate(log_eav = log(cty_cook_eav), 
+         log_levy = log(total_final_levy))
+    
+```
+
+
+
+
+- "Cook County is divided into three triads for assessment purposes: (1) Chicago, (2) North (suburban Cook north of North Avenue), and (3) South (suburban Cook south of North Avenue).  One triad is reassessed each year on a rotating basis while the other two are held constant, except for new construction.  For 2020 taxes (payable in 2021) the South triad was reassessed." 
+
+
+# Samples and Models
+
+Simple model was log(levy) \~ log(base) where each observation is an agency-year and the base is the sum of that jurisdiction's taxable eav. (The taxable eav = equalized assessed value - TIF increments - exemptions)
+
+The coefficients would be interpreted as "a x% change in eav leads to a y% change in levy", which is also the elasticity.
+
+
+- plm() uses the entity-demeaned OLS algorithm and does not report dummy coefficients.
+
+- robust has multiple options: HC0 to HC5. Default is set to "HC3 BUT Stata default is to use "HC1"
+
+[Command and package author site for summ() and table formatting](https://jtools.jacob-long.com/reference/summ.lm.html) 
+
+model = "within" is the same as creating dummies for all agencies
+
+
+## All Agencies
+
+```{r}
+# tax base = log(levy)
+# estimate the fixed effects regression with plm()
+
+library(dplyr)
+panel_data <- agency_data %>% 
+  mutate(year =as.factor(year)) %>%
+  filter(minor_type!="TIF") %>%
+  select(year, agency_name, agency_num, major_type, minor_type, 
+         cty_cook_eav, total_final_levy, log_eav, log_levy,# total_final_rate, 
+     # triad, reassess_year, 
+     home_rule_ind ) 
+
+class(panel_data)
+
+panel_data <- pdata.frame(panel_data, index = c("agency_name", "year"))
+
+
+detach("package:dplyr", unload = TRUE)
+
+panel_data$eav_lag1  <- plm::lag(panel_data$log_eav, 1)
+panel_data$eav_lag2  <- plm::lag(panel_data$log_eav, 2)
+
+#panel_data$reassess_lag1 <- plm::lag(panel_data$reassess_year, 1)
+#panel_data$reassess_lag2 <- plm::lag(panel_data$reassess_year, 2)
+
+                  
+
+#write_csv(panel_data, "alltaxingagencies_paneldata_july20.csv")
+
+
+
+all_agencies <- panel_data 
+
+is.pbalanced(all_agencies)
+#all_agencies_balanced <- make.pbalanced(all_agencies)
+# All Agencies-Agency & Year FE"
+all_m1_simple<- plm(log_levy ~ log_eav, 
+             index = c("agency_name", "year"), 
+             model = "within", effect= "twoways",                    
+             data = all_agencies)
+
+all_m1_lags<- plm(log_levy ~ log_eav  + eav_lag1 + eav_lag2, 
+                  na.action = "na.exclude",
+             index = c("agency_name", "year"), 
+             model = "within", effect= "twoways",                    
+             data = all_agencies)
+
+summary(all_m1_lags)
+all_m1<- plm(log_levy ~ log_eav  + eav_lag1 + eav_lag2, 
+             index = c("agency_name", "year"), 
+             model = "within", effect= "twoways",                    
+             data = all_agencies)
+
+
+model_names <- c( all_m1_simple = "All Agencies FE, Naive", all_m1_lags = "Lagged EAV FE"#,# 
+                #  all_m1 = "All Agencies-Lags & HR Ind"#, "All Agencies, All variables"
+                  )
+
+export_summs(all_m1_simple, all_m1_lags,# all_m1, #, all_m1_all_vars, 
+             robust = "HC3",  model.names = model_names, statistics = c(N = "nobs", adj.R2 = "adj.r.squared", R2 = "r.squared"))
+```
+
+
+
+Before the added variables, there were 13,516 observations for All agencies. Now there are 5,735 when all variables are included (drops observations if variables for the model are missing.)
+
+
+```{r eval=FALSE}
+all_m1_all_vars<- plm(log_levy ~ log_eav   + eav_lag1 + eav_lag2 + reassess_year + reassess_lag2 + reassess_lag2 + triad,  
+             index = c("agency_name", "year"), 
+             model = "within", effect= "twoways",                    
+             data = all_agencies)
+
+summary(all_m1_all_vars)
+```
+
+# All Municipalities Together
+
+If you only want the 134 municipalities within Cook County, then use minor_type == MUNI. We probably want this. 
+
+Major_type == Muni includes things paid for by the municipality but separately such as library, health, muni, township, and general assistance taxing agencies.
+
+```{r}
+
+library(dplyr)
+
+minortype_munis <- agency_data %>% 
+   filter(minor_type == "MUNI" | agency_name == "TOWN CICERO")  %>%
+  select(year, agency_name, agency_num, major_type, minor_type, 
+         cty_cook_eav, total_final_levy, log_eav, log_levy, # total_final_rate, 
+     triad, reassess_year, 
+     home_rule_ind )
+
+minortype_munis <- pdata.frame(minortype_munis, index = c("agency_name", "year"))
+
+
+detach("package:dplyr", unload = TRUE)
+
+minortype_munis$eav_lag1  <- plm::lag(minortype_munis$log_eav, 1)
+minortype_munis$eav_lag2  <- plm::lag(minortype_munis$log_eav, 2)
+
+minortype_munis$reassess_lag1 <- plm::lag(minortype_munis$reassess_year, 1)
+minortype_munis$reassess_lag2 <- plm::lag(minortype_munis$reassess_year, 2)
+minortype_munis$eav_lead1 <- plm::lead(minortype_munis$log_eav, 1)
+minortype_munis$eav_lead2 <- plm::lead(minortype_munis$log_eav,2)
+ 
+
+#%>%
+  # select(year, agency_name, agency_num, major_type, minor_type, 
+  #        cty_cook_eav, total_final_levy, log_eav, log_levy, total_final_rate, home_rule_ind, 
+  #        in_chicago, in_SSA, triad, reassess_year)  
+
+# minortype_munis <- pdata.frame(minortype_munis, index = c("agency_name", "year")) %>%
+#  # filter(agency_num %in% muni_agency_names$agency_num  ) %>%
+#   mutate(eav_lag1 = dplyr::lag(log_eav, n = 1),
+#          eav_lag2 = dplyr::lag(log_eav, n = 2),
+#          reassess_lag1 = dplyr::lag(reassess_year, n=1),
+#          reassess_lag2 = dplyr::lag(reassess_year, n=2)
+#      
+#                               )
+
+# write_csv(minortype_munis, "municpalities_paneldata_july18.csv")
+
+
+muni_minor_simple <- plm(log_levy ~ log_eav, 
+         #    index = c("agency_name", "year"), 
+             model = "within", effect= "twoways",                    
+             data = minortype_munis)
+
+muni_minor <- plm(log_levy ~ log_eav + eav_lag1 +eav_lag2, 
+          #   index = c("agency_name", "year"), 
+             model = "within", effect= "twoways",                    
+             data = minortype_munis)
+
+#summary(muni_minor)
+
+muni_minor_nolags <- plm(log_levy ~ log_eav + reassess_year +triad, 
+          #   index = c("agency_name", "year"), 
+             model = "within", effect= "twoways",                    
+             data = minortype_munis)
+
+
+muni_minor_allvars <- plm(log_levy ~ log_eav + reassess_lag1 + reassess_lag2 + reassess_year +eav_lag1 +eav_lag2 +triad, 
+             index = c("agency_name", "year"), 
+             model = "within", effect= "twoways",                    
+             data = minortype_munis)
+
+export_summs(muni_minor_simple, muni_minor, muni_minor_nolags, muni_minor_allvars, statistics = c(N = "nobs",adj.R2 = "adj.r.squared", R2 = "r.squared"))
+```
+
+
+```{r eval=FALSE, include = FALSE}
+#Playing with variable order and plm() command options:
+
+library(dplyr)
+minortype_munis <- panel_data %>% 
+   filter(minor_type == "MUNI" | agency_name == "TOWN CICERO")
+
+#minortype_munis <- pdata.frame(minortype_munis, index = c("agency_name", "year")) 
+detach("package:dplyr", unload = TRUE)
+
+muni_minor_simple1 <- plm(log_levy ~ log_eav, 
+             index = c("agency_name", "year"), 
+             model = "within", effect= "twoways",                    
+             data = minortype_munis)
+
+muni_minor2 <- plm(log_levy ~ log_eav + eav_lag1 +eav_lag2, 
+             index = c("agency_name", "year"), 
+             model = "within", effect= "twoways",                    
+             data = minortype_munis)
+
+summary(muni_minor)
+
+muni_minor_nolags3 <- plm(log_levy ~ log_eav + reassess_year +triad + home_rule_ind, 
+             index = c("agency_name", "year"), 
+             model = "within", effect= "twoways",                    
+             data = minortype_munis)
+summary(muni_minor_nolags
+        )
+
+muni_minor_allvars4 <- plm(log_levy ~ log_eav + reassess_lag1 + reassess_lag2 + reassess_year +eav_lag1 +eav_lag2 +triad + home_rule_ind, 
+             index = c("agency_name", "year"), 
+             model = "within", effect= "twoways",                    
+             data = minortype_munis)
+summary(muni_minor_allvars)
+
+export_summs( muni_minor_simple1, muni_minor2, muni_minor_nolags3, muni_minor_allvars4, statistics = c(N = "nobs", adj.R2 = "adj.r.squared", R2 = "r.squared"))
+```
+
+
+
+### Homerule Municipalities
+
+```{r}
+ 
+library(dplyr)
+
+minortype_munis <- agency_data %>% 
+   filter(minor_type == "MUNI" | agency_name == "TOWN CICERO")  %>%
+  filter(home_rule_ind == 1) %>%
+  select(year, agency_name, agency_num, major_type, minor_type, 
+         cty_cook_eav, total_final_levy, log_eav, log_levy, # total_final_rate, 
+     triad, reassess_year, 
+     home_rule_ind ) %>% 
+  mutate(year = as.factor(year))
+
+homerule_minortype_munis <- pdata.frame(minortype_munis, index = c("agency_name", "year"))
+
+
+detach("package:dplyr", unload = TRUE)
+
+homerule_minortype_munis$eav_lag1  <- plm::lag(homerule_minortype_munis$log_eav, 1)
+homerule_minortype_munis$eav_lag2  <- plm::lag(homerule_minortype_munis$log_eav, 2)
+
+homerule_minortype_munis$reassess_lag1 <- plm::lag(homerule_minortype_munis$reassess_year, 1)
+homerule_minortype_munis$reassess_lag2 <- plm::lag(homerule_minortype_munis$reassess_year, 2)
+
+
+hr_muni_minor_simple <- plm(log_levy ~ log_eav, 
+             index = c("agency_name", "year"), 
+             model = "within", effect= "twoways",                    
+             data = homerule_minortype_munis)
+
+hr_muni_minor <- plm(log_levy ~ log_eav  + eav_lag1 + eav_lag2,# + reassess_year, 
+             index = c("agency_name", "year"), 
+             model = "within", effect= "twoways",                    
+             data = homerule_minortype_munis)
+
+summary(hr_muni_minor)
+```
+
+
+
+__Homerule Munis - No Chicago__
+
+Excludes Chicago to see if coefficients change at all and to see if Chicago is colinear with triads and causing triad variable to be dropped. 
+
+```{r}
+library(dplyr)
+
+homerule_minortype_munis <- agency_data %>% 
+   filter(minor_type == "MUNI" | agency_name == "TOWN CICERO")  %>%
+  filter(home_rule_ind == 1 & triad != "City") %>%
+  select(year, agency_name, agency_num, major_type, minor_type, 
+         cty_cook_eav, total_final_levy, log_eav, log_levy, 
+     triad, reassess_year, 
+     home_rule_ind )
+
+homerule_minortype_munis <- pdata.frame(homerule_minortype_munis, index = c("agency_name", "year"))
+
+
+detach("package:dplyr", unload = TRUE)
+
+homerule_minortype_munis$eav_lag1  <- plm::lag(homerule_minortype_munis$log_eav, 1)
+homerule_minortype_munis$eav_lag2  <- plm::lag(homerule_minortype_munis$log_eav, 2)
+
+homerule_minortype_munis$reassess_lag1 <- plm::lag(homerule_minortype_munis$reassess_year, 1)
+homerule_minortype_munis$reassess_lag2 <- plm::lag(homerule_minortype_munis$reassess_year, 2)
+homerule_minortype_munis$eav_lead1 <- plm::lead(homerule_minortype_munis$log_eav, 1)
+homerule_minortype_munis$eav_lead2 <- plm::lead(homerule_minortype_munis$log_eav,2)
+
+homerule_minortype_munis_nochi <- homerule_minortype_munis
+
+nochi_hr_muni_minor_simple <- plm(log_levy ~ log_eav, 
+             index = c("agency_name", "year"), 
+             model = "within", effect= "twoways",                    
+             data = homerule_minortype_munis_nochi)
+summary(nochi_hr_muni_minor_simple)
+
+nochi_hr_muni_minor1 <- plm(log_levy ~ log_eav + eav_lag1 + eav_lag2,#+ reassess_year + reassess_lag2+reassess_lag1, 
+             index = c("agency_name", "year"), 
+             model = "within", effect= "twoways",                    
+             data = homerule_minortype_munis_nochi)
+
+#summary(nochi_hr_muni_minor1)
+
+nochi_hr_muni_minor2 <- plm(log_levy ~ log_eav + eav_lag1 + eav_lag2 + reassess_year + reassess_lag2+reassess_lag1, 
+             index = c("agency_name", "year"), 
+             model = "within", effect= "twoways",                    
+             data = homerule_minortype_munis_nochi)
+
+#summary(nochi_hr_muni_minor2)
+# homerule_minortype_munis %>% 
+#   ggplot()+
+#   geom_point(aes(x=log(cty_cook_eav), y=log(total_final_levy), col=agency_name), alpha=.5) +
+#   theme(legend.position="none")+
+#   ggtitle("Homerule Muni: Logged EAV vs Logged Levy")
+# 
+# 
+
+model_names <- c("All Munis", "Simple Homerule Muni", "Lagged Homerule Muni", 
+                 "Simple No Chi", "No Chi-Lagged", "No Chi"
+                 )
+
+export_summs(muni_minor_simple ,hr_muni_minor_simple, hr_muni_minor, nochi_hr_muni_minor_simple, nochi_hr_muni_minor1, nochi_hr_muni_minor2, model.names = model_names, statistics = c(N = "nobs", adj.R2 = "adj.r.squared", R2 = "r.squared"))
+```
+
+
+
+### Non-homerule Munis 
+
+```{r filtering-agencies2}
+
+
+library(dplyr)
+
+minortype_munis <- agency_data %>% 
+   filter(minor_type == "MUNI" | agency_name == "TOWN CICERO")  %>%
+    filter(agency_num %in% muni_agency_names$agency_num & 
+           home_rule_ind==0 ) %>%
+  select(year, agency_name, agency_num, major_type, minor_type, 
+         cty_cook_eav, total_final_levy, log_eav, log_levy, # total_final_rate, 
+     triad, reassess_year, 
+     home_rule_ind )
+
+minortype_munis <- pdata.frame(minortype_munis, index = c("agency_name", "year"))
+
+
+detach("package:dplyr", unload = TRUE)
+
+minortype_munis$eav_lag1  <- plm::lag(minortype_munis$log_eav, 1)
+minortype_munis$eav_lag2  <- plm::lag(minortype_munis$log_eav, 2)
+
+minortype_munis$reassess_lag1 <- plm::lag(minortype_munis$reassess_year, 1)
+minortype_munis$reassess_lag2 <- plm::lag(minortype_munis$reassess_year, 2)
+minortype_munis$eav_lead1 <- plm::lead(minortype_munis$log_eav, 1)
+minortype_munis$eav_lead2 <- plm::lead(minortype_munis$log_eav,2)
+ 
+non_homerule_munis <- minortype_munis
+
+nonhr_muni_minor_simple <- plm(log_levy ~ log_eav, 
+             index = c("agency_name", "year"), 
+             model = "within", effect= "twoways", 
+             data = non_homerule_munis)
+
+nonhr_muni_minor <- plm(log_levy ~ log_eav + eav_lag1 + eav_lag2, #+ reassess_year + reassess_lag1 + reassess_lag2 + triad , 
+             index = c("agency_name", "year"), 
+             model = "within", effect= "twoways", 
+             data = non_homerule_munis)
+
+#summary(nonhr_muni_minor_simple)
+#summary(nonhr_muni_minor)
+```
+
+# Municipality Results
+
+
+```{r}
+model_names <- c("Naive All Taxing Agencies","All Taxing Agencies w/ Lag EAV",
+                 "Naive All Municipalities", "All Municipalities",# "All Munis 2",
+                 "Simple Homerule Muni", "Homerule Muni", 
+                 "Simple Non-homerule Muni", "Non-homerule Munis"
+                 )
+# "Simple Homerule Muni - No Chicago", "Homerule General Muni - No Chicago", 
+
+#       nochi_hr_muni_minor_simple,  nochi_hr_muni_minor, 
+export_summs(all_m1_simple, all_m1_lags,# all_m1, 
+             muni_minor_simple, muni_minor,# muni_minor_nolags,
+             hr_muni_minor_simple, hr_muni_minor,
+             nonhr_muni_minor_simple, nonhr_muni_minor,
+model.names = model_names, statistics = c(N = "nobs", adj.R2 = "adj.r.squared", R2 = "r.squared"))
+```
+
+
+
+major_type == "MUNICIPALITY/TOWNSHIP" includes items provided by the municipality but a different taxing agency associated with the "Village of.. " or "City of..". 
+
+> Need to decide if this matters: Stick with the true minor_type=MUNI or combine major_type=MUNICIPALITY taxing agencies using the first 5 or 6 digits of the taxing agency? Probably the first option but just checking.
+
+
+```{r}
+
+nonhr_muni_minor <- plm(log_levy ~ log_eav + eav_lag1 + eav_lag2 + reassess_year + reassess_lag1 + reassess_lag2 + triad , 
+             index = c("agency_name", "year"), 
+             model = "within", effect= "twoways", 
+             data = non_homerule_munis)
+
+
+model_names <- c("Naive All Taxing Agencies","All Taxing Agencies w/ Lag EAV",
+                 "Naive All Municipalities", "All Municipalities",# "All Munis 2",
+                 "Simple Homerule Muni", "Homerule Muni", "No Chicago-HR Munis", "No Chi-HR Munis",
+                 "Simple Non-homerule Muni", "Non-homerule Munis"
+                 )
+# "Simple Homerule Muni - No Chicago", "Homerule General Muni - No Chicago", 
+
+#       nochi_hr_muni_minor_simple,  nochi_hr_muni_minor, 
+export_summs(all_m1_simple, #all_m1_lags,
+             all_m1, 
+             muni_minor_simple, muni_minor,# muni_minor_nolags,
+             hr_muni_minor_simple, hr_muni_minor, nochi_hr_muni_minor1, nochi_hr_muni_minor2, 
+             nonhr_muni_minor_simple, nonhr_muni_minor,
+model.names = model_names, statistics = c(N = "nobs", adj.R2 = "adj.r.squared", R2 = "r.squared"))
+```
+
+
+
+# Schools
+
+```{r}
+library(dplyr)
+
+schools <- agency_data %>% 
+  filter(major_type == "SCHOOL")  %>%
+  select(year, agency_name, agency_num, major_type, minor_type, 
+         cty_cook_eav, total_final_levy, log_eav, log_levy,
+     home_rule_ind )
+
+schools <- pdata.frame(schools, index = c("agency_name", "year"))
+
+
+detach("package:dplyr", unload = TRUE)
+
+schools$eav_lag1  <- plm::lag(schools$log_eav, 1)
+schools$eav_lag2  <- plm::lag(schools$log_eav, 2)
+
+
+
+# based on major_type == Schools. Groups all schools together. 
+
+school_mod_major_simple <- plm(log_levy ~ log_eav  , index = c("agency_name", "year"), 
+                  model = "within",  effect= "twoways", data = schools)
+
+school_mod_major <- plm(log_levy ~ log_eav  + eav_lag1 + eav_lag2 , index = c("agency_name", "year"), 
+                  model = "within",  effect= "twoways", data = schools)
+
+
+school_mod_secondary_simple <- plm(log_levy ~ log_eav, 
+                        subset = minor_type == "SECONDARY", 
+                        index = c("agency_name", "year"), model = "within",  
+                        effect= "twoways", data = schools)
+
+school_mod_secondary <- plm(log_levy ~ log_eav + eav_lag1 + eav_lag2, 
+                        subset = minor_type == "SECONDARY", 
+                        index = c("agency_name", "year"), model = "within",  
+                        effect= "twoways", data = schools)
+
+school_mod_unified <- plm(log_levy ~ log_eav  + eav_lag1 + eav_lag2, 
+                        subset = minor_type == "UNIFIED", 
+                        index = c("agency_name", "year"), model = "within",  
+                        effect= "twoways", data = schools)
+
+school_mod_elementary <- plm(log_levy ~ log_eav + eav_lag1 + eav_lag2,
+                             subset = minor_type == "ELEMENTARY", 
+                             index = c("agency_name", "year"), model = "within",  
+                             effect= "twoways", data = schools)
+
+school_mod_elementary_simple <- plm(log_levy ~ log_eav,
+                             subset = minor_type == "ELEMENTARY", 
+                             index = c("agency_name", "year"), model = "within",  
+                             effect= "twoways", data = schools)
+
+school_mod_comcol <- plm(log_levy ~ log_eav  + eav_lag1 + eav_lag2, index = c("agency_name", "year"), 
+                         subset = minor_type == "COMM COLL", model = "within",  
+                         effect= "twoways", data = schools)
+
+
+
+
+model_names = c("All Schools", "All Schools", "Secondary", "Elementary", "Elementary", "Com. Colleges", "Unified" )
+export_summs(school_mod_major_simple, school_mod_major, 
+             school_mod_secondary, 
+             school_mod_elementary_simple, school_mod_elementary, 
+             school_mod_comcol, school_mod_unified, 
+             model.names = model_names, robust=TRUE, statistics = c(N = "nobs", adjR2 = "adj.r.squared"))
+```
+
+
+# Add additional Variables
+
+All minor type munis (hr and non-hr). Also drops Chicago from model. 
+
+```{r}
+
+library(dplyr)
+
+minortype_munis <- agency_data %>% 
+  filter(clean_name!= "Chicago") %>%
+   filter(minor_type == "MUNI" | agency_name == "TOWN CICERO")  %>%
+  select(year, agency_name, agency_num, major_type, minor_type, 
+         cty_cook_eav, total_final_levy, log_eav, log_levy,  
+     triad, reassess_year, home_rule_ind, perc_residential )
+
+minortype_munis <- pdata.frame(minortype_munis, index = c("agency_name", "year"))
+
+
+detach("package:dplyr", unload = TRUE)
+
+minortype_munis$eav_lag1  <- plm::lag(minortype_munis$log_eav, 1)
+minortype_munis$eav_lag2  <- plm::lag(minortype_munis$log_eav, 2)
+
+minortype_munis$reassess_lag1 <- plm::lag(minortype_munis$reassess_year, 1)
+minortype_munis$reassess_lag2 <- plm::lag(minortype_munis$reassess_year, 2)
+minortype_munis$eav_lead1 <- plm::lead(minortype_munis$log_eav, 1)
+minortype_munis$eav_lead2 <- plm::lead(minortype_munis$log_eav,2)
+ 
+
+muni_minor_simple <- plm(log_levy ~ log_eav, 
+           index = c("agency_name", "year"), 
+             model = "within", effect= "twoways",                    
+             data = minortype_munis)
+
+muni_minor <- plm(log_levy ~ log_eav + eav_lag1 +eav_lag2, 
+            index = c("agency_name", "year"), 
+             model = "within", effect= "twoways",                    
+             data = minortype_munis)
+
+#summary(muni_minor)
+
+muni_minor_nolags <- plm(log_levy ~ log_eav + reassess_year +triad + perc_residential+ home_rule_ind, 
+            index = c("agency_name", "year"), 
+             model = "within", effect= "twoways",                    
+             data = minortype_munis)
+
+
+muni_minor_allvars <- plm(log_levy ~ log_eav + reassess_lag1 + reassess_lag2 + reassess_year +eav_lag1 +eav_lag2 + home_rule_ind + triad + perc_residential , 
+             index = c("agency_name", "year"), 
+             model = "within", effect= "twoways",                    
+             data = minortype_munis)
+
+export_summs(muni_minor_simple, muni_minor, muni_minor_nolags, muni_minor_allvars, statistics = c(N = "nobs", adj.R2 = "adj.r.squared", R2 = "r.squared"))
+```
+
+Home rule municipalities with additional variables:
+
+```{r}
+
+library(dplyr)
+
+minortype_munis <- agency_data %>% 
+  filter(clean_name!= "Chicago" & 
+           home_rule_ind ==1) %>%
+   filter(minor_type == "MUNI" | agency_name == "TOWN CICERO")  %>%
+  select(year, agency_name, agency_num, major_type, minor_type, 
+         cty_cook_eav, total_final_levy, log_eav, log_levy,  
+     triad, reassess_year, home_rule_ind, perc_residential )
+
+minortype_munis <- pdata.frame(minortype_munis, index = c("agency_name", "year"))
+
+
+detach("package:dplyr", unload = TRUE)
+
+minortype_munis$eav_lag1  <- plm::lag(minortype_munis$log_eav, 1)
+minortype_munis$eav_lag2  <- plm::lag(minortype_munis$log_eav, 2)
+
+minortype_munis$reassess_lag1 <- plm::lag(minortype_munis$reassess_year, 1)
+minortype_munis$reassess_lag2 <- plm::lag(minortype_munis$reassess_year, 2)
+minortype_munis$eav_lead1 <- plm::lead(minortype_munis$log_eav, 1)
+minortype_munis$eav_lead2 <- plm::lead(minortype_munis$log_eav,2)
+ 
+
+muni_minor_simple <- plm(log_levy ~ log_eav, 
+         #    index = c("agency_name", "year"), 
+             model = "within", effect= "twoways",                    
+             data = minortype_munis)
+
+muni_minor <- plm(log_levy ~ log_eav + eav_lag1 +eav_lag2, 
+          #   index = c("agency_name", "year"), 
+             model = "within", effect= "twoways",                    
+             data = minortype_munis)
+
+#summary(muni_minor)
+
+muni_minor_nolags <- plm(log_levy ~ log_eav + reassess_year + triad + perc_residential+ reassess_lag1 + reassess_lag2, 
+          #   index = c("agency_name", "year"), 
+             model = "within", effect= "twoways",                    
+             data = minortype_munis)
+
+
+muni_minor_allvars <- plm(log_levy ~ log_eav + reassess_lag1 + reassess_lag2 + reassess_year + eav_lag1 +eav_lag2 + home_rule_ind + triad + perc_residential,# + eav_lead1+eav_lead2 , 
+             index = c("agency_name", "year"), 
+             model = "within", effect= "twoways",                    
+             data = minortype_munis)
+
+export_summs(muni_minor_simple, muni_minor, muni_minor_nolags, muni_minor_allvars, model.names = c("HR Muni Simple", "HR Muni Lags", "HR Muni Other Vars", "HR Muni All Vars"), statistics = c(N = "nobs", adj.R2 = "adj.r.squared", R2 = "r.squared"))
+```
+
+
+Non-homerule municipalities:
+```{r}
+
+library(dplyr)
+
+minortype_munis <- agency_data %>% 
+  filter(home_rule_ind ==0) %>%
+   filter(minor_type == "MUNI" | agency_name == "TOWN CICERO")  %>%
+  select(year, agency_name, agency_num, major_type, minor_type, 
+         cty_cook_eav, total_final_levy, log_eav, log_levy,  
+     triad, reassess_year, perc_residential, perc_owned )
+
+minortype_munis <- pdata.frame(minortype_munis, index = c("agency_name", "year"))
+
+
+detach("package:dplyr", unload = TRUE)
+
+minortype_munis$eav_lag1  <- plm::lag(minortype_munis$log_eav, 1)
+minortype_munis$eav_lag2  <- plm::lag(minortype_munis$log_eav, 2)
+
+minortype_munis$reassess_lag1 <- plm::lag(minortype_munis$reassess_year, 1)
+minortype_munis$reassess_lag2 <- plm::lag(minortype_munis$reassess_year, 2)
+minortype_munis$eav_lead1 <- plm::lead(minortype_munis$log_eav, 1)
+minortype_munis$eav_lead2 <- plm::lead(minortype_munis$log_eav,2)
+ 
+
+muni_minor_simple <- plm(log_levy ~ log_eav, 
+         #    index = c("agency_name", "year"), 
+             model = "within", effect= "twoways",                    
+             data = minortype_munis)
+
+muni_minor <- plm(log_levy ~ log_eav + eav_lag1 +eav_lag2, 
+          #   index = c("agency_name", "year"), 
+             model = "within", effect= "twoways",                    
+             data = minortype_munis)
+
+#summary(muni_minor)
+
+muni_minor_nolags <- plm(log_levy ~ log_eav + reassess_year + reassess_lag2 + reassess_lag1 + triad + perc_residential+perc_owned, 
+          #   index = c("agency_name", "year"), 
+             model = "within", effect= "twoways",                    
+             data = minortype_munis)
+
+
+muni_minor_allvars <- plm(log_levy ~ log_eav + reassess_lag1 + reassess_lag2 + reassess_year +eav_lag1 +eav_lag2 + triad + perc_residential + perc_owned , 
+             index = c("agency_name", "year"), 
+             model = "within", effect= "twoways",                    
+             data = minortype_munis)
+
+export_summs(muni_minor_simple, muni_minor, muni_minor_nolags, muni_minor_allvars, statistics = c(N = "nobs", adj.R2 = "adj.r.squared", R2 = "r.squared"))
+```
+
+# Other Crap
+
+## Major Munis
+
+All major type taxing agencies together. 
+
+```{r}
+library(dplyr)
+major_munis <- agency_data %>% 
+    filter(major_type == "MUNICIPALITY/TOWNSHIP" ) %>%
+  select(year, agency_name, agency_num, major_type, minor_type, 
+         cty_cook_eav, total_final_levy, log_eav, log_levy, perc_owned, perc_residential,
+     triad, reassess_year, home_rule_ind )
+
+major_munis <- pdata.frame(major_munis, index = c("agency_name", "year"))
+
+
+detach("package:dplyr", unload = TRUE)
+
+major_munis$eav_lag1  <- plm::lag(major_munis$log_eav, 1)
+major_munis$eav_lag2  <- plm::lag(major_munis$log_eav, 2)
+
+major_munis$reassess_lag1 <- plm::lag(major_munis$reassess_year, 1)
+major_munis$reassess_lag2 <- plm::lag(major_munis$reassess_year, 2)
+
+major_munis_naive <- plm(log_levy ~ log_eav, 
+             index = c("agency_name", "year"), 
+             model = "within", effect= "twoways",                    
+             data = major_munis)
+
+major_munis_mod <- plm(log_levy ~ log_eav + eav_lag1 + eav_lag2 , 
+             index = c("agency_name", "year"), 
+             model = "within", effect= "twoways",                    
+             data = major_munis)
+
+major_munis_mod_morevars <- plm(log_levy ~ log_eav + eav_lag1 + eav_lag2 +reassess_lag1 + reassess_lag2 + reassess_year + perc_residential + perc_owned , 
+             index = c("agency_name", "year"), 
+             model = "within", effect= "twoways",                    
+             data = major_munis)
+
+summary(major_munis_mod_morevars)
+```
+
+
+
+
+```{r}
+library(dplyr)
+homerule_majortype_munis <- agency_data %>% 
+  mutate(year = as.factor(year)) %>%
+  filter(home_rule_ind==1 # Homerule only
+ ) %>%
+      filter(major_type == "MUNICIPALITY/TOWNSHIP" ) %>%
+  select(year, agency_name, agency_num, major_type, minor_type, 
+         cty_cook_eav, total_final_levy, log_eav, log_levy, perc_owned, perc_residential,
+     triad, reassess_year, home_rule_ind )
+
+major_munis <- pdata.frame(homerule_majortype_munis, index = c("agency_name", "year"))
+
+
+detach("package:dplyr", unload = TRUE)
+
+major_munis$eav_lag1  <- plm::lag(major_munis$log_eav, 1)
+major_munis$eav_lag2  <- plm::lag(major_munis$log_eav, 2)
+
+major_munis$reassess_lag1 <- plm::lag(major_munis$reassess_year, 1)
+major_munis$reassess_lag2 <- plm::lag(major_munis$reassess_year, 2)
+
+major_munis_naive <- plm(log_levy ~ log_eav, 
+             index = c("agency_name", "year"), 
+             model = "within", effect= "twoways",                    
+             data = major_munis)
+
+
+hr_muni_major <- plm(log_levy ~ log_eav+eav_lag1 + eav_lag2, 
+             index = c("agency_name", "year"), 
+             model = "within", effect= "twoways",                    
+             data = major_munis)
+summary(hr_muni_major)
+
+hr_muni_major <- plm(log_levy ~ log_eav+eav_lag1 + eav_lag2 + reassess_year + reassess_lag2 + reassess_lag1 + triad + perc_owned + perc_residential, 
+             index = c("agency_name", "year"), 
+             model = "within", effect= "twoways",                    
+             data = major_munis)
+summary(hr_muni_major)
+```
+
+
+```{r}
+library(dplyr)
+nonhr_muni_major <- agency_data %>% 
+  mutate(year = as.factor(year)) %>%
+  filter(home_rule_ind==0 # Homerule only
+ ) %>%
+      filter(major_type == "MUNICIPALITY/TOWNSHIP" ) %>%
+  select(year, agency_name, agency_num, major_type, minor_type, 
+         cty_cook_eav, total_final_levy, log_eav, log_levy, perc_owned, perc_residential,
+     triad, reassess_year, home_rule_ind )
+
+major_munis <- pdata.frame(nonhr_muni_major, index = c("agency_name", "year"))
+
+
+detach("package:dplyr", unload = TRUE)
+
+major_munis$eav_lag1  <- plm::lag(major_munis$log_eav, 1)
+major_munis$eav_lag2  <- plm::lag(major_munis$log_eav, 2)
+
+major_munis$reassess_lag1 <- plm::lag(major_munis$reassess_year, 1)
+major_munis$reassess_lag2 <- plm::lag(major_munis$reassess_year, 2)
+
+
+nonhr_muni_maj <- plm(log_levy ~ log_eav + eav_lag1 + eav_lag2, 
+             index = c("agency_name", "year"), 
+             model = "within", effect= "twoways",                    
+             data = major_munis)
+summary(nonhr_muni_maj)
+```
+
+
+## Major muni Model Results
+
+majortype: Uses all taxing agencies that have a major_type == "MUNI/TOWNSHIP". Includes many more taxing agencies than just the 134 muni taxing agencies.  Split into homerule and nonhomerule. 
+
+Municipality models (minorType) use the 134 municipality taxing agencies from 2006-2021. Split into home rule and non homerule.
+
+> I wouldn't use the last two models yet. Not all major Muni taxing agencies have home rule indicators so those all get dropped from the model. I haven't had time to see what is kept and what is dropped. 
+
+```{r}
+model_names <- c("All Agencies", "All Major Muni Agencies - Simple", "All Major Muni Agencies", "Homerule Muni (MajorType)", "Non-homerule Muni (Major Type)"
+                 )
+# coefs <- c("","") # to make names nicer
+
+export_summs(all_m1, major_munis_naive, major_munis_mod, hr_muni_major, nonhr_muni_maj, model.names = model_names, statistics = c(N = "nobs", R2 = "r.squared"))
+#export_summs(m1, m2, m3, model.names = model_names, scale=TRUE, robust = "HC1")
+```
+
+
+#### All major type munis
+
+Does not separate home rule and non-homerule taxing agencies in the majortype_munis model. 
+
+majortype_munis_filtered excludes townships and SSAs so far. 
+
+```{r}
+library(dplyr)
+# All Major Munis: removing SSAs and TOWNSHIPS 
+filtered_majortype_munis <- agency_data %>% 
+  mutate(year = as.factor(year)) %>%
+  filter(major_type == "MUNICIPALITY/TOWNSHIP") %>%
+  filter(!(minor_type %in% c("TOWNSHIP", "SSA"))) %>%
+  select(year, agency_name, agency_num, major_type, minor_type, 
+         cty_cook_eav, total_final_levy, log_eav, log_levy, perc_owned, perc_residential,
+     triad, reassess_year, home_rule_ind )
+         
+major_munis <- pdata.frame(filtered_majortype_munis, index = c("agency_name", "year"))
+
+
+detach("package:dplyr", unload = TRUE)
+
+major_munis$eav_lag1  <- plm::lag(major_munis$log_eav, 1)
+major_munis$eav_lag2  <- plm::lag(major_munis$log_eav, 2)
+ 
+majortype_munis_filtered <- plm(log_levy ~ log_eav, 
+             index = c("agency_name", "year"), 
+             model = "within", effect= "twoways",                    
+             data = major_munis)
+
+```
+
+
+The major type municipal Muni models above still include SSAs and 
+
+```{r}
+# Models for Major Muni types. Includes homerule and nonhomerule together!! 
+# one model removes SSAs and Townships (which is the better model. Included other for comparison.)
+model_names <- c("All Taxing Agencies" ,#"All Munis (MajorType)", 
+                 "All Munis (MajorType) - Filtered"
+                 )
+# coefs <- c("","") # to make names nicer
+
+export_summs(all_m1,# major_munis_mod, 
+             majortype_munis_filtered, 
+             model.names = model_names, statistics = c(N = "nobs", R2 = "r.squared"))
+```
+
+
+
+## More graphs
+
+
+
+```{r}
+agency_data %>% ggplot()+
+  geom_point(aes(x=log(cty_cook_eav), y=log(total_final_levy), col=major_type, alpha=.1)) +
+  ggtitle("Logged EAV vs Logged Levy for ALL agencies and all years")
+```
+
+### Graphs for Munis only
+
+
+```{r}
+library(dplyr)
+#adds cicero, drops chicago
+agency_data %>% 
+  filter(!(agency_num %in% c("030210000", "030210001", "030210002" ) ) 
+         & (minor_type == "MUNI" | agency_num =="020060000")) %>%
+  ggplot(aes(x=log(cty_cook_eav), y=log(total_final_levy), color=agency_name, group = agency_name))+
+  geom_point(alpha=.5) +
+theme(legend.position = "none")+
+    labs(title = "Logged Values All Years: Municipality EAV & Levy")
+
+
+agency_data %>% 
+  filter(year == 2021) %>%
+  filter(!(agency_num %in% c("030210000", "030210001", "030210002" ) ) ) %>%
+   filter(minor_type == "MUNI" | agency_num == "020060000" | agency_name == "TOWN CICERO") %>%
+  ggplot(aes(x=cty_cook_eav, y=total_final_levy, col=triad, label = clean_name))+
+  geom_point()+ 
+  geom_text(size = 2, vjust=-1.5)
+
+minortype_munis %>% 
+  ggplot(aes(x=year, 
+             y= cty_cook_eav, 
+             group = agency_name,
+             color = triad
+          # color = reassess_year
+               )  )+
+  geom_line(alpha = .1)+ 
+  labs(title = "134 Municipalities based on Minor Type: \nLogged EAVLogg/ed Levy Over Time \n Homerule & non-Homerule Together", caption = "Drops Chicago")
+
+agency_data %>%
+  filter(!(agency_num %in% c("030210000", "030210001", "030210002" ) ) 
+         & (minor_type == "MUNI" | agency_num =="020060000")) %>%
+  filter(triad == "South")%>%
+  ggplot(aes(x=year, 
+             y= cty_cook_eav, 
+             group = clean_name,
+            # color = triad
+          # color = reassess_year
+               )  )+
+  geom_line(alpha = .1)+ 
+  labs(title = "134 Municipalities based on Minor Type: \nLogged EAVLogg/ed Levy Over Time \n Homerule & non-Homerule Together", caption = "Drops Chicago")
+```
+
+
+
+
+
+## Heteroskedasticity
+
+https://www.econometrics-with-r.org/10-5-tferaaseffer.html
+
+
+"Similar as for heteroskedasticity, autocorrelation invalidates the usual standard error formulas as well as heteroskedasticity-robust standard errors since these are derived under the assumption that there is no autocorrelation. When there is both heteroskedasticity and autocorrelation so-called heteroskedasticity and autocorrelation-consistent (HAC) standard errors need to be used. Clustered standard errors belong to these type of standard errors. They allow for heteroskedasticity and autocorrelated errors within an entity but not correlation across entities.
+
+As shown in the examples throughout this chapter, it is fairly easy to specify usage of clustered standard errors in regression summaries produced by function like coeftest() in conjunction with vcovHC() from the package sandwich. Conveniently, vcovHC() recognizes panel model objects (objects of class plm) and computes clustered standard errors by default."
+
+The null hypothesis for the Breusch-Pagan test is homoskedasticity.
+
+
+```{r}
+#bptest(log_levy~log_eav + factor(agency_num) + factor(year), data = balanced_panel)
+```
+
+Controlling for heteroskedasticity: Robust covariance matrix estimation (Sandwich estimator)
+
+The `vcovHC` function estimates three heteroskedasticity-consistent covariance
+estimators:  
+• "white1" - for general heteroskedasticity but no serial correlation. Recommended for
+random effects.   
+• "white2" - is "white1" restricted to a common variance within groups. Recommended
+for random effects.   
+• "arellano" - both heteroskedasticity and serial correlation. Recommended for fixed
+effects.   
+
+```{r}
+#coeftest(m1)
+#coeftest(m1, vcovHC(fixed, method = "arellano"))
+```
+
+
