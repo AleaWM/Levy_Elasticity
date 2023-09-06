@@ -35,9 +35,7 @@ library(plm) #for fixed effects
 library(modelsummary)
 
 
-ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "./ptaxsim.db/ptaxsim-2021.0.4.db")
-
-
+ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/ptaxsim.db/ptaxsim-2021.0.4.db")
 #set_summ_defaults(digits = 2, pvals = FALSE, robust = "HC3" )
 
 # made from 3_Exemption_Details.Rmd file.
@@ -161,12 +159,12 @@ muni_agency_names <- DBI::dbGetQuery(
 
 # has binary variable for if it was a reassessment year or not. 
 # Manually created based on the 3 year rotation used for reassessments.
-reassessment_years <- read_csv("Triad_reassessment_years.csv")
+reassessment_years <- read_csv("C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/Triad_reassessment_years.csv")
 
 reassessments_long <- reassessment_years %>% 
   pivot_longer(cols = c(`2006`:`2021`), names_to = "year", values_to = "reassess_year")
 
-Triads <- readxl::read_xlsx("muni_shortnames.xlsx") %>% 
+Triads <- readxl::read_xlsx("C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/muni_shortnames.xlsx") %>% 
   select(-c(agency_number, short_name, ))
 
 muni_agency_names <- muni_agency_names %>% left_join(Triads)
