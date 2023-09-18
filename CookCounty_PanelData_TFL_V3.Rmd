@@ -14,10 +14,6 @@ output:
 ```{r setup, include = FALSE, message = FALSE}
 knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 
-
-# MVH commit practice
-# AWM commit practice 2
-
 library(tidyverse)
 library(DBI)
 #library(data.table)
@@ -351,6 +347,9 @@ agency_data <- agency_data %>%
 #makeCodebook(agency_data, reportTitle = "Panel Data Codebook", output ="word", replace = TRUE, vol = 2)
 ```
 
+```{r merriman-code-chunk}
+agency_data <- agency_data %>% mutate(yearly_change = log())
+```
 
 #### T-Test for home rule taxing agencies
 
@@ -437,6 +436,7 @@ detach("package:dplyr", unload = TRUE)
 
 panel_data2$eav_lag1  <- plm::lag(panel_data2$log_eav, 1)
 panel_data2$eav_lag2  <- plm::lag(panel_data2$log_eav, 2)
+
 
 
 # log_levy2 is the log(total_non_cap_ext)
@@ -563,6 +563,9 @@ panel_data$eav_lag2  <- plm::lag(panel_data$log_eav, 2)
 panel_data$reassess_lag1 <- plm::lag(panel_data$reassess_year, 1)
 panel_data$reassess_lag2 <- plm::lag(panel_data$reassess_year, 2)
 
+library(dplyr)
+panel_data <- panel_data %>% mutate(yearly_change = log_eav-eav_lag1,
+                                    yearly_chang_perc =(log_eav-eav_lag1)/eav_lag1)
 
 #panel_data$reassess_lead1 <- plm::lead(panel_data$reassess_year, 1)
 #panel_data$reassess_lead2 <- plm::lead(panel_data$reassess_year, 2)
@@ -574,6 +577,17 @@ all_agencies <- panel_data
 ```
 
 
+```{r}
+library(dplyr)
+panel_data %>% filter(yearly_change > 0.3 | yearly_change < -0.3) 
+
+# none
+# panel_data %>% filter(yearly_chang_perc > 0.3 | yearly_chang_perc < -0.3) 
+
+panel_data %>% filter(yearly_change > 0.3 | yearly_change < -0.3)  %>% filter(minor_type == "MUNI")
+
+
+```
 
 # Models for All Taxing Agencies
 
