@@ -75,7 +75,7 @@ is.integer64 <- function(x){
 agency_dt <- agency_dt %>%
   mutate_if(is.integer64, as.integer)
 
-# makeCodebook(agency_dt, reportTitle = "Panel Data Codebook", replace = TRUE)
+#makeCodebook(agency_dt, reportTitle = "Panel Data Codebook", replace = TRUE)
 
 ```
 
@@ -148,8 +148,12 @@ muni_agency_names <- DBI::dbGetQuery(
          ) %>%
   select(-minor_type)
 
+
 ```
 
+# Manipulated Variables
+
+Bring in data on reassessment years and reassessment triads. 
 
 ```{r Triads}
 # took from one of Josh files. Made pivot table of his agencies and their Triad 
@@ -164,8 +168,10 @@ reassessment_years <- read_csv("C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 
 reassessments_long <- reassessment_years %>% 
   pivot_longer(cols = c(`2006`:`2021`), names_to = "year", values_to = "reassess_year")
 
-Triads <- readxl::read_xlsx("C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/muni_shortnames.xlsx") %>% 
-  select(-c(agency_number, short_name, ))
+
+
+Triads <- readxl::read_xlsx("C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/muni_shortnames.xlsx")# %>% 
+ # select(-c(agency_number, short_name, ))
 
 muni_agency_names <- muni_agency_names %>% left_join(Triads)
 
@@ -175,6 +181,8 @@ muni_agency_names <- muni_agency_names %>% left_join(Triads)
 
 
 ```{r agency_info-dt}
+
+
 # all agency names, numbers, and types
 # includes TIF and non-TIF agencies
 all_taxing_agencies <- DBI::dbGetQuery(
@@ -222,11 +230,17 @@ raw_data_joined %>%
   arrange(clean_name) %>% pivot_wider(names_from = "year", values_from = "clean_name")
 
 raw_data_joined %>% 
+  filter(total_levy < 1)  %>% 
+  distinct(agency_num, clean_name, year) %>% 
+  arrange(clean_name) %>% pivot_wider(names_from = "year", values_from = "clean_name")
+
+raw_data_joined %>% 
   filter(cty_total_eav < 1 & minor_type == "MUNI" )  %>% 
   distinct(agency_num, clean_name)
+
 ```
 
-> What to do with Countryside, Deer Park, Norridge, Oak Brooke, Schaumburg, Homer Glen, and Dixmoor? They had levies of $0 at some point.
+> Taxing agency must have levy > $0. Countryside, Deer Park, Norridge, Oak Brooke, Schaumburg, Homer Glen, and Dixmoor had levies of $0 at some point.
 
 - Drop from model. They don't rely on property taxes.
 
@@ -235,18 +249,6 @@ raw_data_joined %>%
 dropped_munis <- c("030250000", "030270000", "030300000", "030585000", "030840000", "030890000", "031150000")
 ```
 
-
-
-Simple model was log(levy) \~ log(base) where each observation is an agency-year and the base is the sum of that jurisdiction's taxable eav. (The taxable eav = equalized assessed value - TIF increments - exemptions)
-
-The coefficients would be interpreted as "a x% change in eav leads to a y% change in levy", which is also the elasticity.
-
-
-- plm() uses the entity-demeaned OLS algorithm and does not report dummy coefficients.
-
-- robust has multiple options: HC0 to HC5. Default is set to "HC3 BUT Stata default is to use "HC1"
-
-[Command and package author site for summ() and table formatting](https://jtools.jacob-long.com/reference/summ.lm.html) 
 
 
 
@@ -264,7 +266,7 @@ Summit became home rule in 2016.
 ```{r}
 raw_data_joined %>% 
 #  filter(year == 2006 | year == 2021 ) %>% 
-  pivot_wider(id_cols = c(agency_num, clean_name),names_from = "year", values_from = home_rule_ind) %>% 
+  pivot_wider(id_cols = c(agency_num, clean_name), names_from = "year", values_from = home_rule_ind) %>% 
   mutate(changed = `2021`-`2006`) %>% filter(changed>0)
 
 
@@ -359,6 +361,9 @@ t.test(ttestdata$elasticity ~ ttestdata$home_rule_ind)
 
 ```
 
+#### Capped and non-Capped Funds
+
+All taxing agencies (except dropped munis or agencies that changed homerule status)
 
 ```{r}
 library(dplyr)
@@ -390,6 +395,8 @@ agency_data3 <- agency_data3 %>%
   mutate( 
     log_eav = log(cty_total_eav), # eav within Cook and neighboring counties.
     log_levy = log(total_reduced_levy),
+    reassess_year = factor(reassess_year),
+
     log_levy2 = log(total_non_cap_ext)    #log_eav = log(cty_total_eav),
 #  log_levy = log(total_final_levy),
     )
@@ -399,8 +406,8 @@ agency_data3 <- agency_data3 %>%
 
 selected_columns2 <- agency_data3 %>% 
   select(year, agency_name, agency_num, major_type, minor_type, home_rule_ind, 
-         #cty_total_eav, total_levy, 
-         log_eav, log_levy, log_levy2,
+         reassess_year, cty_total_eav, total_levy, 
+         log_eav, log_levy, log_levy2, reassess_year,
          total_reduced_levy, total_non_cap_ext, cty_total_eav) %>% 
   arrange(agency_num, year)
 
@@ -412,6 +419,8 @@ detach("package:dplyr", unload = TRUE)
 panel_data2$eav_lag1  <- plm::lag(panel_data2$log_eav, 1)
 panel_data2$eav_lag2  <- plm::lag(panel_data2$log_eav, 2)
 
+panel_data2$RY1  <- plm::lag(panel_data2$reassess_year, 1)
+panel_data2$RY2  <- plm::lag(panel_data2$reassess_year, 2)
 
 # log_levy2 is the log(total_non_cap_ext)
 noncapped_ext <- plm(log_levy2 ~ log_eav, 
@@ -511,6 +520,169 @@ export_summs(noncapped_ext, noncapped_ext_lag, reduced_levy, reduced_levy_lag,
 
 ```
 
+
+```{r curiosity, eval = FALSE, include=FALSE}
+library(dplyr)
+  
+agency_data3 <- raw_data_joined %>% 
+  #right_join(agency_dt, all_taxing_agencies, by = c("first6", "first5", "agency_num")  ) %>%
+  mutate(first2 = str_sub(agency_num, 1,2),
+         last2 = str_sub(agency_num,8,9),
+         year = as.factor(year),
+         agency_num = str_pad(agency_num, 9, "left", "0"),
+         agency_num = as.factor(agency_num)) %>%
+  select(-c(cty_dupage_eav:cty_livingston_eav)) %>%
+  mutate(pct_in_Cook = cty_total_eav / cty_total_eav) 
+
+agency_data3 <- agency_data3 %>% 
+ # filter(!agency_num %in% dropped_munis) %>%
+ # filter(!agency_num %in% exclude_hr_change) %>%
+  filter(total_levy > 0) %>%
+  mutate(cty_total_eav = as.numeric(cty_total_eav), # eav in cook and neighboring counties
+         total_reduced_levy = as.numeric(total_reduced_levy), # original request
+
+         total_non_cap_ext = as.numeric(total_non_cap_ext), # value that matches Clerk Office PDF for Levy.
+         total_reduced_levy = ifelse(total_reduced_levy == 0, NA, total_reduced_levy),
+         cty_total_eav = as.numeric(cty_total_eav), # EAV after exemptions within cook county
+         # cty_total_eav = as.numeric(cty_total_eav), 
+         # total_final_levy is after PTELL and clerk or agency reductions.
+         
+  ) %>%
+  mutate( 
+    log_eav = log(cty_total_eav), # eav within Cook and neighboring counties.
+    log_levy = log(total_reduced_levy),
+    reassess_year = as.factor(reassess_year),
+    log_levy2 = log(total_non_cap_ext)    #log_eav = log(cty_total_eav),
+#  log_levy = log(total_final_levy),
+    )
+
+#write_csv(agency_data, "alltaxingagencies_paneldata_August10.csv",  na = "")
+
+
+selected_columns2 <- agency_data3 %>% 
+  select(year, agency_name, agency_num, major_type, minor_type, home_rule_ind, 
+         #cty_total_eav, total_levy, 
+         log_eav, log_levy, log_levy2, reassess_year,
+         total_reduced_levy, total_non_cap_ext, cty_total_eav) %>% 
+  arrange(agency_num, year)
+
+
+panel_data2 <-pdata.frame(selected_columns2, index = c("agency_num", "year"))
+
+detach("package:dplyr", unload = TRUE)
+
+panel_data2$eav_lag1  <- plm::lag(panel_data2$log_eav, 1)
+panel_data2$eav_lag2  <- plm::lag(panel_data2$log_eav, 2)
+
+
+panel_data2$RY1  <- plm::lag(panel_data2$reassess_year, 1)
+panel_data2$RY2  <- plm::lag(panel_data2$reassess_year, 2)
+
+
+# log_levy2 is the log(total_non_cap_ext)
+noncapped_ext <- plm(log_levy2 ~ log_eav, 
+             index = c("agency_name", "year"),
+             model = "within", effect= "twoways",                    
+             data = panel_data2)
+
+
+#summary(noncapped_ext)
+
+# log_levy2 is the log(total_non_cap_ext)
+noncapped_ext_lag <- plm(log_levy2 ~ log_eav + eav_lag1 + eav_lag2, 
+             index = c("agency_name", "year"),
+             model = "within", effect= "twoways",                    
+             data = panel_data2)
+
+
+#summary(noncapped_ext_lag)
+
+# log_levy2 is the log(total_non_cap_ext)
+noncapped_ext_HRind <- plm(log_levy2 ~ log_eav + eav_lag1 + eav_lag2 + home_rule_ind +reassess_year + RY1 + RY2, 
+             index = c("agency_name", "year"),
+             model = "within", effect= "twoways",                    
+             data = panel_data2)
+
+summary(noncapped_ext_HRind)
+
+# log_levy is the log(total_reduced_levy)
+# reduced levy could also be called "capped extension" since it is the
+# extension amount from capped funds that can be reduced by PTELL 
+reduced_levy <- plm(log_levy ~ log_eav, 
+             index = c("agency_name", "year"),
+             model = "within", effect = "twoways",                    
+             data = panel_data2)
+
+
+#summary(reduced_levy)
+
+# extension amount from capped funds that can be reduced by PTELL 
+reduced_levy_lag <- plm(log_levy ~ log_eav +eav_lag1 + eav_lag2, 
+             index = c("agency_name", "year"),
+             model = "within", effect = "twoways",                    
+             data = panel_data2)
+
+
+#summary(reduced_levy_lag)
+
+export_summs(noncapped_ext, noncapped_ext_lag, reduced_levy, reduced_levy_lag,
+             model.names = c("Agency Totals - Non Capped Funds","Agency Totals - Non Capped With Lags", "Agency Totals - Capped Funds", "Agency Totals - Capped With Lags"),
+             robust = "HC3", statistics = c(N = "nobs", adj.R2 = "adj.r.squared", R2 = "r.squared"))
+
+
+library(dplyr)
+selected_columns3 <- selected_columns2 %>% 
+  filter(minor_type == "MUNI")
+
+panel_data2 <-pdata.frame(selected_columns3, index = c("agency_num", "year"))
+ 
+
+detach("package:dplyr", unload = TRUE)
+
+panel_data2$eav_lag1  <- plm::lag(panel_data2$log_eav, 1)
+panel_data2$eav_lag2  <- plm::lag(panel_data2$log_eav, 2)
+
+
+# log_levy2 is the log(total_non_cap_ext)
+noncapped_ext <- plm(log_levy2 ~ log_eav, 
+             index = c("agency_name", "year"),
+             model = "within", effect= "twoways",                    
+             data = panel_data2)
+
+
+
+# log_levy2 is the log(total_non_cap_ext)
+noncapped_ext_lag <- plm(log_levy2 ~ log_eav + eav_lag1 + eav_lag2, 
+             index = c("agency_name", "year"),
+             model = "within", effect= "twoways",                    
+             data = panel_data2)
+
+
+
+
+# log_levy is the log(total_reduced_levy)
+# reduced levy could also be called "capped extension" since it is the
+# extension amount from capped funds that can be reduced by PTELL 
+reduced_levy <- plm(log_levy ~ log_eav, 
+             index = c("agency_name", "year"),
+             model = "within", effect = "twoways",                    
+             data = panel_data2)
+
+
+
+# extension amount from capped funds that can be reduced by PTELL 
+reduced_levy_lag <- plm(log_levy ~ log_eav +eav_lag1 + eav_lag2, 
+             index = c("agency_name", "year"),
+             model = "within", effect = "twoways",                    
+             data = panel_data2)
+
+
+
+export_summs(noncapped_ext, noncapped_ext_lag, reduced_levy, reduced_levy_lag,
+             model.names = c("Muni Totals - Non Capped Funds","Muni Totals - Non Capped With Lags", "Muni Totals - Capped Funds", "Muni Totals - Capped With Lags"),
+             robust = "HC3", statistics = c(N = "nobs", adj.R2 = "adj.r.squared", R2 = "r.squared"))
+
+```
 
 __Basic Panel Data Set Below for all Taxing Agencies__ 
 
@@ -641,6 +813,11 @@ export_summs(all_m1_simple, all_m1_lags,# all_m1, #, all_m1_all_vars,
 
 
 
+#### Grouped Municipalities
+
+```{r}
+groupies <- readxl::read_excel("C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/grouped_munis_manual_entry.xlsx")
+```
 
 ```{r}
 
@@ -1706,6 +1883,8 @@ raw_data_joined %>% # 7473 obs have  extensions smaller than their maximum levy
   filter(total_ext < total_max_levy) 
 
 
+raw_data_joined %>% 
+  filter(total_reduced_levy == 0 | is.na(total_reduced_levy))
 
 ```
 
