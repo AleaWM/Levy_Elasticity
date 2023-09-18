@@ -17,6 +17,7 @@ knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 
 # MVH commit practice
 # AWM commit practice 2
+# MVH's failed first practice...whose fault was that?
 
 library(tidyverse)
 library(DBI)
