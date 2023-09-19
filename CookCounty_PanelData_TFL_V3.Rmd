@@ -14,6 +14,14 @@ output:
 ```{r setup, include = FALSE, message = FALSE}
 knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 
+<<<<<<< HEAD
+=======
+
+# MVH commit practice
+# AWM commit practice 2
+# MVH's failed first practice...whose fault was that?
+
+>>>>>>> 342ffa580a141441498b80740661623ffa8bc9fa
 library(tidyverse)
 library(DBI)
 #library(data.table)
