@@ -1,0 +1,20 @@
+---
+title: "Alternative Models"
+author: "MVH"
+format: docx
+editor: visual
+---
+
+```{r}
+
+
+```
+
+# Alternative Regression Models
+
+## What if we swap the variables of interest?
+
+```{r}
+
+
+```
