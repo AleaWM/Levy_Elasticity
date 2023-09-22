@@ -1649,8 +1649,6 @@ indexed_munis <- agency_data3 %>% ungroup() %>%
 
   group_by(agency_name) %>% 
   arrange(year) %>%
-
-
 #  group_by(agency_name, year) %>%
 # filter(total_non_cap_ext > 0  & total_capped_ext > 0 & !is.na(cty_cook_eav)) %>%
  # group_by(year) %>%
@@ -1673,6 +1671,47 @@ indexed_munis%>% ggplot() + geom_line(aes(x=year, y = cappedext_idx, group = age
 # franklin park was at 40 so filtered it out. 
 indexed_munis%>% filter(agency_name != "VILLAGE OF FRANKLIN PARK") %>% ggplot() + geom_line(aes(x=year, y = noncappedext_idx, group = agency_name, color = Triad))
 #minortype_munis %>% write_csv("minortype_munis.csv")
+```
+
+
+```{r allagencies-indexed, eval=FALSE}
+agencies_indexed <- agency_data3 %>% ungroup() %>%
+  select( agency_name, year, total_non_cap_ext, total_capped_ext, cty_cook_eav, total_final_levy, home_rule_ind, Triad, total_reduced_levy) %>%
+  group_by(agency_name) %>% 
+  arrange(agency_name) %>%
+  summarize(# Index values to 2006
+        year = year,
+
+    eav_idx = cty_cook_eav / cty_cook_eav[year == 2006] ,
+    levy_idx = total_final_levy / total_final_levy[year == 2006] ,
+    reduced_levy_idx = total_reduced_levy / total_reduced_levy[year == 2006] ,
+
+    cappedext_idx = total_capped_ext / total_capped_ext[year == 2006] ,
+    noncappedext_idx = total_non_cap_ext / total_non_cap_ext[year == 2006] ,
+    #home_rule_ind = home_rule_ind,  
+   #Triad = Triad
+    )
+
+agencies_indexed %>%
+  filter(agency_name != "VILLAGE OF FRANKLIN PARK") %>%
+  ggplot() + geom_line(aes(x=year, y = noncappedext_idx, group = agency_name))
+
+
+agency_data3 %>% ungroup() %>%
+  select( agency_name, year, total_non_cap_ext, total_capped_ext, cty_cook_eav, total_final_levy, home_rule_ind, Triad) %>%
+
+  group_by(agency_name) %>% 
+  arrange(year) %>%
+
+  summarize(# Index values to 2006
+    eav_idx = cty_cook_eav / cty_cook_eav[year == 2006] ,
+    levy_idx = total_final_levy / total_final_levy[year == 2006] ,
+    cappedext_idx = total_capped_ext / total_capped_ext[year == 2006] ,
+    noncappedext_idx = total_non_cap_ext / total_non_cap_ext[year == 2006] ,
+    year = year, home_rule_ind = home_rule_ind,  Triad = Triad) %>%
+  filter(agency_name != "VILLAGE OF FRANKLIN PARK") %>%
+  ggplot() + geom_line(aes(x=year, y = cappedext_idx, group = agency_name))
+  
 ```
 
 ```{r townships, eval=FALSE}
