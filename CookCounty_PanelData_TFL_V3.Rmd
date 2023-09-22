@@ -433,19 +433,35 @@ library(dplyr)
 agency_data3 %>% group_by(agency_name)  %>%
   filter(minor_type == "MUNI" & agency_name != "CITY OF CHICAGO") %>% 
   
-  ggplot() + geom_line(aes(x=year, y = total_non_cap_ext, group = agency_name, color = Triad))
-
-agency_data3 %>% group_by(agency_name) %>% 
-  filter(minor_type == "MUNI" & agency_name != "CITY OF CHICAGO") %>% 
-  ggplot() + geom_line(aes(x=year, y = total_capped_ext, group = agency_name, color = Triad))
+  ggplot() + geom_line(aes(x=year, y = total_non_cap_ext, group = agency_name, color = Triad)) +
+    labs(title = "Municipalities: Non-Capped Funds")
 
 
 agency_data3 %>% group_by(agency_name)  %>%
-  filter(agency_name != "BOARD OF EDUCATION") %>% ggplot() + geom_line(aes(x=year, y = total_non_cap_ext, group = agency_name))
+  filter(major_type == "SCHOOL" & agency_name != "BOARD OF EDUCATION") %>% 
+  ggplot() + 
+  geom_line(aes(x=year, y = total_non_cap_ext, group = agency_name)) + 
+  labs(title = "Schools: Non-Capped Funds")
+
+
+agency_data3 %>% group_by(agency_name) %>% 
+  filter(minor_type == "MUNI" & agency_name != "CITY OF CHICAGO") %>% 
+  ggplot() + geom_line(aes(x=year, y = total_capped_ext, group = agency_name, color = Triad)) + labs(title = "Municipalities: Capped Funds")
+
+
+agency_data3 %>% group_by(agency_name) %>% 
+  filter(major_type == "SCHOOL" & agency_name != "BOARD OF EDUCATION") %>% 
+  ggplot() + geom_line(aes(x=year, y = total_capped_ext, group = agency_name)) +
+    labs(title = "Schools: Capped Funds")
+
+agency_data3 %>% group_by(agency_name)  %>%
+  filter(agency_name != "BOARD OF EDUCATION") %>% ggplot() + geom_line(aes(x=year, y = total_non_cap_ext, group = agency_name)) +
+    labs(title = "All Taxing Agencies: Non Capped Funds")
 
 agency_data3 %>% group_by(agency_name) %>% 
   filter(agency_name != "BOARD OF EDUCATION") %>% 
-  ggplot() + geom_line(aes(x=year, y = total_capped_ext, group = agency_name))
+  ggplot() + geom_line(aes(x=year, y = total_capped_ext, group = agency_name)) +
+    labs(title = "All Taxing Agencies: Capped Funds")
 
 ```
 
@@ -1640,36 +1656,95 @@ export_summs(
 
 # Other Crap
 
-```{r levy-indexE}
+```{r levy-indexed}
 library(dplyr)
 
 indexed_munis <- agency_data3 %>% ungroup() %>%
     filter(minor_type == "MUNI" ) %>%
   select( agency_name, year, total_non_cap_ext, total_capped_ext, cty_cook_eav, total_final_levy, home_rule_ind, Triad) %>%
-
   group_by(agency_name) %>% 
   arrange(year) %>%
-#  group_by(agency_name, year) %>%
-# filter(total_non_cap_ext > 0  & total_capped_ext > 0 & !is.na(cty_cook_eav)) %>%
- # group_by(year) %>%
-  
-  #arrange()
-  summarize(# Index values to 2006
+    summarize(# Index values to 2006
     eav_idx = cty_cook_eav / cty_cook_eav[year == 2006] ,
     levy_idx = total_final_levy / total_final_levy[year == 2006] ,
     cappedext_idx = total_capped_ext / total_capped_ext[year == 2006] ,
     noncappedext_idx = total_non_cap_ext / total_non_cap_ext[year == 2006] ,
-    year = year, home_rule_ind = home_rule_ind,  Triad = Triad)  
+    year = year, home_rule_ind = home_rule_ind,  Triad = Triad) 
 
-indexed_munis%>% ggplot() + geom_line(aes(x=year, y = levy_idx, group = agency_name, color = as.factor(home_rule_ind)))
-indexed_munis%>% ggplot() + geom_line(aes(x=year, y = eav_idx, group = agency_name, color = as.factor(home_rule_ind)))
-indexed_munis%>% ggplot() + geom_line(aes(x=year, y = levy_idx, group = agency_name, color = Triad))
+indexed_munis %>% ggplot(aes(x=year, y = levy_idx, group = agency_name, label = agency_name, color = as.factor(home_rule_ind))) + 
+    geom_line(alpha=.5, linetype = "dashed") +
+  geom_point() + 
+  theme_classic()+
+  geom_text(size = 2, vjust=-1.5)+
+  labs(title = "Municipalities:Total Final Levy Indexed to 2006")
 
 
-indexed_munis%>% ggplot() + geom_line(aes(x=year, y = cappedext_idx, group = agency_name, color = Triad))
+indexed_munis %>% ggplot() + 
+  geom_line(aes(x=year, y = levy_idx, group = agency_name, color = Triad), alpha=.5, linetype = "dashed") +
+  geom_point(aes(x=year, y = levy_idx)) + 
+  theme_classic()+
+    labs(title = "Municipalities:Total Final Levy Indexed to 2006")
+
+
+indexed_munis %>% ggplot() + geom_line(aes(x=year, y = eav_idx, group = agency_name, color = as.factor(home_rule_ind)))  +
+  labs(title = "Municipalities: Taxable EAV Indexed to 2006" )
+
+indexed_munis %>% ggplot() + geom_line(aes(x=year, y = levy_idx, group = agency_name, color = Triad)) +  labs(title = "Municipalities: Total Final Levy Indexed to 2006")
+
+
+
+indexed_munis %>% ggplot() + geom_line(aes(x=year, y = cappedext_idx, group = agency_name, color = Triad, label = agency_name))  +  labs(title = "Municipalities: Capped Funds Indexed to 2006")
+
 
 # franklin park was at 40 so filtered it out. 
-indexed_munis%>% filter(agency_name != "VILLAGE OF FRANKLIN PARK") %>% ggplot() + geom_line(aes(x=year, y = noncappedext_idx, group = agency_name, color = Triad))
+indexed_munis %>% filter(agency_name != "VILLAGE OF FRANKLIN PARK") %>% 
+  ggplot() + 
+  geom_line(aes(x=year, y = noncappedext_idx, group = agency_name, color = Triad)) +   
+  labs(title = "Municipalities: Non-capped Funds Indexed to 2006")
+
+#minortype_munis %>% write_csv("minortype_munis.csv")
+```
+
+```{r levy-indexed-schools}
+library(dplyr)
+
+indexed_schools <- agency_data3 %>% ungroup() %>%
+    filter(major_type == "SCHOOL" ) %>%
+  select( agency_name, year, total_non_cap_ext, total_capped_ext, cty_cook_eav, total_final_levy, home_rule_ind, Triad) %>%
+  group_by(agency_name) %>% 
+  arrange(year) %>%
+    summarize(# Index values to 2006
+    eav_idx = cty_cook_eav / cty_cook_eav[year == 2006] ,
+    levy_idx = total_final_levy / total_final_levy[year == 2006] ,
+    cappedext_idx = total_capped_ext / total_capped_ext[year == 2006] ,
+    noncappedext_idx = total_non_cap_ext / total_non_cap_ext[year == 2006] ,
+    year = year, home_rule_ind = home_rule_ind,  Triad = Triad) 
+
+indexed_schools %>% ggplot(aes(x=year, y = levy_idx, group = agency_name, label = agency_name, color = as.factor(home_rule_ind))) + 
+    geom_line(alpha=.5, linetype = "dashed") +
+  geom_point() + 
+  theme_classic()+
+  labs(title = "Schools: Total Final Levy Indexed to 2006")
+
+
+indexed_schools %>% ggplot() + geom_line(aes(x=year, y = eav_idx, group = agency_name, color = as.factor(home_rule_ind)))  +  theme_classic()+
+
+  labs(title = "Schools: Taxable EAV Indexed to 2006" )
+
+
+indexed_schools %>% ggplot() + 
+  geom_line(aes(x=year, y = cappedext_idx, group = agency_name))  +   
+  theme_classic()+
+
+  labs(title = "Schools: Capped Funds Indexed to 2006")
+
+
+indexed_schools %>%  
+  ggplot() +   theme_classic()+
+
+  geom_line(aes(x=year, y = noncappedext_idx, group = agency_name)) +   
+  labs(title = "Schools: Non-capped Funds Indexed to 2006")
+
 #minortype_munis %>% write_csv("minortype_munis.csv")
 ```
 
