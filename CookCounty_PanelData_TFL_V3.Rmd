@@ -1,5 +1,6 @@
 ---
 title: "Revenue Elasticity for Cook County Municipalities"
+subtitle: "Using total_final_levy"
 author: "Alea Wilbur"
 date: "`r Sys.Date()`"
 output:
@@ -347,9 +348,6 @@ agency_data <- agency_data %>%
 #makeCodebook(agency_data, reportTitle = "Panel Data Codebook", output ="word", replace = TRUE, vol = 2)
 ```
 
-```{r merriman-code-chunk}
-agency_data <- agency_data %>% mutate(yearly_change = log())
-```
 
 #### T-Test for home rule taxing agencies
 
@@ -382,7 +380,7 @@ t.test(ttestdata$elasticity ~ ttestdata$home_rule_ind)
 
 ```
 
-#### Capped and non-Capped Funds
+### Capped and non-Capped Funds
 
 
 ```{r}
@@ -396,38 +394,71 @@ agency_data3 <- raw_data_joined %>%
          agency_num = str_pad(agency_num, 9, "left", "0"),
          agency_num = as.factor(agency_num)) %>%
   select(-c(cty_dupage_eav:cty_livingston_eav)) %>%
-  mutate(pct_in_Cook = cty_total_eav / cty_total_eav) 
+  mutate(cty_total_eav = as.numeric(cty_total_eav), # eav in cook and neighboring counties
+         cty_cook_eav = as.numeric(cty_cook_eav), # EAV after exemptions within cook county
+
+pct_in_Cook = cty_cook_eav / cty_total_eav,
+total_final_levy = as.numeric(total_final_levy),
+         total_reduced_levy = as.numeric(total_reduced_levy)) 
 
 agency_data3 <- agency_data3 %>% 
   filter(!agency_num %in% dropped_munis) %>%
   filter(!agency_num %in% exclude_hr_change) %>%
   filter(total_final_levy > 0) %>%
-  mutate(cty_total_eav = as.numeric(cty_total_eav), # eav in cook and neighboring counties
-         total_reduced_levy = as.numeric(total_reduced_levy), # original request
-
-         total_non_cap_ext = as.numeric(total_non_cap_ext), # value that matches Clerk Office PDF for Levy.
-         total_reduced_levy = ifelse(total_reduced_levy == 0, NA, total_reduced_levy),
-         cty_total_eav = as.numeric(cty_total_eav), # EAV after exemptions within cook county
+  mutate( 
+         total_non_cap_ext = ifelse(!is.na(total_non_cap_ext) & total_non_cap_ext > 0,
+                                    as.numeric(total_non_cap_ext), NA), # value that matches Clerk Office PDF for Levy.
+         total_capped_ext = total_final_levy - total_non_cap_ext,
+         #total_reduced_levy = ifelse(total_reduced_levy == 0, NA, total_reduced_levy),
          # cty_total_eav = as.numeric(cty_total_eav), 
          # total_final_levy is after PTELL and clerk or agency reductions.
          
   ) %>%
   mutate( 
     log_eav = log(cty_total_eav), # eav within Cook and neighboring counties.
-    log_levy = log(total_reduced_levy),
+    log_levy = log(total_capped_ext),
     log_levy2 = log(total_non_cap_ext)    #log_eav = log(cty_total_eav),
 #  log_levy = log(total_final_levy),
     )
 
 #write_csv(agency_data, "alltaxingagencies_paneldata_August10.csv",  na = "")
+```
 
 
+The Board of Education is the outlier for both capped and non capped extensions.
+
+
+```{r}
+library(dplyr)
+agency_data3 %>% group_by(agency_name)  %>%
+  filter(minor_type == "MUNI" & agency_name != "CITY OF CHICAGO") %>% 
+  
+  ggplot() + geom_line(aes(x=year, y = total_non_cap_ext, group = agency_name, color = Triad))
+
+agency_data3 %>% group_by(agency_name) %>% 
+  filter(minor_type == "MUNI" & agency_name != "CITY OF CHICAGO") %>% 
+  ggplot() + geom_line(aes(x=year, y = total_capped_ext, group = agency_name, color = Triad))
+
+
+agency_data3 %>% group_by(agency_name)  %>%
+  filter(agency_name != "BOARD OF EDUCATION") %>% ggplot() + geom_line(aes(x=year, y = total_non_cap_ext, group = agency_name))
+
+agency_data3 %>% group_by(agency_name) %>% 
+  filter(agency_name != "BOARD OF EDUCATION") %>% 
+  ggplot() + geom_line(aes(x=year, y = total_capped_ext, group = agency_name))
+
+```
+
+
+
+```{r}
 selected_columns2 <- agency_data3 %>% 
   select(year, agency_name, agency_num, major_type, minor_type, home_rule_ind, 
          #cty_total_eav, total_final_levy, 
          log_eav, log_levy, log_levy2,
-         total_reduced_levy, total_non_cap_ext, cty_total_eav) %>% 
-  arrange(agency_num, year)
+          total_non_cap_ext, total_capped_ext, cty_total_eav) %>% 
+  arrange(agency_num, year) %>%
+  filter(total_non_cap_ext > 0  & total_capped_ext > 0 )
 
 
 panel_data2 <-pdata.frame(selected_columns2, index = c("agency_num", "year"))
@@ -538,6 +569,7 @@ export_summs(noncapped_ext, noncapped_ext_lag, reduced_levy, reduced_levy_lag,
 ```
 
 
+
 __Basic Panel Data Set Below for all Taxing Agencies__ 
 
 
@@ -579,12 +611,12 @@ all_agencies <- panel_data
 
 ```{r}
 library(dplyr)
-panel_data %>% filter(yearly_change > 0.3 | yearly_change < -0.3) 
+panel_data %>% filter(yearly_change > 0.3 | yearly_change < -0.3) %>% head()
 
 # none
 # panel_data %>% filter(yearly_chang_perc > 0.3 | yearly_chang_perc < -0.3) 
 
-panel_data %>% filter(yearly_change > 0.3 | yearly_change < -0.3)  %>% filter(minor_type == "MUNI")
+panel_data %>% filter(yearly_change > 0.3 | yearly_change < -0.3)  %>% filter(minor_type == "MUNI") %>% head()
 
 
 ```
@@ -684,7 +716,7 @@ export_summs(all_m1_simple, all_m1_lags,# all_m1, #, all_m1_all_vars,
 #### Grouped Municipalities
 
 ```{r}
-groupies <- readxl::read_excel("C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/grouped_munis_manual_entry.xlsx")
+groupies <- readxl::read_excel("C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/Levy Elasticity Research/Levy_Elasticity/grouped_munis_manual_entry.xlsx")
 
 library(dplyr)
 grouped_taxbase <- selected_columns %>% 
@@ -1538,7 +1570,7 @@ export_summs(school_mod_major_simple, school_mod_major,
 library(dplyr)
 
 schools <- agency_data3 %>% 
-  filter(major_type == "SCHOOL") %>%
+  filter(major_type == "SCHOOL" & !is.na(log_levy ) & !is.na(log_levy2)) %>%
   select(year, agency_name, agency_num, minor_type, 
          #total_max_levy, total_non_cap_ext, 
          cty_total_eav, log_eav, log_levy, log_levy2, home_rule_ind)
@@ -1608,6 +1640,40 @@ export_summs(
 
 # Other Crap
 
+```{r levy-indexE}
+library(dplyr)
+
+indexed_munis <- agency_data3 %>% ungroup() %>%
+    filter(minor_type == "MUNI" ) %>%
+  select( agency_name, year, total_non_cap_ext, total_capped_ext, cty_cook_eav, total_final_levy, home_rule_ind, Triad) %>%
+
+  group_by(agency_name) %>% 
+  arrange(year) %>%
+
+
+#  group_by(agency_name, year) %>%
+# filter(total_non_cap_ext > 0  & total_capped_ext > 0 & !is.na(cty_cook_eav)) %>%
+ # group_by(year) %>%
+  
+  #arrange()
+  summarize(# Index values to 2006
+    eav_idx = cty_cook_eav / cty_cook_eav[year == 2006] ,
+    levy_idx = total_final_levy / total_final_levy[year == 2006] ,
+    cappedext_idx = total_capped_ext / total_capped_ext[year == 2006] ,
+    noncappedext_idx = total_non_cap_ext / total_non_cap_ext[year == 2006] ,
+    year = year, home_rule_ind = home_rule_ind,  Triad = Triad)  
+
+indexed_munis%>% ggplot() + geom_line(aes(x=year, y = levy_idx, group = agency_name, color = as.factor(home_rule_ind)))
+indexed_munis%>% ggplot() + geom_line(aes(x=year, y = eav_idx, group = agency_name, color = as.factor(home_rule_ind)))
+indexed_munis%>% ggplot() + geom_line(aes(x=year, y = levy_idx, group = agency_name, color = Triad))
+
+
+indexed_munis%>% ggplot() + geom_line(aes(x=year, y = cappedext_idx, group = agency_name, color = Triad))
+
+# franklin park was at 40 so filtered it out. 
+indexed_munis%>% filter(agency_name != "VILLAGE OF FRANKLIN PARK") %>% ggplot() + geom_line(aes(x=year, y = noncappedext_idx, group = agency_name, color = Triad))
+#minortype_munis %>% write_csv("minortype_munis.csv")
+```
 
 ```{r townships, eval=FALSE}
 ## ## Townships   
@@ -1713,7 +1779,7 @@ agency_data3 <- raw_data_joined %>%
          agency_num = str_pad(agency_num, 9, "left", "0"),
          agency_num = as.factor(agency_num)) %>%
   select(-c(cty_dupage_eav:cty_livingston_eav)) %>%
-  mutate(pct_in_Cook = cty_total_eav / cty_total_eav) 
+  mutate(pct_in_Cook = cty_cook_eav / cty_total_eav) 
 
 agency_data3 <- agency_data3 %>% 
   filter(!agency_num %in% dropped_munis) %>%
