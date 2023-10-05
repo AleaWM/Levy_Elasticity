@@ -210,7 +210,12 @@ raw_data_joined <- left_join(raw_data_joined, reassessments_long, by = c("Triad"
 
 raw_data_joined <- left_join(raw_data_joined, pct_res)
 
-#agency_dt %>% write_csv("agency_raw_joined.csv", na = "")
+# output for stata. Missing values are blank spaces
+# raw_data_joined %>% write_csv("agency_raw_joined.csv", na = "")
+
+# output for R, Missing values are empty
+# raw_data_joined %>% write_csv("agency_raw_joined.csv")
+
 ```
 
 > `agency_raw_joined.csv` created in code chunk above.
