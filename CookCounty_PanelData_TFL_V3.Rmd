@@ -456,6 +456,7 @@ agency_data3 %>% group_by(agency_name) %>%
 
 
 ```{r}
+library(dplyr)
 selected_columns2 <- agency_data3 %>% 
   select(year, agency_name, agency_num, major_type, minor_type, home_rule_ind, 
          #cty_total_eav, total_final_levy, 
@@ -514,15 +515,6 @@ reduced_levy_lag <- plm(log_levy ~ log_eav +eav_lag1 + eav_lag2,
              data = panel_data2)
 
 
-#summary(reduced_levy_lag)
-
-export_summs(noncapped_ext, noncapped_ext_lag, reduced_levy, reduced_levy_lag,
-             model.names = c("Agency Totals - Non Capped Funds","Agency Totals - Non Capped With Lags", "Agency Totals - Capped Funds", "Agency Totals - Capped With Lags"),
-             robust = "HC3", statistics = c(N = "nobs", adj.R2 = "adj.r.squared", R2 = "r.squared"))
-```
-
-```{r}
-
 # log_levy2 is the log(total_non_cap_ext)
 noncapped_ext <- plm(log_levy2 ~ log_eav, 
              index = c("agency_name", "year"),
@@ -532,7 +524,7 @@ noncapped_ext <- plm(log_levy2 ~ log_eav,
 
 
 # log_levy2 is the log(total_non_cap_ext)
-noncapped_ext_lag <- plm(log_levy2 ~ log_eav + eav_lag1 +eav_lag2 +eav_lag3 + eav_lag4, 
+noncapped_ext_lag4 <- plm(log_levy2 ~ log_eav + eav_lag1 +eav_lag2 +eav_lag3 + eav_lag4, 
              index = c("agency_name", "year"),
              model = "within", effect= "twoways",                    
              data = panel_data2)
@@ -540,26 +532,17 @@ noncapped_ext_lag <- plm(log_levy2 ~ log_eav + eav_lag1 +eav_lag2 +eav_lag3 + ea
 
 
 
-# log_levy is the log(total_reduced_levy)
-# reduced levy could also be called "capped extension" since it is the
+
 # extension amount from capped funds that can be reduced by PTELL 
-reduced_levy <- plm(log_levy ~ log_eav, 
+reduced_levy_lag4 <- plm(log_levy ~ log_eav + eav_lag1 +eav_lag2+ eav_lag3 + eav_lag4+log_eav*home_rule_ind + log_eav*perc_residential, 
              index = c("agency_name", "year"),
              model = "within", effect = "twoways",                    
              data = panel_data2)
 
 
 
-# extension amount from capped funds that can be reduced by PTELL 
-reduced_levy_lag <- plm(log_levy ~ log_eav + eav_lag1 +eav_lag2+ eav_lag3 + eav_lag4+log_eav*home_rule_ind + log_eav*perc_residential, 
-             index = c("agency_name", "year"),
-             model = "within", effect = "twoways",                    
-             data = panel_data2)
-
-
-
-export_summs(noncapped_ext, noncapped_ext_lag, reduced_levy, reduced_levy_lag,
-             model.names = c("Agency Totals - Non Capped Funds","Agency Totals - Non Capped With Lags", "Agency Totals - Capped Funds", "Agency Totals - Capped With Lags"),
+export_summs(noncapped_ext, noncapped_ext_lag, noncapped_ext_lag4, reduced_levy, reduced_levy_lag, reduced_levy_lag4,
+             model.names = c("Agency Totals - Non Capped Funds","Agency Totals - Non Capped With Lags", "4 Lags", "Agency Totals - Capped Funds", "Agency Totals - Capped With Lags", "4 Lags"),
              robust = "HC3", statistics = c(N = "nobs", adj.R2 = "adj.r.squared", R2 = "r.squared"))
 ```
 
@@ -616,26 +599,8 @@ reduced_levy_lag <- plm(log_levy ~ log_eav +eav_lag1 + eav_lag2,
              data = panel_data2)
 
 
-
-export_summs(noncapped_ext, noncapped_ext_lag, reduced_levy, reduced_levy_lag,
-             model.names = c("Muni Totals - Non Capped Funds","Muni Totals - Non Capped With Lags", "Muni Totals - Capped Funds", "Muni Totals - Capped With Lags"),
-             robust = "HC3", statistics = c(N = "nobs", adj.R2 = "adj.r.squared", R2 = "r.squared"))
-
-```
-
-
-```{r}
-
 # log_levy2 is the log(total_non_cap_ext)
-noncapped_ext <- plm(log_levy2 ~ log_eav, 
-             index = c("agency_name", "year"),
-             model = "within", effect= "twoways",                    
-             data = panel_data2)
-
-
-
-# log_levy2 is the log(total_non_cap_ext)
-noncapped_ext_lag <- plm(log_levy2 ~ log_eav + eav_lag1 +eav_lag2 +eav_lag3 + eav_lag4, 
+noncapped_ext_lag4 <- plm(log_levy2 ~ log_eav + eav_lag1 +eav_lag2 +eav_lag3 + eav_lag4, 
              index = c("agency_name", "year"),
              model = "within", effect= "twoways",                    
              data = panel_data2)
@@ -643,26 +608,16 @@ noncapped_ext_lag <- plm(log_levy2 ~ log_eav + eav_lag1 +eav_lag2 +eav_lag3 + ea
 
 
 
-# log_levy is the log(total_reduced_levy)
-# reduced levy could also be called "capped extension" since it is the
 # extension amount from capped funds that can be reduced by PTELL 
-reduced_levy <- plm(log_levy ~ log_eav, 
+reduced_levy_lag4 <- plm(log_levy ~ log_eav + eav_lag1 +eav_lag2+ eav_lag3 + eav_lag4+ log_eav*home_rule_ind, 
              index = c("agency_name", "year"),
              model = "within", effect = "twoways",                    
              data = panel_data2)
 
 
 
-# extension amount from capped funds that can be reduced by PTELL 
-reduced_levy_lag <- plm(log_levy ~ log_eav + eav_lag1 +eav_lag2+ eav_lag3 + eav_lag4+ log_eav*home_rule_ind + log_eav*perc_residential, 
-             index = c("agency_name", "year"),
-             model = "within", effect = "twoways",                    
-             data = panel_data2)
-
-
-
-export_summs(noncapped_ext, noncapped_ext_lag, reduced_levy, reduced_levy_lag,
-             model.names = c("Muni Totals - Non Capped Funds","Muni Totals - Non Capped With Lags", "Muni Totals - Capped Funds", "Muni Totals - Capped With Lags"),
+export_summs(noncapped_ext, noncapped_ext_lag, noncapped_ext_lag4, reduced_levy, reduced_levy_lag, reduced_levy_lag4,
+             model.names = c("Muni Totals - Non Capped Funds","Muni Totals - Non Capped With 2 Lags", "Muni NonCapped Totals - 4 Lags", "Muni Totals - Capped Funds", "Muni Totals - Capped With 2 Lags", "Munis Capped 4 Lags"),
              robust = "HC3", statistics = c(N = "nobs", adj.R2 = "adj.r.squared", R2 = "r.squared"))
 ```
 
@@ -895,6 +850,7 @@ grouped_munis <- agency_data %>%
   summarize(total_final_levy = sum(total_final_levy),
             total_final_levy = sum(total_final_levy),
             cty_total_eav = first(cty_total_eav), 
+            Triad = first(Triad),
             count = n()) %>% 
   left_join(muni_agency_names) %>% 
   #select(-c(Column1, `Most recent reassessed`)) %>% 
@@ -1015,6 +971,7 @@ grouped_munis <- agency_data %>%
   summarize(total_final_levy = sum(total_final_levy),
             total_final_levy = sum(total_final_levy),
             cty_total_eav = first(cty_total_eav), 
+            Triad = first(Triad),
             count = n()) %>% 
   left_join(muni_agency_names) %>% 
   #select(-c(Column1, `Most recent reassessed`)) %>% 
@@ -1107,6 +1064,7 @@ grouped_munis <- agency_data %>%
             total_final_levy = sum(total_final_levy),
             cty_total_eav = first(cty_total_eav), 
             count = n(),
+            Triad = first(Triad),
             home_rule_ind = as.factor(first(home_rule_ind))) %>% 
   left_join(muni_agency_names) %>% 
  # select(-c(Column1, `Most recent reassessed`)) %>% 
