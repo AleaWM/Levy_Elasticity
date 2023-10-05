@@ -45,6 +45,21 @@ pct_res <- read_csv("C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 20
 # muni av and eav are calculated from the pin data table in ptaxsim. It is BEFORE exemptions and includes any EAV that is above the frozen TIF EAV, frozen EAV, and EAV outside of TIF tax codes.
 # percentages for land use are also before exemptions and do not consider any EAV that would go to a TIF increment
 
+groupies <- readxl::read_excel("C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/Levy Elasticity Research/Levy_Elasticity/grouped_munis_manual_entry.xlsx")
+
+muni_agency_names <- DBI::dbGetQuery(
+  ptaxsim_db_conn,
+  "SELECT DISTINCT agency_num, agency_name, minor_type
+  FROM agency_info
+  WHERE minor_type = 'MUNI'
+  OR agency_num = '020060000'
+  "
+  ) %>% 
+  mutate(first6 = str_sub(agency_num,1,6),
+        # first5 = str_sub(agency_num,1,5)
+         ) %>%
+  select(-minor_type)
+
 ```
 
 From agency.R code in ptaxsim Gitlab "The levy of each jurisdiction is reported by the Cook County Clerk's Office. URL here: <https://www.cookcountyclerkil.gov/service/tax-extension-and-rates>
@@ -52,7 +67,7 @@ From agency.R code in ptaxsim Gitlab "The levy of each jurisdiction is reported 
 
 # Data Gathering and Cleaning
 
-```{r codebook}
+```{r codebook, eval=FALSE, include = FALSE}
 
 #library(sjlabelled)
 #library(psych)
@@ -88,6 +103,9 @@ agency_dt <- agency_dt %>%
 
 
 ## Build Panel Data
+
+
+> `agency_raw_joined.csv` created in code chunk below. File just reads in the CSV for the remaining of the code. To recreate the CSV file, delete 'eval=FALSE' in the code chunk.
 
 ```{r extra-data, include=FALSE}
 
@@ -125,10 +143,9 @@ agency_dt <- agency_dt %>%
 ```
 
 
-```{r agency-dt}
+```{r build-dataset, eval=FALSE}
 
 
-library(dplyr)
 
 agency_dt <- DBI::dbGetQuery(
   ptaxsim_db_conn,
@@ -142,27 +159,8 @@ mutate(first6 = str_sub(agency_num,1,6),
 mutate(year = as.character(year))
 
 
-muni_agency_names <- DBI::dbGetQuery(
-  ptaxsim_db_conn,
-  "SELECT DISTINCT agency_num, agency_name, minor_type
-  FROM agency_info
-  WHERE minor_type = 'MUNI'
-  OR agency_num = '020060000'
-  "
-  ) %>% 
-  mutate(first6 = str_sub(agency_num,1,6),
-        # first5 = str_sub(agency_num,1,5)
-         ) %>%
-  select(-minor_type)
-
-```
 
 
-```{r Triads}
-# took from one of Josh files. Made pivot table of his agencies and their Triad 
-# then saved the info as a csv on my computer named muni_agency_Triads
-# Triads <-  read_csv("muni_agency_Triads.csv") 
-# better file is now muni_short_names.csv
 
 # has binary variable for if it was a reassessment year or not. 
 # Manually created based on the 3 year rotation used for reassessments.
@@ -178,10 +176,7 @@ muni_agency_names <- muni_agency_names %>% left_join(Triads)
 
 # table(muni_agency_names$Triad)
 
-```
 
-
-```{r agency_info-dt}
 # all agency names, numbers, and types
 # includes TIF and non-TIF agencies
 all_taxing_agencies <- DBI::dbGetQuery(
@@ -218,7 +213,6 @@ raw_data_joined <- left_join(raw_data_joined, pct_res)
 
 ```
 
-> `agency_raw_joined.csv` created in code chunk above.
 
 
 > Model notes: Percent residential doesn't change (in its current form of the data) so it doesn't belong in a FE model. If we had the percent residential EAV over time, then it could be in the model but I only have it for one year currently. Triad also doesn't change. home rule indicator shouldn't be used if the homerule status doens't change but it does for a couple munis. 
@@ -230,6 +224,7 @@ raw_data_joined <- left_join(raw_data_joined, pct_res)
 
 
 ```{r}
+raw_data_joined <- read_csv("agency_raw_joined.csv")
 
 raw_data_joined %>% 
   filter(total_final_levy < 1 & minor_type == "MUNI" )  %>% 
@@ -334,8 +329,7 @@ agency_data <- agency_data %>%
 #  log_levy = log(total_levy),
     )
 
-agency_data <- agency_data %>%
-  mutate_if(is.integer64, as.integer)
+# agency_data <- agency_data %>%  mutate_if(is.integer64, as.integer)
 
 #write_csv(agency_data, "alltaxingagencies_paneldata_Sept25.csv",  na = "")
 
@@ -346,20 +340,6 @@ selected_columns <- agency_data %>%
          log_levy, log_eav, reassess_year, cty_total_eav) %>% 
   arrange(agency_num, year)
   
-```
-
-```{r}
-
-agency_data <- agency_data %>%
-  mutate_if(is.integer64, as.integer)
-
-agency_data <- agency_data %>%
-  mutate_if(is.character, as.factor) %>% 
-  mutate(home_rule_ind = as.factor(home_rule_ind),
-         agg_ext_base_year = as.factor(agg_ext_base_year))
-
-
-#makeCodebook(agency_data, reportTitle = "Panel Data Codebook", output ="word", replace = TRUE, vol = 2)
 ```
 
 
@@ -832,7 +812,7 @@ export_summs(all_m1_simple, all_m1_lags,# all_m1, #, all_m1_all_vars,
 #### Grouped Municipalities
 
 ```{r}
-groupies <- readxl::read_excel("C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/Levy Elasticity Research/Levy_Elasticity/grouped_munis_manual_entry.xlsx")
+
 
 library(dplyr)
 grouped_taxbase <- selected_columns %>% 
