@@ -343,7 +343,7 @@ selected_columns <- agency_data %>%
 ```
 
 
-#### T-Test for home rule taxing agencies
+### T-Test for home rule taxing agencies
 
 There does seem to be a difference between home rule and non homerule taxing agencies so include it as an interaction in the panel data. 
 ```{r}
@@ -375,7 +375,7 @@ t.test(ttestdata$elasticity ~ ttestdata$home_rule_ind)
 
 ```
 
-### Capped and non-Capped Funds
+### Capped and non-Capped Funds - Alea's Tangent
 
 
 ```{r}
@@ -739,7 +739,7 @@ all_m1_simple<- plm(log(total_final_levy) ~ log(cty_total_eav) + home_rule_ind +
              data = all_agencies)
 
 
-all_m1_lags<- plm(log(total_final_levy) ~ log(cty_total_eav)  + home_rule_ind+ home_rule_ind:log(cty_total_eav) + eav_lag1 + eav_lag2, 
+all_m1_lags<- plm(log(total_final_levy) ~ log(cty_total_eav)  + home_rule_ind + home_rule_ind:log(cty_total_eav) + eav_lag1 + eav_lag2, 
              index = c("agency_name", "year"), 
              model = "within", effect = "twoways",                    
              data = all_agencies)
@@ -764,7 +764,7 @@ export_summs(all_m1_simple, all_m1_lags,# all_m1, #, all_m1_all_vars,
 
 
 
-#### Grouped Municipalities
+## Grouped Municipalities - Alea's Tangent
 
 ```{r}
 
@@ -839,6 +839,8 @@ export_summs(grouped_model, grouped_model_lagged,# all_m1, #, all_m1_all_vars,
              model.names = c("Shared Taxable Base - All agencies","Shared Taxable Base - All Agencies with lags"),
              robust = "HC3", statistics = c(N = "nobs", adj.R2 = "adj.r.squared", R2 = "r.squared"))
 ```
+
+## Grouped Munis by Traid - Alea's Tangent
 
 ```{r}
 
@@ -1139,7 +1141,7 @@ export_summs(grouped_model, grouped_north, grouped_south, grouped_cleannames, gr
 
 ```
 
-## All Municipalities Together
+# Models for All Municipalities Together
 
 If you only want the 134 municipalities within Cook County, then use minor_type == MUNI. We probably want this. 
 
@@ -1206,10 +1208,6 @@ export_summs(muni_minor_simple, muni_minor, muni_minor_nolags, muni_minor_allvar
              statistics = c(N = "nobs",adj.R2 = "adj.r.squared", R2 = "r.squared"))
 ```
 
-
-### Homerule Municipalities
-
-
 ```{r}
  
 library(dplyr)
@@ -1273,10 +1271,6 @@ hr_muni_minor_leads <- plm(log_levy ~ log(cty_total_eav)  + eav_lead1 + eav_lead
 #summary(hr_muni_minor_leads)
 ```
 
-
-
-__Homerule Munis - No Chicago__
-
 ```{r}
 library(dplyr)
 
@@ -1334,13 +1328,14 @@ nochi_hr_muni_minor2 <- plm(log_levy ~ log(cty_total_eav) + eav_lag1 + eav_lag2 
 # 
 # 
 
-model_names <- c( "Simple Munis", 
+model_names <- c( "Simple Munis all Together", 
                  "Simple No Chi, lagged & HR Ind", "With Interaction"
                  )
 
 export_summs(nochi_hr_muni_minor_simple, nochi_hr_muni_minor1, nochi_hr_muni_minor2, model.names = model_names, statistics = c(N = "nobs", adj.R2 = "adj.r.squared", R2 = "r.squared"))
 ```
 
+## Homerule Municipalities
  
 
 ```{r}
@@ -1407,6 +1402,7 @@ export_summs(muni_minor_simple, hr_muni_minor_simple, hr_muni_minor, nochi_hr_mu
 
 
 
+## Non Homerule Munis
 
 ```{r filtering-agencies2}
 
@@ -1457,7 +1453,7 @@ nonhr_muni_minor_lags <- plm(log_levy ~ log(cty_total_eav) + eav_lag1 + eav_lag2
 #summary(nonhr_muni_minor)
 ```
 
-# Municipality Results
+## Municipality Results
 
 
 
@@ -1541,7 +1537,7 @@ model.names = model_names, statistics = c(N = "nobs", adj.R2 = "adj.r.squared", 
 
 
 
-# Schools
+# Models for Schools
 
 ```{r}
 library(dplyr)
