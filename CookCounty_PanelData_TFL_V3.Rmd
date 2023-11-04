@@ -767,18 +767,49 @@ export_summs(all_m1_simple, all_m1_lags,# all_m1, #, all_m1_all_vars,
 
 ```{r}
 
-plm(log(total_final_levy) ~ log(cty_total_eav)*up_down, 
+m1 <- plm(log(total_final_levy) ~ log(cty_total_eav), 
              index = c("agency_name", "year"), 
              model = "within", effect= "twoways",                    
-             data = panel_data) %>% summary()
+             data = panel_data)
 
 
-plm(log(total_final_levy) ~ log(cty_total_eav)*up_down  + eav_lag1*up_down + eav_lag2*up_down + up_down, 
+m2<- plm(log(total_final_levy) ~ log(cty_total_eav) + eav_lag1 + eav_lag2, 
              index = c("agency_name", "year"), 
              model = "within", effect= "twoways",                    
-             data = panel_data) %>% summary()
+             data = panel_data)
+  
+  
+m3<-  plm(log(total_final_levy) ~ log(cty_total_eav)*up_down, 
+             index = c("agency_name", "year"), 
+             model = "within", effect= "twoways",                    
+             data = panel_data)
+
+
+m4 <- plm(log(total_final_levy) ~ log(cty_total_eav)*up_down  + eav_lag1*up_down + eav_lag2*up_down, 
+             index = c("first6", "year"), 
+             model = "within", effect= "twoways",                    
+             data = panel_data) 
+
+
+# 
+# m2<-plm(log(total_final_levy) ~ log(cty_total_eav)*up_down, 
+#              index = c("agency_name", "year"), 
+#              model = "within", effect= "twoways",                    
+#              data = minortype_munis_panel)
+# 
+# m3<- plm(log(total_final_levy) ~ log(cty_total_eav)*up_down  + eav_lag1*up_down + eav_lag2*up_down + up_down, 
+#              index = c("agency_name", "year"), 
+#              model = "within", effect= "twoways",                    
+#              data = minortype_munis_panel)
+
+
+export_summs(m1, m2, m3, m4, 
+             statistics = c(N = "nobs",adj.R2 = "adj.r.squared", R2 = "r.squared"))
 ```
 
+
+
+## Interactions 
 
 __With Homerule Indicator & log(EAV) Interaction__
 
@@ -838,6 +869,9 @@ export_summs(all_m1_simple, all_m1_lags,# all_m1, #, all_m1_all_vars,
 ```
 
 
+# Models for All Municipalities Together
+
+
 
 ## Grouped Municipalities - Grouped by Shared EAV - Alea's Tangent
 
@@ -884,7 +918,16 @@ detach("package:dplyr", unload = TRUE)
 grouped_taxbase_panel$eav_lag1  <- plm::lag(grouped_taxbase_panel$log_eav, 1)
 grouped_taxbase_panel$eav_lag2  <- plm::lag(grouped_taxbase_panel$log_eav, 2)
 
+grouped_taxbase_panel$county_eav_lag1  <- plm::lag(grouped_taxbase_panel$cty_total_eav, 1)
+grouped_taxbase_panel$county_eav_lag2  <- plm::lag(grouped_taxbase_panel$cty_total_eav, 2)
 
+library(dplyr)
+grouped_taxbase_panel <- grouped_taxbase_panel %>% 
+  mutate(yearly_change = log_eav-eav_lag1,
+         yearly_chang_perc =(log_eav-eav_lag1)/eav_lag1,
+         eav_change = cty_total_eav - county_eav_lag1,
+         eav_change_pct = ((cty_total_eav - county_eav_lag1)/county_eav_lag1)) %>%
+  mutate(up_down  = ifelse(eav_change > 0, "increased", "decreased"))
 
 grouped_model<- plm(log(summed_levy) ~ log(cty_total_eav), 
                     index = c("agency_num", "year"), 
@@ -916,6 +959,31 @@ export_summs(grouped_model, grouped_model_lagged,# all_m1, #, all_m1_all_vars,
              model.names = c("Shared Taxable Base - All agencies","Shared Taxable Base - All Agencies with lags"),
              robust = "HC3", statistics = c(N = "nobs", adj.R2 = "adj.r.squared", R2 = "r.squared"))
 ```
+
+### Asymmetric Models - grouped by EAV & year
+
+```{r}
+
+grouped_model<- plm(log(summed_levy) ~ log(cty_total_eav)*up_down, 
+                    index = c("agency_num", "year"), 
+                    model = "within", 
+                    effect= "twoways",                    
+                    data = grouped_taxbase_panel)
+
+# summary(grouped_model)
+
+grouped_model_lagged<- plm(log(summed_levy) ~ log(cty_total_eav)*up_down + eav_lag1*up_down + eav_lag2*up_down, 
+                    index = c("agency_num", "year"), 
+                    model = "within", 
+                    effect= "twoways",                    
+                    data = grouped_taxbase_panel)
+
+
+export_summs(grouped_model, grouped_model_lagged,# all_m1, #, all_m1_all_vars, 
+             model.names = c("Shared Taxable Base - All agencies","Shared Taxable Base - All Agencies with lags"),
+             robust = "HC3", statistics = c(N = "nobs", adj.R2 = "adj.r.squared", R2 = "r.squared"))
+```
+
 
 ## Grouped Munis by First 6 Digits - Alea's Tangent
 
@@ -1172,7 +1240,6 @@ export_summs(grouped_model, grouped_north, grouped_south, grouped_cleannames, gr
 
 ```
 
-# Models for All Municipalities Together
 
 If you only want the 134 municipalities within Cook County, then use minor_type == MUNI. We probably want this. 
 
@@ -1186,30 +1253,30 @@ library(dplyr)
 minortype_munis <- agency_data %>% 
   filter(minor_type == "MUNI" | agency_name == "TOWN CICERO")  %>%
   select(year, agency_name, agency_num, major_type, minor_type, 
-         cty_total_eav, total_final_levy, log_eav, log_levy, # total_final_rate, 
+         cty_total_eav, total_final_levy, log_eav, log_levy, first6, # total_final_rate, 
      Triad, reassess_year, cty_total_eav, home_rule_ind )
 
-minortype_munis <- pdata.frame(minortype_munis, index = c("agency_name", "year"))
+minortype_munis_panel <- pdata.frame(minortype_munis, index = c("agency_name", "year"))
 
 
 detach("package:dplyr", unload = TRUE)
 
-minortype_munis$eav_lag1  <- plm::lag(minortype_munis$log_eav, 1)
-minortype_munis$eav_lag2  <- plm::lag(minortype_munis$log_eav, 2)
+minortype_munis_panel$eav_lag1  <- plm::lag(minortype_munis_panel$log_eav, 1)
+minortype_munis_panel$eav_lag2  <- plm::lag(minortype_munis_panel$log_eav, 2)
 
-minortype_munis$reassess_lag1 <- plm::lag(minortype_munis$reassess_year, 1)
-minortype_munis$reassess_lag2 <- plm::lag(minortype_munis$reassess_year, 2)
+minortype_munis_panel$reassess_lag1 <- plm::lag(minortype_munis_panel$reassess_year, 1)
+minortype_munis_panel$reassess_lag2 <- plm::lag(minortype_munis_panel$reassess_year, 2)
 
-minortype_munis$eav_lead1 <- plm::lead(minortype_munis$log_eav, 1)
-minortype_munis$eav_lead2 <- plm::lead(minortype_munis$log_eav,2)
+minortype_munis_panel$eav_lead1 <- plm::lead(minortype_munis_panel$log_eav, 1)
+minortype_munis_panel$eav_lead2 <- plm::lead(minortype_munis_panel$log_eav,2)
  
 
-minortype_munis$county_eav_lag1  <- plm::lag(minortype_munis$cty_total_eav, 1)
-minortype_munis$county_eav_lag2  <- plm::lag(minortype_munis$cty_total_eav, 2)
+minortype_munis_panel$county_eav_lag1  <- plm::lag(minortype_munis_panel$cty_total_eav, 1)
+minortype_munis_panel$county_eav_lag2  <- plm::lag(minortype_munis_panel$cty_total_eav, 2)
 
 
 library(dplyr)
-minortype_munis <- minortype_munis %>% 
+minortype_munis_panel <- minortype_munis_panel %>% 
   mutate(yearly_change = log_eav-eav_lag1,
          yearly_chang_perc =(log_eav-eav_lag1)/eav_lag1,
          eav_change = cty_total_eav - county_eav_lag1,
@@ -1219,57 +1286,120 @@ minortype_munis <- minortype_munis %>%
 muni_minor_simple <- plm(log_levy ~ log(cty_total_eav), 
          #    index = c("agency_name", "year"), 
              model = "within", effect = "twoways",      
-             data = minortype_munis)
+             data = minortype_munis_panel)
 
 muni_minor <- plm(log_levy ~ log(cty_total_eav) + eav_lag1 + eav_lag2, 
           #   index = c("agency_name", "year"), 
              model = "within", effect= "twoways",                    
-             data = minortype_munis)
+             data = minortype_munis_panel)
 
 #summary(muni_minor)
 
 muni_minor_nolags <- plm(log_levy ~ log(cty_total_eav) + reassess_year, 
           #   index = c("agency_name", "year"), 
              model = "within", effect= "twoways",                    
-             data = minortype_munis)
+             data = minortype_munis_panel)
 
 
 muni_minor_allvars <- plm(log_levy ~ log(cty_total_eav) + reassess_lag1 + reassess_lag2 + reassess_year +eav_lag1 +eav_lag2, 
              index = c("agency_name", "year"), 
              model = "within", effect= "twoways",                    
-             data = minortype_munis)
+             data = minortype_munis_panel)
 
 muni_minor_leads <- plm(log_levy ~ log(cty_total_eav)+ eav_lead1 + eav_lead2, 
              index = c("agency_name", "year"), 
              model = "within", effect= "twoways",                    
-             data = minortype_munis)
+             data = minortype_munis_panel)
 
 export_summs(muni_minor_simple, muni_minor, muni_minor_nolags, muni_minor_allvars, muni_minor_leads,
              model.names = c("Simple Munis together: HR+nonHR", "Munis together with lags", "Munis together + reassessment year", "Munis together, all variables", " with assessment leads"),
              statistics = c(N = "nobs",adj.R2 = "adj.r.squared", R2 = "r.squared"))
 ```
 
+## Asymmetric Models - Municipalities by agency_name & year
 
 ```{r}
+
 m1 <- plm(log(total_final_levy) ~ log(cty_total_eav), 
              index = c("agency_name", "year"), 
              model = "within", effect= "twoways",                    
-             data = minortype_munis) 
+             data = minortype_munis_panel)
 
-m2<-plm(log(total_final_levy) ~ log(cty_total_eav)*up_down, 
+
+m2<- plm(log(total_final_levy) ~ log(cty_total_eav) + eav_lag1 + eav_lag2, 
              index = c("agency_name", "year"), 
              model = "within", effect= "twoways",                    
-             data = minortype_munis)
-
-m3<- plm(log(total_final_levy) ~ log(cty_total_eav)*up_down  + eav_lag1*up_down + eav_lag2*up_down + up_down, 
+             data = minortype_munis_panel)
+  
+  
+m3<-  plm(log(total_final_levy) ~ log(cty_total_eav)*up_down, 
              index = c("agency_name", "year"), 
              model = "within", effect= "twoways",                    
-             data = minortype_munis)
+             data = minortype_munis_panel)
 
 
-export_summs(m1, m2, m3, 
+m4 <- plm(log(total_final_levy) ~ log(cty_total_eav)*up_down  + eav_lag1*up_down + eav_lag2*up_down, 
+             index = c("agency_name", "year"), 
+             model = "within", effect= "twoways",                    
+             data = minortype_munis_panel) 
+
+
+export_summs(m1, m2, m3, m4, 
              statistics = c(N = "nobs",adj.R2 = "adj.r.squared", R2 = "r.squared"))
 ```
+
+## Asymmetric Models - Munis by first6 & year
+```{r}
+
+minortype_munis_panel <- pdata.frame(minortype_munis, index = c("first6", "year"))
+
+
+detach("package:dplyr", unload = TRUE)
+
+minortype_munis_panel$eav_lag1  <- plm::lag(minortype_munis_panel$log_eav, 1)
+minortype_munis_panel$eav_lag2  <- plm::lag(minortype_munis_panel$log_eav, 2)
+
+minortype_munis_panel$reassess_lag1 <- plm::lag(minortype_munis_panel$reassess_year, 1)
+minortype_munis_panel$reassess_lag2 <- plm::lag(minortype_munis_panel$reassess_year, 2)
+
+minortype_munis_panel$county_eav_lag1  <- plm::lag(minortype_munis_panel$cty_total_eav, 1)
+minortype_munis_panel$county_eav_lag2  <- plm::lag(minortype_munis_panel$cty_total_eav, 2)
+
+
+library(dplyr)
+minortype_munis_panel <- minortype_munis_panel %>% 
+  mutate(yearly_change = log_eav-eav_lag1,
+         yearly_chang_perc =(log_eav-eav_lag1)/eav_lag1,
+         eav_change = cty_total_eav - county_eav_lag1,
+         eav_change_pct = ((cty_total_eav - county_eav_lag1)/county_eav_lag1)) %>%
+  mutate(up_down  = ifelse(eav_change > 0, "increased", "decreased"))
+
+m1 <- plm(log(total_final_levy) ~ log(cty_total_eav), 
+             index = c("first6", "year"), 
+             model = "within", effect= "twoways",                    
+             data = minortype_munis_panel) 
+
+m2 <- plm(log(total_final_levy) ~ log(cty_total_eav) + eav_lag1 + eav_lag2, 
+             index = c("first6", "year"), 
+             model = "within", effect= "twoways",                    
+             data = minortype_munis_panel) 
+
+
+m3<-plm(log(total_final_levy) ~ log(cty_total_eav)*up_down, 
+             index = c("first6", "year"), 
+             model = "within", effect= "twoways",                    
+             data = minortype_munis_panel)
+
+m4<- plm(log(total_final_levy) ~ log(cty_total_eav)*up_down  + eav_lag1*up_down + eav_lag2*up_down + up_down, 
+             index = c("first6", "year"), 
+             model = "within", effect= "twoways",                    
+             data = minortype_munis_panel)
+
+
+export_summs(m1, m2, m3, m4,
+             statistics = c(N = "nobs",adj.R2 = "adj.r.squared", R2 = "r.squared"))
+```
+
 
 ```{r}
  
@@ -1397,6 +1527,11 @@ model_names <- c( "Simple Munis all Together",
 
 export_summs(nochi_hr_muni_minor_simple, nochi_hr_muni_minor1, nochi_hr_muni_minor2, model.names = model_names, statistics = c(N = "nobs", adj.R2 = "adj.r.squared", R2 = "r.squared"))
 ```
+
+
+
+
+
 
 ## Homerule Municipalities
  
