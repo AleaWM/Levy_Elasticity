@@ -38,14 +38,12 @@ library(modelsummary)
 ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/ptaxsim.db/ptaxsim-2021.0.4.db")
 #set_summ_defaults(digits = 2, pvals = FALSE, robust = "HC3" )
 
-# made from 3_Exemption_Details.Rmd file.
-pct_res <- read_csv("C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/Output/3_exemption_details_output-residential_percent.csv")
 
 # Data notes for pct_res: 
 # muni av and eav are calculated from the pin data table in ptaxsim. It is BEFORE exemptions and includes any EAV that is above the frozen TIF EAV, frozen EAV, and EAV outside of TIF tax codes.
 # percentages for land use are also before exemptions and do not consider any EAV that would go to a TIF increment
 
-groupies <- readxl::read_excel("C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/Levy Elasticity Research/Levy_Elasticity/grouped_munis_manual_entry.xlsx")
+groupies <- readxl::read_excel("./grouped_munis_manual_entry.xlsx")
 
 muni_agency_names <- DBI::dbGetQuery(
   ptaxsim_db_conn,
@@ -160,6 +158,8 @@ mutate(year = as.character(year))
 
 
 
+# made from 3_Exemption_Details.Rmd file.
+pct_res <- read_csv("C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/Output/3_exemption_details_output-residential_percent.csv")
 
 
 # has binary variable for if it was a reassessment year or not. 
@@ -1739,7 +1739,7 @@ model.names = model_names, statistics = c(N = "nobs", adj.R2 = "adj.r.squared", 
 
 # Models for Schools
 
-```{r}
+```{r }
 library(dplyr)
 
 schools <- agency_data %>% 
@@ -1796,17 +1796,14 @@ school_mod_comcol <- plm(log_levy ~ log_eav  + eav_lag1 + eav_lag2, index = c("a
                          subset = minor_type == "COMM COLL", model = "within",  
                          effect= "twoways", data = schools)
 
+## table with more school types 
+# model_names = c("All Schools", "All Schools", "Secondary", "Elementary", "Elementary", "Com. Colleges", "Unified" )
+# export_summs(school_mod_major_simple, school_mod_major, 
+#              school_mod_secondary, 
+#              school_mod_elementary_simple, school_mod_elementary, 
+#              school_mod_comcol, school_mod_unified, 
+#              model.names = model_names, robust=TRUE, statistics = c(N = "nobs", adjR2 = "adj.r.squared"))
 
-model_names = c("All Schools", "All Schools", "Secondary", "Elementary", "Elementary", "Com. Colleges", "Unified" )
-export_summs(school_mod_major_simple, school_mod_major, 
-             school_mod_secondary, 
-             school_mod_elementary_simple, school_mod_elementary, 
-             school_mod_comcol, school_mod_unified, 
-             model.names = model_names, robust=TRUE, statistics = c(N = "nobs", adjR2 = "adj.r.squared"))
-```
-
-
-```{r}
 model_names = c("All Schools", "All Schools", "Secondary", "Secondary", "Elementary", "Elementary" )
 export_summs(school_mod_major_simple, school_mod_major, 
              school_mod_secondary_simple,
@@ -1815,6 +1812,8 @@ export_summs(school_mod_major_simple, school_mod_major,
  
              model.names = model_names, robust=TRUE, statistics = c(N = "nobs", adjR2 = "adj.r.squared"))
 ```
+
+## Capped and noncapped school funds - Alea's tangent
 
 ```{r}
 library(dplyr)
