@@ -1,0 +1,139 @@
+---
+title: "Data Validation"
+author: "MVH"
+format: html
+editor: visual
+---
+
+## Load Packages/Read in Data
+
+```{r, message = FALSE}
+
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+
+library(tidyverse)
+library(lmtest)
+library(huxtable)
+library(modelsummary)
+
+df <- read_csv("agency_raw_joined.csv")
+```
+
+Note: We'll load plm when we need it so it doesn't have to fail to play
+nice with tidyverse.
+
+## Make DF with relevant variables
+
+Thus, per Alea's "Codebook for Cook County Taxing Agency Data.docx**"**
+we need:
+
+-   year
+
+-   agency_num
+
+-   home_rule_ind
+
+-   cty_cook_eav: amount of EAV within CC
+
+-   lim_rate: rate that limits the growth in extensions on existing
+    property
+
+-   total_levy: amt requested by agency
+
+-   total_max_levy: for HR = 1, amount requested; HR = 0, after PTELL
+    limits
+
+-   total_reduced_levy: amount of levy requested that is subject to
+    PTELL limitations
+
+-   total_non_cap_ext: amount that is requested that is not subject to
+    PTELL reductions
+
+```{r}
+
+df <- df %>%
+  select(year, agency_num, home_rule_ind, cty_cook_eav, lim_rate, 
+         total_levy, total_max_levy, total_reduced_levy,
+         total_non_cap_ext)
+```
+
+We also need to merge in that pesky clean names file. *If I were petty,
+I'd rename the file to something rude and not just create a csv.*
+
+```{r, eval = FALSE}
+
+names <- read_csv("muni_shortnames.csv")
+
+names <- names %>%
+  select(agency_number, agency_name) %>%
+  rename(agency_num = agency_number) %>%
+  mutate(agency_num = as.character(agency_num))
+
+df <- left_join(df, names, by = "agency_num")
+```
+
+\^\^\^\^\^Let's just come back to this item, I suppose.
+
+## Checking Missingness
+
+I *think* Alea said it would be helpful for me to check if any values
+are missing (or something like that), so let's do that!
+
+First, *total_levy [should equal]{.underline}* *total_reduced_levy +
+total_non_cap_ext*.
+
+```{r}
+
+df <- df %>%
+  mutate(calc_levy = total_reduced_levy + total_non_cap_ext,
+         levy_dif = calc_levy - total_levy)
+```
+
+How many have values where levy_dif != 0? levy_dif \> 0 when the sum of
+total_reduced_levy and total_non_cap_ext are greater than total_levy.
+
+```{r}
+
+options(scipen=999)
+
+df %>%
+  filter(levy_dif != 0) %>%
+  arrange(desc(levy_dif)) %>%
+  mutate(agency_num = as.character(agency_num)) %>%
+  group_by(agency_num) %>%
+  summarize(n = n()) %>%
+  distinct() %>%
+  arrange(desc(n)) %>%
+  group_by(n) %>%
+  reframe(n, count = n()) %>%
+  distinct() %>%
+  arrange(desc(count)) %>%
+  ggplot(aes(x = n, y = count)) +
+  geom_col() +
+  scale_x_continuous(breaks = seq(0, 16, 1))
+
+df_2 <- df %>%
+  arrange(desc(levy_dif)) %>%
+  filter(levy_dif != 0) %>%
+  group_by(agency_num) %>%
+  reframe(agency_num, mean_levy_dif = mean(levy_dif)) %>%
+  distinct() %>% #fucking reframe
+  arrange(mean_levy_dif)
+  
+df_2 %>%  
+  ggplot(aes(mean_levy_dif)) +
+  geom_histogram()
+```
+
+Let's dig in on mean_levy_dif...
+
+```{r}
+
+library(summarytools)
+
+dfSummary(df_2$mean_levy_dif)
+```
+
+*THIS DID NOT WORK BECAUSE IT DIDN'T KNOW HOW TO HANDLE NAs*
+
+Drive/PhD/Repositories/Levy_Elasticity/Levy_Elasticity').
