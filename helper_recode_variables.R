@@ -11,7 +11,7 @@ exclude_hr_change <- c("030770000", "030800000","030880000", "031070000", "03119
 
 recoded_data <- raw_data_joined %>% 
   
-  filter(total_final_levy > 0) %>%
+  filter(total_final_levy > 0) %>%  ## discuss 
   
   mutate(first2 = str_sub(agency_num, 1,2),
          last2 = str_sub(agency_num,8,9),
@@ -38,21 +38,21 @@ recoded_data <- recoded_data %>%
   # log(0)=Inf
   mutate(
     total_final_levy_4log = ifelse(total_final_levy <= 0, 1, total_final_levy),
-    total_non_cap_ext_4log = ifelse(total_non_cap_ext<= 0 | is.na(total_non_cap_ext), 1, total_non_cap_ext), # added Oct. 18 2023
-    total_capped_ext_4log = ifelse(home_rule_ind == 0, (total_final_levy_4log - total_non_cap_ext_4log), NA )
+ #   total_non_cap_ext_4log = ifelse(total_non_cap_ext<= 0 | is.na(total_non_cap_ext), 1, total_non_cap_ext), # added Oct. 18 2023
+ #   total_capped_ext_4log = ifelse(home_rule_ind == 0, (total_final_levy_4log - total_non_cap_ext_4log), NA )
     ) %>%
  
    mutate( 
     log_eav = log(cty_total_eav), # eav within Cook AND neighboring counties.
-    log_capped = log(total_capped_ext_4log),
-    log_nocap = log(total_non_cap_ext_4log),
+ #   log_capped = log(total_capped_ext_4log),
+ #   log_nocap = log(total_non_cap_ext_4log),
     log_totallevy = log(total_final_levy_4log)
   ) %>%
 
   # if not using logged variables, then this matters less  
-  mutate(total_final_levy = ifelse(total_final_levy <=0, 0, total_final_levy),
-         total_non_cap_ext = ifelse(total_non_cap_ext<= 0 | is.na(total_non_cap_ext), 0, total_non_cap_ext),   
-         total_capped_ext = (total_final_levy - total_non_cap_ext) 
+  mutate(total_final_levy = ifelse(total_final_levy <= 0, 0, total_final_levy),
+      #   total_non_cap_ext = ifelse(total_non_cap_ext<= 0 | is.na(total_non_cap_ext), 0, total_non_cap_ext),   
+       #  total_capped_ext = (total_final_levy - total_non_cap_ext) 
   )
          
 
@@ -64,9 +64,9 @@ panel_data <-pdata.frame(recoded_data, index = c("agency_num", "year"))
 
 detach("package:dplyr", unload = TRUE)
 
-panel_data$lag_capped <- plm::lag(panel_data$total_capped_ext, 1)
+# panel_data$lag_capped <- plm::lag(panel_data$total_capped_ext, 1)
 panel_data$lag_totallevy <- plm::lag(panel_data$total_final_levy, 1)
-panel_data$lag_nocap <- plm::lag(panel_data$total_non_cap_ext, 1)
+# panel_data$lag_nocap <- plm::lag(panel_data$total_non_cap_ext, 1)
 panel_data$lag_cty_total_eav <- plm::lag(panel_data$cty_total_eav, 1)
 
 panel_data$eav_lag1 <- plm::lag(panel_data$cty_total_eav, 1)
@@ -82,12 +82,12 @@ panel_data$reassess_lag2 <- plm::lag(panel_data$reassess_year, 2)
 
 library(dplyr)
 panel_data<-panel_data %>% 
-  mutate(capped_pct_change = ((total_capped_ext-lag_capped)/lag_capped),
-         nocap_pct_change = ((total_non_cap_ext - lag_nocap) / lag_nocap),
+  mutate(#capped_pct_change = ((total_capped_ext-lag_capped)/lag_capped),
+         #nocap_pct_change = ((total_non_cap_ext - lag_nocap) / lag_nocap),
          eav_pct_change = (cty_total_eav - lag_cty_total_eav)/ lag_cty_total_eav,
          totallevy_pct_change = (total_final_levy - lag_totallevy) /lag_totallevy)  %>%
-  mutate(capped_pct_change = ifelse(is.na(capped_pct_change),0, capped_pct_change),
-         nocap_pct_change = ifelse(is.na(nocap_pct_change),0, nocap_pct_change),
+  mutate(#capped_pct_change = ifelse(is.na(capped_pct_change),0, capped_pct_change),
+         #nocap_pct_change = ifelse(is.na(nocap_pct_change),0, nocap_pct_change),
          eav_pct_change = ifelse(is.na(eav_pct_change), 0, eav_pct_change),
          home_rule_ind = as.factor(home_rule_ind),
          minor_type = as.factor(minor_type))
