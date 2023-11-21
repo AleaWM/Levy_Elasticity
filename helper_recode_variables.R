@@ -11,7 +11,7 @@ exclude_hr_change <- c("030770000", "030800000","030880000", "031070000", "03119
 
 recoded_data <- raw_data_joined %>% 
   
-  filter(total_final_levy > 0) %>%  ## discuss 
+  filter(total_final_levy > 0) %>%  #### discuss 
   
   mutate(first2 = str_sub(agency_num, 1,2),
          last2 = str_sub(agency_num,8,9),
