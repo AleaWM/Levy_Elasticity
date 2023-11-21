@@ -13,12 +13,14 @@ recoded_data <- raw_data_joined %>%
   
   filter(total_final_levy > 0) %>%  #### discuss 
   
+
+  
   mutate(first2 = str_sub(agency_num, 1,2),
          last2 = str_sub(agency_num,8,9),
          year = as.factor(year),
          agency_num = str_pad(agency_num, 9, "left", "0"),
          agency_num = as.factor(agency_num),
-         home_rule_ind = as.factor(home_rule_ind),
+         home_rule_ind = as.factor(home_rule_ind), #change reference category
          minor_type = as.factor(minor_type)) %>%
   
   mutate(cty_total_eav = as.numeric(cty_total_eav),    # eav in cook and neighboring counties
@@ -28,36 +30,23 @@ recoded_data <- raw_data_joined %>%
          total_reduced_levy = as.numeric(total_reduced_levy) # for non-HR agencies that have their levy reduced
          ) 
 
-
-
 recoded_data <- recoded_data %>% 
   
-  filter(pct_in_Cook > 0.9) %>%
+  filter(pct_in_Cook > 0.9) %>% #keep only agencies greater than 90% in Cook
   
-  # In order to use logged variables, then adding 1 to all values allows the log() to work
-  # log(0)=Inf
   mutate(
-    total_final_levy_4log = ifelse(total_final_levy <= 0, 1, total_final_levy),
- #   total_non_cap_ext_4log = ifelse(total_non_cap_ext<= 0 | is.na(total_non_cap_ext), 1, total_non_cap_ext), # added Oct. 18 2023
- #   total_capped_ext_4log = ifelse(home_rule_ind == 0, (total_final_levy_4log - total_non_cap_ext_4log), NA )
+    total_final_levy_4log = total_final_levy + 1
+    #Add 1 to total_final_levy to allow ln transformation.
+    #See question on line 14
     ) %>%
  
    mutate( 
     log_eav = log(cty_total_eav), # eav within Cook AND neighboring counties.
- #   log_capped = log(total_capped_ext_4log),
- #   log_nocap = log(total_non_cap_ext_4log),
     log_totallevy = log(total_final_levy_4log)
-  ) %>%
-
-  # if not using logged variables, then this matters less  
-  mutate(total_final_levy = ifelse(total_final_levy <= 0, 0, total_final_levy),
-      #   total_non_cap_ext = ifelse(total_non_cap_ext<= 0 | is.na(total_non_cap_ext), 0, total_non_cap_ext),   
-       #  total_capped_ext = (total_final_levy - total_non_cap_ext) 
   )
-         
 
 
-
+#fixed effects for agency and year.
 
 panel_data <-pdata.frame(recoded_data, index = c("agency_num", "year"))
 
