@@ -13,12 +13,10 @@ recoded_data <- raw_data_joined %>%
   
   filter(total_final_levy > 0) %>%  #### discuss 
   
-
-  
-  mutate(first2 = str_sub(agency_num, 1,2),
-         last2 = str_sub(agency_num,8,9),
+  mutate(first2 = str_sub(agency_num, 1,2), #used to collapse agencies
+         last2 = str_sub(agency_num,8,9), #ditto?
          year = as.factor(year),
-         agency_num = str_pad(agency_num, 9, "left", "0"),
+         agency_num = str_pad(agency_num, 9, "left", "0"), #add missing leading zeros
          agency_num = as.factor(agency_num),
          home_rule_ind = as.factor(home_rule_ind), #change reference category
          minor_type = as.factor(minor_type)) %>%
@@ -46,16 +44,15 @@ recoded_data <- recoded_data %>%
   )
 
 
-#fixed effects for agency and year.
+#two way fixed effects will be used for agency and year.
 
 panel_data <-pdata.frame(recoded_data, index = c("agency_num", "year"))
 
+#need to detach dplyr because conflict w/ plm lag command
 
 detach("package:dplyr", unload = TRUE)
 
-# panel_data$lag_capped <- plm::lag(panel_data$total_capped_ext, 1)
 panel_data$lag_totallevy <- plm::lag(panel_data$total_final_levy, 1)
-# panel_data$lag_nocap <- plm::lag(panel_data$total_non_cap_ext, 1)
 panel_data$lag_cty_total_eav <- plm::lag(panel_data$cty_total_eav, 1)
 
 panel_data$eav_lag1 <- plm::lag(panel_data$cty_total_eav, 1)
@@ -66,21 +63,21 @@ panel_data$eav_lag4 <- plm::lag(panel_data$cty_total_eav, 4)
 panel_data$reassess_lag1 <- plm::lag(panel_data$reassess_year, 1)
 panel_data$reassess_lag2 <- plm::lag(panel_data$reassess_year, 2)
 
-
+#boss said leave redundant code.
 
 
 library(dplyr)
-panel_data<-panel_data %>% 
-  mutate(#capped_pct_change = ((total_capped_ext-lag_capped)/lag_capped),
-         #nocap_pct_change = ((total_non_cap_ext - lag_nocap) / lag_nocap),
-         eav_pct_change = (cty_total_eav - lag_cty_total_eav)/ lag_cty_total_eav,
+
+panel_data <- panel_data %>% 
+  
+  mutate(eav_pct_change = (cty_total_eav - lag_cty_total_eav)/ lag_cty_total_eav,
          totallevy_pct_change = (total_final_levy - lag_totallevy) /lag_totallevy)  %>%
-  mutate(#capped_pct_change = ifelse(is.na(capped_pct_change),0, capped_pct_change),
-         #nocap_pct_change = ifelse(is.na(nocap_pct_change),0, nocap_pct_change),
-         eav_pct_change = ifelse(is.na(eav_pct_change), 0, eav_pct_change),
+  
+  mutate(eav_pct_change = ifelse(is.na(eav_pct_change), 0, eav_pct_change),
          home_rule_ind = as.factor(home_rule_ind),
          minor_type = as.factor(minor_type))
 
 detach("package:dplyr", unload = TRUE)
+
 panel_data$lag_eav_pct_change1 <- plm::lag(panel_data$eav_pct_change, 1)
 panel_data$lag_eav_pct_change2 <- plm::lag(panel_data$eav_pct_change, 2)
