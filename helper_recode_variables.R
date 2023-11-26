@@ -1,7 +1,15 @@
 library(tidyverse)
+library(dplyr)
+library(plm)
 
 #16,354 obs
 raw_data_joined <- read_csv("agency_raw_joined.csv")
+
+# Tables from PTAXSIM
+cpi <- read_csv("./Necessary_Files/cpi.csv") # has two year variables!!
+eq_factor <- read_csv("./Necessary_Files/eq_factor.csv") %>% 
+  select(-eq_factor_tentative)
+
 
 dropped_munis <- c("030250000", "030270000", "030300000", "030585000", "030840000", "030890000", "031150000")
 
@@ -10,23 +18,29 @@ exclude_hr_change <- c("030770000", "030800000","030880000", "031070000", "03119
 
 
 recoded_data <- raw_data_joined %>% 
-  
-  filter(total_final_levy > 0) %>%  #### discuss 
-  
-  mutate(first2 = str_sub(agency_num, 1,2), #used to collapse agencies
-         last2 = str_sub(agency_num,8,9), #ditto?
+  left_join(cpi, by = c("year" = "levy_year")) %>%
+  left_join(eq_factor) %>%
+  mutate(
          year = as.factor(year),
          agency_num = str_pad(agency_num, 9, "left", "0"), #add missing leading zeros
          agency_num = as.factor(agency_num),
          home_rule_ind = as.factor(home_rule_ind), #change reference category
          minor_type = as.factor(minor_type)) %>%
   
-  mutate(cty_total_eav = as.numeric(cty_total_eav),    # eav in cook and neighboring counties
-         cty_cook_eav = as.numeric(cty_cook_eav),      # EAV after exemptions within cook county
+  mutate(cty_total_eav = as.numeric(cty_total_eav),    # taxable eav in cook and neighboring counties
+         cty_cook_eav = as.numeric(cty_cook_eav),      # taxable EAV in cook county only
          pct_in_Cook = cty_cook_eav / cty_total_eav,   # to identify taxing agencies that cross county lines
          total_final_levy = as.numeric(total_final_levy), 
-         total_reduced_levy = as.numeric(total_reduced_levy) # for non-HR agencies that have their levy reduced
-         ) 
+         total_reduced_levy = as.numeric(total_reduced_levy), # for non-HR agencies that have their levy reduced
+         av = cty_cook_eav / eq_factor_final
+         ) %>%
+  group_by(year, cty_total_eav) %>%
+  mutate(summed_levy = sum(total_final_levy)+1) %>% # grouped by tax base and year
+  ungroup() %>% 
+  group_by(year, first6) %>%
+  mutate(summed_levy_first6 =sum(total_final_levy)+1) %>% # grouped by first 6 digits in agency number 
+  ungroup()
+
 
 recoded_data <- recoded_data %>% 
   
@@ -35,25 +49,26 @@ recoded_data <- recoded_data %>%
   mutate(
     total_final_levy_4log = total_final_levy + 1
     #Add 1 to total_final_levy to allow ln transformation.
-    #See question on line 14
     ) %>%
  
    mutate( 
     log_eav = log(cty_total_eav), # eav within Cook AND neighboring counties.
-    log_totallevy = log(total_final_levy_4log)
+    log_levy = log(total_final_levy_4log),
+    log_av = log(av)
   )
 
-
-#two way fixed effects will be used for agency and year.
-
+# turn it into panel data!
+# two way fixed effects will be used for agency and year.
 panel_data <-pdata.frame(recoded_data, index = c("agency_num", "year"))
 
-#need to detach dplyr because conflict w/ plm lag command
 
+# need to detach dplyr because conflict w/ plm lag command
 detach("package:dplyr", unload = TRUE)
 
 panel_data$lag_totallevy <- plm::lag(panel_data$total_final_levy, 1)
 panel_data$lag_cty_total_eav <- plm::lag(panel_data$cty_total_eav, 1)
+panel_data$lag_av <- plm::lag(panel_data$av, 1)
+
 
 panel_data$eav_lag1 <- plm::lag(panel_data$cty_total_eav, 1)
 panel_data$eav_lag2 <- plm::lag(panel_data$cty_total_eav, 2)
@@ -71,13 +86,41 @@ library(dplyr)
 panel_data <- panel_data %>% 
   
   mutate(eav_pct_change = (cty_total_eav - lag_cty_total_eav)/ lag_cty_total_eav,
-         totallevy_pct_change = (total_final_levy - lag_totallevy) /lag_totallevy)  %>%
+         tfl_pct_change = (total_final_levy - lag_totallevy) / lag_totallevy,
+         av_pct_change = (av - lag_av) / lag_av,
+         up_down  = ifelse(eav_pct_change > 0, "increased", "decreased"))  %>%
   
-  mutate(eav_pct_change = ifelse(is.na(eav_pct_change), 0, eav_pct_change),
+  mutate(# eav_pct_change = ifelse(is.na(eav_pct_change), 0, eav_pct_change),
          home_rule_ind = as.factor(home_rule_ind),
-         minor_type = as.factor(minor_type))
+         minor_type = as.factor(minor_type),
+         major_type = as.factor(major_type),
+         first6 = as.factor(first6))
 
 detach("package:dplyr", unload = TRUE)
 
 panel_data$lag_eav_pct_change1 <- plm::lag(panel_data$eav_pct_change, 1)
 panel_data$lag_eav_pct_change2 <- plm::lag(panel_data$eav_pct_change, 2)
+
+panel_data$lag_av_pct_change1 <- plm::lag(panel_data$av_pct_change, 1)
+panel_data$lag_av_pct_change2 <- plm::lag(panel_data$av_pct_change, 2)
+
+
+
+library(dplyr)
+schools_panel <- panel_data %>% filter(major_type == "SCHOOL") %>%  
+  mutate(lag_totallevy = as.numeric(lag_totallevy))
+
+governments_panel <- panel_data %>% 
+  mutate(lag_totallevy = as.numeric(lag_totallevy)) %>% 
+  anti_join(schools_panel)  %>%
+  filter(minor_type != "SSA" & major_type != "COOK") # drops 5332 taxing agencies (agency-year combos)
+
+
+table(governments_panel$minor_type)
+
+
+governments_panel <- as.data.frame(governments_panel)
+schools_panel <- as.data.frame(schools_panel)
+all_agencies <- as.data.frame(panel_data)
+
+
