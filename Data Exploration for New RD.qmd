@@ -17,3 +17,22 @@ editor: visual
 Goals: Assemble needed data and balance panel data.
 
 # Lack of Variation in non-HR Munis
+
+First step is to demonstrate a lack of variation in non-HR Munis. Let's
+create the necessary dataframe and generate some descriptive statistics.
+
+## Generate DF
+
+1.  Read in agency_raw_joined.csv from helper file. Load tidyverse.
+
+```{r, message = FALSE}
+
+library(tidyverse)
+
+agency_df <- read_csv("agency_raw_joined.csv")
+```
+
+```{r}
+
+
+```
