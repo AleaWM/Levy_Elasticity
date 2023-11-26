@@ -1,0 +1,19 @@
+---
+title: "Untitled"
+format: html
+editor: visual
+---
+
+# New Research Design
+
+1.  Demonstrate lack of variation for non-HR municipalities.
+
+2.  Calculate cross-elasticity of the levy and the tax base.
+
+    A.  Homerule Munis
+
+    B.  Schools
+
+Goals: Assemble needed data and balance panel data.
+
+# Lack of Variation in non-HR Munis
