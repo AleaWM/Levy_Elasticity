@@ -23,7 +23,8 @@ create the necessary dataframe and generate some descriptive statistics.
 
 ## Generate DF
 
-1.  Read in agency_raw_joined.csv from helper file. Load tidyverse.
+1.  Read in agency_raw_joined.csv from data generation helper file.
+2.  Load tidyverse.
 
 ```{r, message = FALSE}
 
@@ -31,6 +32,8 @@ library(tidyverse)
 
 agency_df <- read_csv("agency_raw_joined.csv")
 ```
+
+3.  Use data transform helper file to clean up variable types.
 
 ```{r}
 
