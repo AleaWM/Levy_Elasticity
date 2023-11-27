@@ -1,5 +1,5 @@
 ---
-title: "Untitled"
+title: "Data Exploration for Revised RD"
 format: html
 editor: visual
 ---
@@ -23,8 +23,8 @@ create the necessary dataframe and generate some descriptive statistics.
 
 ## Generate DF
 
-1.  Read in agency_raw_joined.csv from data generation helper file.
-2.  Load tidyverse.
+1.  Load tidyverse.
+2.  Read in agency_raw_joined.csv from data generating helper file.
 
 ```{r, message = FALSE}
 
@@ -33,9 +33,33 @@ library(tidyverse)
 agency_df <- read_csv("agency_raw_joined.csv")
 ```
 
-3.  Use data transform helper file to clean up variable types.
+### Clean data 1: Run Helper File
+
+```{r, include = FALSE}
+
+source("helper_recode_variables.R")
+```
+
+(Is there a good way to show the helper file worked?)
+
+### Clean data 2: Evaluate data
+
+Want to isolate data on the non-HR municipalities.
 
 ```{r}
 
+NHR_munis <- governments_panel %>%
+  filter(home_rule_ind == 0)
+```
 
+Group by first 6 agency_numbers to "bundle" public goods and services.
+
+```{r}
+
+NHR_munis_bundled <- governments_panel %>%
+  group_by(first6) %>%
+  group_by(year) %>%
+  reframe(year, agency_num, agency_name, clean_name, major_type, minor_type, muni_av, muni_eav, sum_tfl = sum(total_final_levy),
+          sum_tfr = sum(total_final_rate), sum_tml = 
+            sum(total_max_levy), reassess_year)
 ```
