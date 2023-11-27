@@ -113,8 +113,8 @@ schools_panel <- panel_data %>% filter(major_type == "SCHOOL") %>%
 governments_panel <- panel_data %>% 
   mutate(lag_totallevy = as.numeric(lag_totallevy)) %>% 
   anti_join(schools_panel)  %>%
-  filter(minor_type != "SSA" & major_type != "COOK") # drops 5332 taxing agencies (agency-year combos)
-
+  filter(minor_type != "SSA" & major_type != "COOK COUNTY") # drops 5332 taxing agencies (agency-year combos)
+#revised 11/26 to filter "COOK COUNTY"
 
 table(governments_panel$minor_type)
 
