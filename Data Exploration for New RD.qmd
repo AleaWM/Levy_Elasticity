@@ -57,9 +57,12 @@ Group by first 6 agency_numbers to "bundle" public goods and services.
 ```{r}
 
 NHR_munis_bundled <- governments_panel %>%
-  group_by(first6) %>%
-  group_by(year) %>%
-  reframe(year, agency_num, agency_name, clean_name, major_type, minor_type, muni_av, muni_eav, sum_tfl = sum(total_final_levy),
-          sum_tfr = sum(total_final_rate), sum_tml = 
-            sum(total_max_levy), reassess_year)
+  group_by(first6, year) %>%
+  arrange(agency_num, year) %>%
+  summarize(agency_name = first(agency_name), muni_av = max(muni_av), 
+            muni_eav = max(muni_eav), sum_tfl = 
+              sum(total_final_levy, na.rm = T), sum_tfr = 
+              sum(total_final_rate, na.rm = T), sum_tml = 
+              sum(total_max_levy, na.rm = T), 
+            reassess_year = first(reassess_year))
 ```
