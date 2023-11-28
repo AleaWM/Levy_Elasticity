@@ -16,6 +16,77 @@ editor: visual
 
 Goals: Assemble needed data and balance panel data.
 
+# Bundling Munis
+
+First, we are going to group by "first six". That will be
+underinclusive. Then, to pull in additional relevant agencies, we are
+going to do a string search for the muni names. At that point, we will
+re-evaluate what is left out.
+
+Let's load in tidyverse and the original dataframe.
+
+```{r, message = FALSE}
+
+library(tidyverse)
+
+df <- read_csv("agency_raw_joined.csv")
+```
+
+## Bundles of first_six
+
+First, we want to create a df with just:
+
+1.  First six
+2.  Agency number
+3.  Agency name
+4.  Major type
+5.  Minor type
+
+Let's test it out for just 2021.
+
+For now, let's filter out schools and SSAs
+
+```{r}
+
+df_1 <- df %>%
+  filter(year == 2021) %>%
+  filter(major_type != "SCHOOL" & minor_type != "SSA") %>%
+  select(first6, agency_num, agency_name, major_type, minor_type,
+         total_final_levy)
+
+table(df_1$minor_type, df_1$major_type)
+```
+
+It looks like we want to ensure we have the following types of services
+pulled in, because they won't match by first6:
+
+1.  Fire
+2.  Library
+3.  Park
+
+How much total_final_levy does that leave unaccounted for?
+
+```{r}
+
+df_1 %>%
+  filter(major_type == "MISCELLANEOUS") %>%
+  group_by(minor_type) %>%
+  summarize(minor_type, sum(total_final_levy), n()) %>%
+  distinct()
+```
+
+The biggest concern seems to be minor_type == BOND. That is a large
+amount of levy tied up in seven entities. Might warrant eyeballing.
+Return to this item.
+
+## Pulling in levies for Park, Library, and Fire
+
+Since we can't use "first6" for the minor_type == park, library, and
+fire, we need to find another way to pull them into the municipal
+bundles.
+
+## What's up with minor_type == BOND?
+
 # Lack of Variation in non-HR Munis
 
 First step is to demonstrate a lack of variation in non-HR Munis. Let's
