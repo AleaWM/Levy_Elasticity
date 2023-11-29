@@ -44,7 +44,8 @@ First, we want to create a df with just:
 
 Let's test it out for just 2021.
 
-For now, let's filter out schools and SSAs
+For now, let's filter out schools and SSAs and look at the breakdown for
+the other minor types.
 
 ```{r}
 
@@ -83,7 +84,7 @@ Return to this item.
 
 Since we can't use "first6" for the minor_type == park, library, and
 fire, we need to find another way to pull them into the municipal
-bundles.
+bundles. A text string seems like the cleanest way.
 
 ## What's up with minor_type == BOND?
 
