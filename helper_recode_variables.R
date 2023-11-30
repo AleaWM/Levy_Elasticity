@@ -34,10 +34,10 @@ recoded_data <- raw_data_joined %>%
          total_reduced_levy = as.numeric(total_reduced_levy), # for non-HR agencies that have their levy reduced
          av = cty_cook_eav / eq_factor_final
          ) %>%
-  group_by(year, cty_total_eav) %>%
-  mutate(summed_levy = sum(total_final_levy)+1) %>% # grouped by tax base and year
+  group_by(year, cty_total_eav, home_rule_ind) %>%
+  mutate(summed_levy_sharetaxbase = sum(total_final_levy)+1) %>% # grouped by tax base and year
   ungroup() %>% 
-  group_by(year, first6) %>%
+  group_by(year, first6, home_rule_ind) %>%
   mutate(summed_levy_first6 =sum(total_final_levy)+1) %>% # grouped by first 6 digits in agency number 
   ungroup()
 
@@ -55,7 +55,8 @@ recoded_data <- recoded_data %>%
     log_eav = log(cty_total_eav), # eav within Cook AND neighboring counties.
     log_levy = log(total_final_levy_4log),
     log_av = log(av)
-  )
+  ) %>% 
+  filter(minor_type != "SSA")
 
 # turn it into panel data!
 # two way fixed effects will be used for agency and year.
