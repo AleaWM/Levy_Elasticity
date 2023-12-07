@@ -11,6 +11,8 @@ eq_factor <- read_csv("./Necessary_Files/eq_factor.csv") %>%
   select(-eq_factor_tentative)
 
 
+
+
 dropped_munis <- c("030250000", "030270000", "030300000", "030585000", "030840000", "030890000", "031150000")
 
 
@@ -21,24 +23,29 @@ recoded_data <- raw_data_joined %>%
   left_join(cpi, by = c("year" = "levy_year")) %>%
   left_join(eq_factor) %>%
   mutate(
-         year = as.factor(year),
-         agency_num = str_pad(agency_num, 9, "left", "0"), #add missing leading zeros
-         agency_num = as.factor(agency_num),
-         home_rule_ind = as.factor(home_rule_ind), #change reference category
-         minor_type = as.factor(minor_type)) %>%
+    # year = as.factor(year) 
+    agency_num = as.character(agency_num),
+    
+    agency_num = str_pad(agency_num, 9, "left", "0"), #add missing leading zeros
+    first6 = str_pad(first6, 6, "left", "0"),
+    home_rule_ind = as.character(home_rule_ind), #change reference category
+    minor_type = as.factor(minor_type),
+    reassess_year = as.character(reassess_year)) %>%
   
   mutate(cty_total_eav = as.numeric(cty_total_eav),    # taxable eav in cook and neighboring counties
          cty_cook_eav = as.numeric(cty_cook_eav),      # taxable EAV in cook county only
          pct_in_Cook = cty_cook_eav / cty_total_eav,   # to identify taxing agencies that cross county lines
          total_final_levy = as.numeric(total_final_levy), 
          total_reduced_levy = as.numeric(total_reduced_levy), # for non-HR agencies that have their levy reduced
-         av = cty_cook_eav / eq_factor_final
+         av = cty_cook_eav / eq_factor_final,
+         first6_w_hr = str_c(first6, "_", home_rule_ind),
+         agency_w_hr = str_c(agency_num, "_", home_rule_ind)
          ) %>%
   group_by(year, cty_total_eav, home_rule_ind) %>%
   mutate(summed_levy_sharetaxbase = sum(total_final_levy)+1) %>% # grouped by tax base and year
-  ungroup() %>% 
+  ungroup() %>%
   group_by(year, first6, home_rule_ind) %>%
-  mutate(summed_levy_first6 =sum(total_final_levy)+1) %>% # grouped by first 6 digits in agency number 
+  mutate(summed_levy_first6 =sum(total_final_levy)+1) %>% # grouped by first 6 digits in agency number
   ungroup()
 
 
@@ -47,16 +54,34 @@ recoded_data <- recoded_data %>%
   filter(pct_in_Cook > 0.9) %>% #keep only agencies greater than 90% in Cook
   
   mutate(
-    total_final_levy_4log = total_final_levy + 1
+    total_final_levy_4log = total_final_levy + 1,
     #Add 1 to total_final_levy to allow ln transformation.
-    ) %>%
- 
-   mutate( 
+    
     log_eav = log(cty_total_eav), # eav within Cook AND neighboring counties.
     log_levy = log(total_final_levy_4log),
-    log_av = log(av)
+    log_av = log(av),
+    
+    year = as.factor(year), # for plm()
+    agency_num = as.factor(agency_num) # for plm()
+    
   ) %>% 
-  filter(minor_type != "SSA")
+  filter(minor_type != "SSA") # drops 5332 taxing agencies (agency-year combos)
+
+## 7921 observations remain after removing SSAs ##
+
+drop_me <- recoded_data %>% 
+  group_by(agency_name, agency_num) %>%
+  mutate(has_levy = ifelse(total_final_levy > 0, 1, 0)) %>%
+  summarize(levies = sum(total_final_levy),
+            has_levies = sum(has_levy)) %>%
+  filter(levies == 0 | has_levies < 5)
+
+drop_me
+
+recoded_data <- recoded_data %>% 
+  filter(!agency_num %in% drop_me$agency_num)
+# 7715 obs after removing
+
 
 # turn it into panel data!
 # two way fixed effects will be used for agency and year.
@@ -113,8 +138,7 @@ schools_panel <- panel_data %>% filter(major_type == "SCHOOL") %>%
 
 governments_panel <- panel_data %>% 
   mutate(lag_totallevy = as.numeric(lag_totallevy)) %>% 
-  anti_join(schools_panel)  %>%
-  filter(minor_type != "SSA" & major_type != "COOK COUNTY") # drops 5332 taxing agencies (agency-year combos)
+  filter( major_type != "COOK COUNTY" & major_type != "SCHOOL") 
 #revised 11/26 to filter "COOK COUNTY"
 
 table(governments_panel$minor_type)
