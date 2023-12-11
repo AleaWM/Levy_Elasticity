@@ -152,6 +152,7 @@ all_m1_lags<- plm(log(total_final_levy_4log) ~ log(cty_total_eav) + lag(log(cty_
 ```
 ```{r AV-version, include = FALSE}
 
+
 av_simple<- plm(log(total_final_levy_4log) ~ log(av), 
              index = c("agency_name", "year"), 
              model = "within", effect= "twoways",                    
@@ -719,7 +720,6 @@ grouped_manual <- recoded_data %>%
   select(year, uniqueid, everything())
 
 
-table(grouped_manual$reassess_year, grouped_manual$minor_type)
 
  grouped_manual %>%  # 236 nonHR and 68 HR
   ungroup() %>%
@@ -1012,32 +1012,6 @@ export_summs(nonhr_muni_minor_simple, # nonhr_muni_minor_simple0,
              statistics = c(N = "nobs", R2 = "r.squared", adj.R2 = "adj.r.squared"))
 ```
 
-## Asymmetric attempt
-
-```{r}
-
-grouped_model<- plm(log(total_final_levy) ~ log(cty_total_eav)*up_down, 
-                    model = "within", 
-                    effect= "twoways",                    
-                    data = grouped_munis)
-
-# summary(grouped_model)
-
-grouped_model_lagged<- plm(log(total_final_levy) ~ log(cty_total_eav)*up_down + lag(log(cty_total_eav),1)*up_down + lag(log(cty_total_eav),2)*up_down, 
-                    model = "within", 
-                    effect= "twoways",                    
-                    data = grouped_munis)
-
-grouped_model_lagged2 <- plm(log(total_final_levy) ~ log(cty_total_eav)*up_down + lag(log(cty_total_eav),1)*up_down + lag(log(cty_total_eav),2)*up_down + home_rule_ind*up_down + log(cty_total_eav)*home_rule_ind, 
-                    model = "within", 
-                    effect= "twoways",                    
-                    data = grouped_munis)
-
-
-export_summs(grouped_model, grouped_model_lagged, grouped_model_lagged2, #, all_m1_all_vars, 
-             model.names = c("Mnaully grouped","with lags", "with hr_ind"),
-             robust = "HC3", statistics = c(N = "nobs", adj.R2 = "adj.r.squared", R2 = "r.squared"))
-```
 
 # Percent change
 
