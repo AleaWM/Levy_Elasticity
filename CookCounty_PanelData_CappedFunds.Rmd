@@ -89,18 +89,20 @@ agency_dt <- agency_dt %>%
 
 ## Build Panel Data
 
-```{r extra-data, include=FALSE}
+```{r extra-data, include=FALSE, eval=FALSE}
 
 ## These are additional tables that exist in PTAXSIM
 ## Not necessary for this code but reminder that it exists.
 ## Contains fund number, capped fund status, and more.
 
-# cpi <- DBI::dbGetQuery(
-#   ptaxsim_db_conn,
-#   "SELECT *
-#   FROM cpi
-#   "
-# )
+cpi <- DBI::dbGetQuery(
+  ptaxsim_db_conn,
+  "SELECT *
+  FROM cpi
+  "
+)
+
+# write_csv(cpi, "cpi.csv")
 # 
 # agency_fund <- DBI::dbGetQuery(
 #   ptaxsim_db_conn,
@@ -116,12 +118,14 @@ agency_dt <- agency_dt %>%
 #   "
 # )
 # 
-# eq_factor <-  DBI::dbGetQuery(
-#   ptaxsim_db_conn,
-#   "SELECT *
-#   FROM eq_factor
-#   "
-# )
+eq_factor <-  DBI::dbGetQuery(
+  ptaxsim_db_conn,
+  "SELECT *
+  FROM eq_factor
+  "
+)
+
+#write_csv(eq_factor, "eq_factor.csv")
 ```
 
 
