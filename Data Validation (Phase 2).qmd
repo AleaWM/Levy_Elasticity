@@ -1,42 +1,47 @@
 ---
 title: "Data Exploration--Revised RD"
-author: "MVH"
+author: "MVH & AWM"
 format: html
 editor: visual
 ---
 
-```{r setup, message = FALSE}
+# Municipalities
+
+## Setup
+
+1.  Load packages/global options
+
+```{r, message = FALSE}
+
 knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 
 library(tidyverse)
 library(DBI)
-#library(data.table)
-#library(ggspatial)
-#library(gstat)
-#library(here)
-#library(httr)
-#library(jsonlite)
 library(ptaxsim)
-#library(sf)
 library(stars)
-#library(glue)
 library(lmtest)
-library(huxtable) # for summ() and regression output formatting
-# Create the DB connection with the default name expected by PTAXSIM functions
+library(huxtable)
 library(jtools)
-library(plm) #for fixed effects
+library(plm)
 library(modelsummary)
-library(dplyr)
 
-ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/ptaxsim.db/ptaxsim-2021.0.4.db")
-#set_summ_defaults(digits = 2, pvals = FALSE, robust = "HC3" )
+set_summ_defaults(digits = 2, pvals = FALSE, robust = "HC3")
 
+```
 
-# Data notes for pct_res: 
-# muni av and eav are calculated from the pin data table in ptaxsim. It is BEFORE exemptions and includes any EAV that is above the frozen TIF EAV, frozen EAV, and EAV outside of TIF tax codes.
-# percentages for land use are also before exemptions and do not consider any EAV that would go to a TIF increment
+2.  Open PTAXSIM DB connection
 
-#groupies <- readxl::read_excel("./grouped_munis_manual_entry.xlsx")
+```{r, message = FALSE}
+
+ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "G:/My Drive/PhD/Cook County Property Taxes/Data Analysis/Working Directory/ptaxsim.db")
+
+```
+
+3.  Query PTAXSIM DB for minor_type == "muni" and Cicero names
+
+<!--# Check necessity of final two lines of this chunk!! -->
+
+```{r}
 
 muni_agency_names <- DBI::dbGetQuery(
   ptaxsim_db_conn,
@@ -46,15 +51,12 @@ muni_agency_names <- DBI::dbGetQuery(
   OR agency_num = '020060000'
   "
   ) %>% 
-  mutate(first6 = str_sub(agency_num,1,6),
-        # first5 = str_sub(agency_num,1,5)
-         ) %>%
+  mutate(first6 = str_sub(agency_num,1,6)) %>%
   select(-minor_type)
-
 ```
 
+```{r, message = FALSE, warning = FALSE}
 
-```{r message = FALSE, warning = FALSE}
 source("helper_recode_variables.R")
 ```
 
@@ -66,14 +68,15 @@ all_agencies <- recoded_data
 
 ```
 
-
 # Grouped by grouped_label from CSV
 
-Uses manually coded labels that combine both methods of grouping taxing agencies: 
+Uses manually coded labels that combine both methods of grouping taxing
+agencies:
 
-taxing agencies that could be grouped by either the first 6 digits of their  shared tax base (EAV equal during a tax year)
+taxing agencies that could be grouped by either the first 6 digits of
+their shared tax base (EAV equal during a tax year)
 
-```{r}
+```{r, eval = FALSE}
 library(dplyr)
 
 library(openxlsx)
@@ -133,7 +136,7 @@ grouped_manual <- recoded_data %>%
   summarize(count = n())
 ```
 
-72 nonHR and 65 HR if only majortype munis is included. 
+72 nonHR and 65 HR if only majortype munis is included.
 
 ```{r}
 
@@ -179,7 +182,6 @@ grouped_manual_has16 %>% ggplot() +
   facet_wrap(~home_rule_ind) +
   theme_classic()
 ```
-
 
 ```{r}
 
@@ -279,7 +281,8 @@ export_summs(grouped_model, grouped_cleannames_lag,  grouped_cleannames_withHRin
 
 ```
 
-When using the grouped_labels csv to identify agencies that should be grouped, then there are 124 nonHR and 69 HR grouped taxing districts.
+When using the grouped_labels csv to identify agencies that should be
+grouped, then there are 124 nonHR and 69 HR grouped taxing districts.
 
 ## Seperating hr and nonhr
 
@@ -417,7 +420,6 @@ export_summs(nonhr_muni_minor_simple, # nonhr_muni_minor_simple0,
              statistics = c(N = "nobs", R2 = "r.squared", adj.R2 = "adj.r.squared"))
 ```
 
-
 # Percent change
 
 ```{r}
@@ -497,7 +499,6 @@ indexed_munis %>% ggplot() + geom_line(aes(x=year, y = levy_idx, group = uniquei
 
 #minortype_munis %>% write_csv("minortype_munis.csv")
 ```
-
 
 # Schools
 
