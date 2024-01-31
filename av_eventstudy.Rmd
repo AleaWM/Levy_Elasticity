@@ -1,0 +1,1049 @@
+---
+title: "Event Studies Attempt"
+subtitle: "Using Assessed Value"
+author: "AWM & MVH"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    theme: flatly
+    toc: yes
+    toc_float: yes
+    df_print: paged
+    code_folding: hide
+---
+
+```{r setup, message = FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+
+library(tidyverse)
+library(DBI)
+#library(data.table)
+#library(ggspatial)
+#library(gstat)
+#library(here)
+#library(httr)
+#library(jsonlite)
+library(ptaxsim)
+#library(sf)
+library(stars)
+#library(glue)
+library(lmtest)
+library(huxtable) # for summ() and regression output formatting
+# Create the DB connection with the default name expected by PTAXSIM functions
+library(jtools)
+library(plm) #for fixed effects
+library(modelsummary)
+library(dplyr)
+
+ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/ptaxsim.db/ptaxsim-2021.0.4.db")
+#set_summ_defaults(digits = 2, pvals = FALSE, robust = "HC3" )
+
+
+# Data notes for pct_res: 
+# muni av and eav are calculated from the pin data table in ptaxsim. It is BEFORE exemptions and includes any EAV that is above the frozen TIF EAV, frozen EAV, and EAV outside of TIF tax codes.
+# percentages for land use are also before exemptions and do not consider any EAV that would go to a TIF increment
+
+#groupies <- readxl::read_excel("./grouped_munis_manual_entry.xlsx")
+
+muni_agency_names <- DBI::dbGetQuery(
+  ptaxsim_db_conn,
+  "SELECT DISTINCT agency_num, agency_name, minor_type
+  FROM agency_info
+  WHERE minor_type = 'MUNI'
+  OR agency_num = '020060000'
+  "
+  ) %>% 
+  mutate(first6 = str_sub(agency_num,1,6),
+        # first5 = str_sub(agency_num,1,5)
+         ) %>%
+  select(-minor_type)
+
+```
+
+From agency.R code in ptaxsim Gitlab "The levy of each jurisdiction is reported by the Cook County Clerk's Office. URL here: <https://www.cookcountyclerkil.gov/service/tax-extension-and-rates>
+
+
+# Data Gathering and Cleaning
+
+
+
+## Manipulated Variables
+
+```{r message = FALSE, warning = FALSE}
+source("helper_recode_variables.R")
+```
+
+```{r}
+
+library(dplyr)
+
+all_agencies <- recoded_data
+
+```
+
+
+# Models for All Taxing Agencies
+
+Includes schools, and miscellaneous taxing agencies all together. Only for comparison. Excludes SSAs and Cook County taxing agencies.
+
+```{r AV-version}
+
+detach("package:dplyr", unload = TRUE)
+
+av_simple<- plm(log(total_final_levy_4log) ~ log(av), 
+             index = c("agency_name", "year"), 
+             model = "within", effect= "twoways",                    
+             data = all_agencies)
+#summary(all_m1_simple)
+
+av_lags<- plm(log(total_final_levy_4log) ~ log(av) + lag(log(av), 1) + lag(log(av),2), 
+             index = c("agency_name", "year"), 
+             model = "within", effect= "twoways",                    
+             data = all_agencies)
+
+
+model_names <- c( av_simple = "All Agencies FE, Naive Levy Requested", 
+                  av_lags = "With Lagged EAV"
+                 # all_m1 = "Leads & Lags"
+                  )
+
+export_summs(av_simple, av_lags,# all_m1, #, all_m1_all_vars, 
+             robust = "HC3",  model.names = model_names, statistics = c(N = "nobs", adj.R2 = "adj.r.squared", R2 = "r.squared"))
+
+
+```
+
+```{r}
+
+m1 <- plm(log(total_final_levy_4log) ~ log(cty_total_eav), 
+             index = c("agency_name", "year"), 
+             model = "within", effect= "twoways",                    
+             data = panel_data)
+
+
+m2<- plm(log(total_final_levy_4log) ~ log(cty_total_eav) + lag(log(cty_total_eav), 1) + lag(log(cty_total_eav),2), 
+             index = c("agency_name", "year"), 
+             model = "within", effect= "twoways",                    
+             data = panel_data)
+  
+  
+m3 <-  plm(log(total_final_levy_4log) ~ log(cty_total_eav)*up_down, 
+             index = c("agency_name", "year"), 
+             model = "within", effect= "twoways",                    
+             data = panel_data)
+
+
+m4 <- plm(log(summed_levy_first6) ~ log(cty_total_eav)*up_down  + lag(log(cty_total_eav), 1)*up_down + lag(log(cty_total_eav),2)*up_down, 
+             index = c("agency_name", "year"), 
+             model = "within", effect= "twoways",                    
+             data = governments_panel) 
+
+
+```
+
+
+# Grouped by grouped_label from CSV
+
+Uses manually coded labels that combine both methods of grouping taxing agencies: 
+
+taxing agencies that could be grouped by either the first 6 digits of their  shared tax base (EAV equal during a tax year)
+
+```{r}
+library(dplyr)
+
+library(openxlsx)
+groupies2 <- read.xlsx("grouped_agencies_28Nov2023.xlsx") %>%          
+  mutate(agency_num = str_pad(agency_num, 9, "left", "0"),
+                                                                        
+         first6 = as.character(first6)) #add missing leading zeros
+
+
+groupies2 <- read_csv("grouped_labels.csv") %>%          
+  mutate(agency_num = str_pad(agency_num, 9, "left", "0"),
+         first6 = as.character(first6), # make character
+        # home_rule_ind = as.character(home_rule_ind),
+         first6 = str_pad(first6, 6, "left", "0"), # add leading zeros
+         first6_w_hr_ind = str_c(first6, "_", hr_ind))
+                                                                        
+
+```
+
+# After 2018
+```{r}
+library(dplyr)
+
+table(recoded_data$reassess_year, recoded_data$minor_type)
+
+after2018_hr <- recoded_data %>% 
+  ungroup() %>% 
+  mutate(year_num = as.numeric(as.character(year)) ) %>% 
+  filter(year_num > 2017) %>%
+ # filter(year %in% c("2018", "2019", "2020". "2021") ) %>%   
+  left_join(groupies2,
+            by = c("agency_name", "agency_num")
+            ) %>% 
+    filter(major_type == "MUNICIPALITY/TOWNSHIP" # | major_type == "MISCELLANEOUS"
+           & minor_type != "MISC"
+           ) %>%  
+  filter(home_rule_ind == 1) %>% 
+  group_by(year, grouped_label, home_rule_ind, lim_rate) %>% 
+  summarize(agency_name = first(agency_name),
+            agency_num = first(agency_num),
+            total_final_levy = sum(total_final_levy, na.rm=TRUE)+1,
+            cty_total_eav = first(cty_total_eav), 
+            av = sum(av, na.rm=TRUE),
+            Triad = first(Triad), 
+            agency_count = n(),
+            reassess_year = first(reassess_year),
+            home_rule_ind = first(home_rule_ind)) %>% 
+    left_join(muni_agency_names) %>% 
+    #select(-c(Column1, `Most recent reassessed`)) %>% 
+    mutate(
+      log_eav = log(cty_total_eav),
+      log_levy = log(total_final_levy),
+      bundled = ifelse(agency_count > 1, 1, 0),
+      uniqueid = str_c(grouped_label, "_", home_rule_ind, "_", bundled),
+      panel_id = str_c(grouped_label, "_", home_rule_ind, "_", bundled, "_", lim_rate),
+    first2_dig = str_sub(agency_num, 1,2),
+    town = ifelse(first2_dig == "02" | agency_name == "TOWN CICERO", "Town", "Muni")) %>% 
+  filter(total_final_levy > 1) %>%
+  select(year, uniqueid, everything())
+
+ after2018_hr %>%  # 236 nonHR and 68 HR
+  ungroup() %>%
+  #filter(year == 2021) %>%
+  group_by(home_rule_ind, year) %>%
+  summarize(count = n())
+```
+
+
+
+72 nonHR and 65 HR if only majortype munis is included. 
+
+```{r}
+after2018_hr %>% ggplot() + 
+  geom_line(aes(x=year,y=total_final_levy, group = uniqueid, alpha = .5, color = Triad)) + 
+  theme_classic()
+
+after2018_hr %>% ggplot() + 
+  geom_line(aes(x=year, y=av, group = uniqueid, alpha = .5, color = Triad)) + 
+  theme_classic()
+
+
+after2018_hr %>% ggplot() + 
+  geom_point(aes(x=log(av), y = log(total_final_levy), color = uniqueid)) + theme(legend.position = "none")
+
+after2018_hr %>% ggplot() + 
+  geom_point(aes(x=log(av), y = log(total_final_levy), color = uniqueid, shape = year)) + theme(legend.position = "none")
+
+
+after2018_hr %>% ggplot() + 
+  geom_point(aes(x=year, y=av,# color = home_rule_ind, 
+                 alpha = .1)) +
+  geom_line(aes(x=year, y = av, group = grouped_label, alpha = .1, color = Triad)) +
+  geom_smooth(aes(x=year, y=av, # 
+                  color = Triad, se=FALSE, size = 2)) + 
+  theme_classic() + 
+  labs(title = "Assessment impact on AV",
+       subtitle = "Years shown are Tax Years (Reassessment year + 1)", 
+       caption = "North Triad was reasessed in 2019,
+       South Triad was reassessed in 2020,
+       Chicago was reassessed in 2021. (North in 2022, South in 2023)")
+
+after2018_hr %>% ggplot() + 
+  geom_point(aes(x=year, y=total_final_levy,# color = home_rule_ind, 
+                 alpha = .1)) +
+  geom_line(aes(x=year, y = total_final_levy, group = uniqueid, alpha = .1)) +
+  geom_smooth(aes(x=year, y=total_final_levy, # 
+                  group = home_rule_ind,
+                 # group = grouped_w_hr_ind, 
+                  color = home_rule_ind), se=FALSE, size = 2) + 
+  facet_wrap(~home_rule_ind) +
+  theme_classic()
+```
+
+
+```{r av-paneldata-triad}
+
+detach("package:dplyr", unload = TRUE)
+
+grouped_munis <- pdata.frame(after2018_hr, index = c("uniqueid", "year")) 
+
+table(grouped_munis$year)
+grouped_munis <- make.pbalanced(grouped_munis)
+is.pbalanced(grouped_munis)
+table(grouped_munis$year)
+
+grouped_munis$eav_lag1  <- plm::lag(grouped_munis$log_eav, 1)
+grouped_munis$av_lag  <- plm::lag(grouped_munis$av, 1)
+
+grouped_munis$eav_lag2  <- plm::lag(grouped_munis$log_eav, 2)
+
+grouped_munis$cty_eav_lag  <- plm::lag(grouped_munis$cty_total_eav, 1)
+
+# 
+# grouped_munis$reassess_lag1 <- plm::lag(grouped_munis$reassess_year, 1)
+# grouped_munis$reassess_lag2 <- plm::lag(grouped_munis$reassess_year, 2)
+# 
+# 
+# grouped_munis$reassess_lead1 <- plm::lead(grouped_munis$reassess_year, 1)
+# grouped_munis$reassess_lead2 <- plm::lead(grouped_munis$reassess_year, 2)
+        
+library(dplyr)
+grouped_munis <- grouped_munis %>% 
+  mutate(yearly_change = log_eav-eav_lag1,
+         yearly_chang_perc =(log_eav-eav_lag1)/eav_lag1,
+         eav_change = cty_total_eav - cty_eav_lag,
+         eav_change_pct = ((cty_total_eav - cty_eav_lag)/cty_eav_lag),
+         av_change = av - av_lag,
+         av_pct_change = (av-av_lag)/av_lag
+       ) %>%
+  mutate(up_down  = ifelse(eav_change > 0, "increased", "decreased"))
+
+
+detach("package:dplyr", unload = TRUE)
+
+# All Agencies-Agency & Year FE"
+grouped_model<- plm(log(total_final_levy) ~ log(cty_total_eav), 
+                   # index = c("grouped_w_hr_ind", "year"), 
+                    model = "within", 
+                    effect= "twoways",                    
+                    data = grouped_munis)
+
+
+
+
+
+
+grouped_cleannames_withHRind <- plm(log(total_final_levy) ~ log(cty_total_eav)+ log(cty_total_eav):Triad, 
+                        #  index = c("grouped_w_hr_ind", "year"), 
+                          model = "within", 
+                          effect= "twoways",                    
+                          data = grouped_munis)
+
+#summary(grouped_cleannames_withHRind)
+
+grouped_cleannames_withHRind_lagged <- plm(log(total_final_levy) ~ log(cty_total_eav)+ log(cty_total_eav):Triad + lag(log(cty_total_eav),1) + lag(log(cty_total_eav),2), 
+                          #index = c("grouped_w_hr_ind", "year"), 
+                          model = "within", 
+                          effect= "twoways",                    
+                          data = grouped_munis)
+
+#summary(grouped_cleannames_withHRind_lagged)
+
+grouped_cleannames_lag <- plm(log(total_final_levy) ~ log(cty_total_eav) + lag(log(cty_total_eav),1) + lag(log(cty_total_eav),2),
+                          #index = c("grouped_w_hr_ind", "year"), 
+                              model = "within", 
+                              effect= "twoways",                    
+                              data = grouped_munis)
+
+grouped_cleannames_lag2 <- plm(log(total_final_levy) ~ log(cty_total_eav) + lag(log(cty_total_eav),1) + lag(log(cty_total_eav),2)+log(cty_total_eav):Triad + lag(log(cty_total_eav),1):Triad  + lag(log(cty_total_eav),2):Triad ,
+#                          index = c("uniqueid", "year"), 
+                              model = "within", 
+                              effect= "twoways",                    
+                              data = grouped_munis)
+#summary(grouped_cleannames_lag2)
+
+
+model_names <- c(grouped_model = "Grouped manually, Summed Levies", 
+                 grouped_cleannames_lag = "with Lags",
+                 grouped_cleannames_withHRind = "with Triad Indicator",
+                 grouped_cleannames_withHRind_lagged = "Triad indacator with Lags",
+                grouped_cleannames_lag2 = "Triad interact with both Lags") # has Chicago
+
+
+# plot(grouped_model)
+
+
+export_summs(grouped_model, grouped_cleannames_lag,  grouped_cleannames_withHRind, grouped_cleannames_withHRind_lagged, grouped_cleannames_lag2, robust = "HC3",  model.names = model_names, statistics = c(N = "nobs", R2 = "r.squared", adj.R2 = "adj.r.squared"))
+
+
+
+```
+
+When using the grouped_labels csv to identify agencies that should be grouped, then there are 124 nonHR and 69 HR grouped taxing districts.
+```{r av-lmdata-triad}
+
+#detach("package:dplyr", unload = TRUE)
+
+
+library(dplyr)
+grouped_munis <- grouped_munis %>% 
+  mutate(yearly_change = log_eav-eav_lag1,
+         yearly_chang_perc =(log_eav-eav_lag1)/eav_lag1,
+         eav_change = cty_total_eav - cty_eav_lag,
+         eav_change_pct = ((cty_total_eav - cty_eav_lag)/cty_eav_lag),
+         av_change = av - av_lag,
+         av_pct_change = (av-av_lag)/av_lag
+       ) %>%
+  mutate(up_down  = ifelse(eav_change > 0, "increased", "decreased"),
+         North_reassess = ifelse(reassess_year == "2020", "N_reassess", "no_assess"))
+
+
+detach("package:dplyr", unload = TRUE)
+
+# All Agencies-Agency & Year FE"
+grouped_model<- lm(log(total_final_levy) ~ log(cty_total_eav), 
+                    data = grouped_munis)
+
+
+
+
+
+
+grouped_cleannames_withHRind <- lm(log(total_final_levy) ~ log(cty_total_eav)+ log(cty_total_eav):Triad, 
+                          data = grouped_munis)
+
+#summary(grouped_cleannames_withHRind)
+
+grouped_cleannames_withHRind_lagged <- plm(log(total_final_levy) ~ log(cty_total_eav)+ log(cty_total_eav):Triad + lag(log(cty_total_eav),1) + lag(log(cty_total_eav),2), 
+                          data = grouped_munis)
+
+#summary(grouped_cleannames_withHRind_lagged)
+
+grouped_cleannames_lag <- plm(log(total_final_levy) ~ log(cty_total_eav) + lag(log(cty_total_eav),1) + lag(log(cty_total_eav),2),
+                              data = grouped_munis)
+
+grouped_cleannames_lag2 <- plm(log(total_final_levy) ~ log(cty_total_eav) + lag(log(cty_total_eav),1) + lag(log(cty_total_eav),2)+log(cty_total_eav):Triad + lag(log(cty_total_eav),1):Triad  + lag(log(cty_total_eav),2):Triad ,
+                              data = grouped_munis)
+#summary(grouped_cleannames_lag2)
+
+
+model_names <- c(grouped_model = "Grouped manually, Summed Levies", 
+                 grouped_cleannames_lag = "with Lags",
+                 grouped_cleannames_withHRind = "with Triad Indicator",
+                 grouped_cleannames_withHRind_lagged = "Triad indacator with Lags",
+                grouped_cleannames_lag2 = "Triad interact with both Lags") # has Chicago
+
+
+# plot(grouped_model)
+
+
+export_summs(grouped_model, grouped_cleannames_lag,  grouped_cleannames_withHRind, grouped_cleannames_withHRind_lagged, grouped_cleannames_lag2, robust = "HC3",  model.names = model_names, statistics = c(N = "nobs", R2 = "r.squared", adj.R2 = "adj.r.squared"))
+
+
+
+```
+
+
+```{r av-laggedlevy-triad}
+
+#detach("package:dplyr", unload = TRUE)
+
+
+library(dplyr)
+grouped_munis <- grouped_munis %>% 
+  mutate(yearly_change = log_eav-eav_lag1,
+         yearly_chang_perc =(log_eav-eav_lag1)/eav_lag1,
+         eav_change = cty_total_eav - cty_eav_lag,
+         eav_change_pct = ((cty_total_eav - cty_eav_lag)/cty_eav_lag),
+         av_change = av - av_lag,
+         av_pct_change = (av-av_lag)/av_lag
+       ) %>%
+  mutate(up_down  = ifelse(eav_change > 0, "increased", "decreased"),
+         North_reassess = as.factor(ifelse(reassess_year == "2020", "N_reassess", "no_assess")))
+
+
+detach("package:dplyr", unload = TRUE)
+
+# All Agencies-Agency & Year FE"
+grouped_model<- lm(log(total_final_levy) ~ lag(log(total_final_levy)), 
+                    data = grouped_munis)
+
+
+
+
+
+
+grouped_cleannames_withHRind <- lm(log(total_final_levy) ~ log(av)+ log(total_final_levy), 
+                          data = grouped_munis)
+
+#summary(grouped_cleannames_withHRind)
+
+grouped_cleannames_withHRind_lagged <- lm(log(total_final_levy) ~ log(av)+ log(total_final_levy) + Triad, 
+                          data = grouped_munis)
+
+
+grouped_cleannames_lag <- lm(log(total_final_levy) ~ log(av) + lag(log(av),1) + lag(log(av),2),
+                              data = grouped_munis)
+
+grouped_cleannames_lag2 <- lm(log(total_final_levy) ~ log(av) + lag(log(av),1) + lag(log(av),2)+ log(av):Triad + lag(log(av),1):Triad  + lag(log(av),2):Triad ,
+                              data = grouped_munis)
+
+
+model_names <- c(grouped_model = "Grouped manually, Summed Levies", 
+                 grouped_cleannames_lag = "with Lags",
+                 grouped_cleannames_withHRind = "with Triad Indicator",
+                 grouped_cleannames_withHRind_lagged = "Triad indacator with Lags",
+                grouped_cleannames_lag2 = "Triad interact with both Lags") # has Chicago
+
+
+# plot(grouped_model)
+
+
+export_summs(grouped_model, grouped_cleannames_lag,  grouped_cleannames_withHRind, grouped_cleannames_withHRind_lagged, grouped_cleannames_lag2, robust = "HC3",  model.names = model_names, statistics = c(N = "nobs", R2 = "r.squared", adj.R2 = "adj.r.squared"))
+
+
+
+```
+
+
+
+# Other Crap
+
+```{r levy-indexed, error=TRUE}
+library(dplyr)
+library(tidyverse)
+
+indexed_munis <- grouped_manual_has16 %>%
+#  mutate(year = as.factor(year)) %>%
+  ungroup() %>%
+ # filter(minor_type == "MUNI") %>%
+ # filter(!agency_num %in% dropped_munis & !agency_num %in% exclude_hr_change ) %>% 
+  mutate(year = as.character(year),
+         agency_name = as.character(agency_name)) %>% 
+  group_by(uniqueid) %>% 
+  summarize(     # Index values to 2006
+    year=year,
+    
+    eav_idx = cty_total_eav / (cty_total_eav[year == "2006"] ),
+    levy_idx = total_final_levy / (total_final_levy[year == "2006"]),
+    av_idx = av / (av[year == 2006]),
+    Triad = Triad,
+    home_rule_ind = home_rule_ind
+  )   
+
+indexed_munis %>% 
+  ggplot(aes(x=year, y = levy_idx, group = uniqueid, label = uniqueid, color = Triad)) + 
+  geom_line(alpha=.5, linetype = "dashed") +
+  geom_point() + 
+  theme_classic()+
+ # geom_text(size = 2, vjust=-1.5)+
+  labs(title = "Municipalities:Total Final Levy Indexed to 2006")
+
+
+indexed_munis %>% ggplot() + 
+  geom_line(aes(x=year, y = levy_idx, group = uniqueid, color = Triad), alpha=.5, linetype = "dashed") +
+  geom_point(aes(x=year, y = levy_idx), alpha = .1) + 
+  theme_classic()+
+  facet_wrap(~Triad)+
+    labs(title = "Municipalities:Total Final Levy Indexed to 2006")
+
+
+indexed_munis %>% ggplot() + geom_line(aes(x=year, y = eav_idx, group = uniqueid, color = (Triad)))  +
+  facet_wrap(~Triad) + 
+  labs(title = "Municipalities: Taxable EAV Indexed to 2006" )
+
+
+indexed_munis %>% ggplot() + geom_line(aes(x=year, y = av_idx, group = uniqueid, color = Triad))  +
+  facet_wrap(~Triad) + 
+  theme(legend.position = "bottom") +
+  labs(title = "Municipalities: AV Indexed to 2006" )
+
+indexed_munis %>% ggplot() + 
+  geom_line(aes(x=year, y = levy_idx, group = uniqueid, color = Triad)) +  
+  facet_wrap(~Triad) + 
+  labs(title = "Municipalities: Total Final Levy Indexed to 2006")
+
+#minortype_munis %>% write_csv("minortype_munis.csv")
+```
+
+```{r levy-indexed-schools, error=TRUE}
+library(dplyr)
+
+indexed_schools <- recoded_data %>% ungroup() %>%
+    filter(major_type == "SCHOOL" ) %>%
+ # select( agency_name, year, #total_non_cap_ext, total_capped_ext, 
+ #         cty_cook_eav, total_final_levy, home_rule_ind, Triad) %>%
+  group_by(agency_name) %>% 
+  mutate(years = n()) %>%
+  filter(years == 16) %>%
+  arrange(year) %>%
+    summarize(# Index values to 2006
+    eav_idx = cty_cook_eav / cty_cook_eav[year == 2006] ,
+    levy_idx = total_final_levy / total_final_levy[year == 2006] ,
+    av_idx = av / av[year == 2006],
+  #  cappedext_idx = total_capped_ext / total_capped_ext[year == 2006] ,
+  #  noncappedext_idx = total_non_cap_ext / total_non_cap_ext[year == 2006] ,
+    year = year, home_rule_ind = home_rule_ind,  Triad = Triad) 
+
+indexed_schools %>% ggplot(aes(x=year, y = levy_idx, group = agency_name, label = agency_name)) + 
+    geom_line(alpha=.5, linetype = "dashed") +
+  geom_point(alpha = .2) + 
+  theme_classic()+
+  labs(title = "Schools: Total Final Levy Indexed to 2006")
+
+
+indexed_schools %>% ggplot() + 
+  geom_line(aes(x=year, y = eav_idx, group = agency_name), alpha = .3)  +  theme_classic()+
+
+  labs(title = "Schools: Taxable EAV Indexed to 2006" )
+
+indexed_schools %>% ggplot() + 
+  geom_line(aes(x=year, y = av_idx, group = agency_name), alpha = .3)  +  theme_classic()+
+
+  labs(title = "Schools: Taxable AV Indexed to 2006" )
+```
+
+
+
+
+
+## More graphs
+
+
+```{r error = TRUE}
+agency_data <- after2018_hr
+
+library(dplyr)
+#adds cicero, drops chicago
+agency_data %>% 
+  ggplot(aes(x=log(av), y=log(total_final_levy), color=agency_num, group = agency_num))+
+  geom_point(alpha=.5) +
+theme(legend.position = "none")+
+    labs(title = "Logged Values All Years: Municipality EAV & Requested Levy")
+
+
+agency_data %>% 
+  filter(year == 2017) %>%
+  ggplot(aes(x=av, y=total_final_levy, color=Triad, label = grouped_label))+
+  theme_classic()+
+  geom_point()+ 
+  geom_text(size = 2, vjust=-1.5)+
+  labs(title = "2021 levy:av")
+
+
+
+agency_data %>%
+  filter(Triad == "South")%>%
+  ggplot(aes(x=year, 
+             y= av, 
+             group = grouped_label,
+            # color = Triad
+          # color = reassess_year
+               )  )+
+  geom_line(alpha = .1)+ 
+  theme_classic() + 
+  labs(title = "South triad municipalities: \n Homerule & non-Homerule Together", caption = "Drops Chicago")
+```
+
+```{r error=TRUE}
+agency_data %>% 
+  ggplot(aes(x=year, y=total_final_levy, group = grouped_label, color = Triad))+
+  geom_line(alpha=.5, linetype = "dashed") +
+  geom_point( )+
+  theme_classic() + 
+    geom_vline(aes(xintercept = "2020")) +
+theme(legend.position = "none") +
+    labs(title = "Non-homerule South Triad: Muni Levy Values All Years")
+
+
+```
+
+# From 2014 to 2018
+
+
+```{r}
+library(dplyr)
+
+after2014_hr <- recoded_data %>% 
+  ungroup() %>% 
+  mutate(year_num = as.numeric(as.character(year)) ) %>% 
+  filter(year_num > 2014 & year_num  < 2019) %>%
+ # filter(year %in% c("2018", "2019", "2020". "2021") ) %>%   
+  left_join(groupies2,
+            by = c("agency_name", "agency_num")
+            ) %>% 
+    filter(major_type == "MUNICIPALITY/TOWNSHIP" # | major_type == "MISCELLANEOUS"
+           & minor_type != "MISC"
+           ) %>%  
+  filter(home_rule_ind == 1) %>% 
+  group_by(year, grouped_label, home_rule_ind, lim_rate) %>% 
+  summarize(agency_name = first(agency_name),
+            agency_num = first(agency_num),
+            total_final_levy = sum(total_final_levy, na.rm=TRUE)+1,
+            cty_total_eav = first(cty_total_eav), 
+            av = sum(av, na.rm=TRUE),
+            Triad = first(Triad), 
+            agency_count = n(),
+            reassess_year = first(reassess_year),
+            home_rule_ind = first(home_rule_ind)) %>% 
+    left_join(muni_agency_names) %>% 
+    #select(-c(Column1, `Most recent reassessed`)) %>% 
+    mutate(
+      log_eav = log(cty_total_eav),
+      log_levy = log(total_final_levy),
+      bundled = ifelse(agency_count > 1, 1, 0),
+      uniqueid = str_c(grouped_label, "_", home_rule_ind, "_", bundled),
+      panel_id = str_c(grouped_label, "_", home_rule_ind, "_", bundled, "_", lim_rate),
+    first2_dig = str_sub(agency_num, 1,2),
+    town = ifelse(first2_dig == "02" | agency_name == "TOWN CICERO", "Town", "Muni")) %>% 
+  filter(total_final_levy > 1) %>%
+  select(year, uniqueid, everything())
+
+ after2014_hr %>%  # 236 nonHR and 68 HR
+  ungroup() %>%
+  group_by(home_rule_ind, year) %>%
+  summarize(count = n())
+```
+
+
+
+72 nonHR and 65 HR if only majortype munis is included. 
+
+```{r}
+after2014_hr %>% ggplot() + 
+  geom_line(aes(x=year,y=total_final_levy, group = uniqueid, alpha = .5, color = Triad)) + 
+  theme_classic()
+
+after2014_hr %>% ggplot() + 
+  geom_line(aes(x=year, y=av, group = uniqueid, alpha = .5, color = Triad)) + 
+  theme_classic()
+
+
+after2014_hr %>% ggplot() + 
+  geom_point(aes(x=log(av), y = log(total_final_levy), color = uniqueid)) + theme(legend.position = "none")
+
+after2014_hr %>% ggplot() + 
+  geom_point(aes(x=log(av), y = log(total_final_levy), color = uniqueid, shape = year)) + theme(legend.position = "none")
+
+
+after2014_hr %>% ggplot() + 
+  geom_point(aes(x=year, y=av,# color = home_rule_ind, 
+                 alpha = .1)) +
+  geom_line(aes(x=year, y = av, group = grouped_label, alpha = .1, color = Triad)) +
+  geom_smooth(aes(x=year, y=av, # 
+                  color = Triad, se=FALSE, size = 2)) + 
+  theme_classic() + 
+  labs(title = "Assessment impact on AV",
+       subtitle = "Years shown are Tax Years (Reassessment year + 1)", 
+       caption = "North Triad was reasessed in 2015,
+       South Triad was reassessed in 2016,
+       Chicago was reassessed in 2017.")
+
+after2014_hr %>% ggplot() + 
+  geom_point(aes(x=year, y=total_final_levy,# color = home_rule_ind, 
+                 alpha = .1)) +
+  geom_line(aes(x=year, y = total_final_levy, group = uniqueid, alpha = .1)) +
+  geom_smooth(aes(x=year, y=total_final_levy, # 
+                  group = home_rule_ind,
+                 # group = grouped_w_hr_ind, 
+                  color = home_rule_ind), se=FALSE, size = 2) + 
+  facet_wrap(~home_rule_ind) +
+  theme_classic()
+```
+
+## FEOLS
+```{r error = TRUE}
+#("fixest")
+library(fixest)
+
+after2014_hr <- after2014_hr %>% mutate(year_num = as.numeric(as.character(year)) ) 
+
+event_2016_0 <- feols(log(total_final_levy)~ i(year, Triad, ref = 2016) | lag(log(total_final_levy)) + year_num, data = after2014_hr)
+  
+coefplot(event_2016_0)
+  
+
+event2016 <- feols(log(total_final_levy)~  log(av) + Triad*i(year, ref = 2016), data = after2014_hr, cluster = 'grouped_label')
+
+event2016
+
+ # Plot the results , except for the intercep ,# and add a line joining
+ # them and a space and line for the reference group
+coefplot(event2016, drop = '(Intercept)',
+pt.join = TRUE, ref = c('year:2015' = 2016), ref.line = TRUE)
+
+event2017 <- feols(log(total_final_levy)~  log(av) + Triad*i(year, ref = 2017), data = after2014_hr, cluster = 'grouped_label')
+
+event2017
+
+ # Plot the results , except for the intercep ,# and add a line joining
+ # them and a space and line for the reference group
+coefplot(event2017, drop = '(Intercept)',
+pt.join = TRUE, ref = c('year:2016' = 2017), ref.line = TRUE)
+```
+
+Event study treats each time period separately. It does not incorporate any sort of trend.
+The predicted counterfactual in each period is purely determined by the reference year (aka "the event") — everything is relative to that.  
+
+## ARIMA
+
+
+## OLS and FE 
+
+Event Studies chapter in the Effect - 
+"we have to have some way of predicting the counterfactual. We have plenty of information from the before-event times. If we can make an assumption that whatever was going on before would have continued doing its thing if not for the treatment, then we can use that before-event data to predict what we’d expect to see without treatment, and then see how410 the effect the actual outcome deviates from that prediction. The extent of the deviation is the effect of treatment"
+
+Figure 7.2 in book?
+
+```{r}
+library(dplyr)
+after2018_hr <- after2018_hr %>% 
+  mutate(year_num = as.numeric(as.character(year)),
+         afterevent = ifelse(year_num > 2016, 1, 0),
+         afterevent_factor = factor(afterevent, levels = c("Before", "After"), ordered = TRUE),
+         eventyear = year_num - 2016)
+
+
+detach("package:dplyr", unload = TRUE)
+
+grouped_munis <- pdata.frame(after2018_hr, index = c("uniqueid", "year")) 
+
+table(grouped_munis$year)
+grouped_munis <- make.pbalanced(grouped_munis)
+is.pbalanced(grouped_munis)
+table(grouped_munis$year)
+
+grouped_munis$eav_lag1  <- plm::lag(grouped_munis$log_eav, 1)
+grouped_munis$av_lag  <- plm::lag(grouped_munis$av, 1)
+
+grouped_munis$eav_lag2  <- plm::lag(grouped_munis$log_eav, 2)
+
+grouped_munis$cty_eav_lag  <- plm::lag(grouped_munis$cty_total_eav, 1)
+
+# 
+# grouped_munis$reassess_lag1 <- plm::lag(grouped_munis$reassess_year, 1)
+# grouped_munis$reassess_lag2 <- plm::lag(grouped_munis$reassess_year, 2)
+# 
+# 
+# grouped_munis$reassess_lead1 <- plm::lead(grouped_munis$reassess_year, 1)
+# grouped_munis$reassess_lead2 <- plm::lead(grouped_munis$reassess_year, 2)
+        
+library(dplyr)
+grouped_munis <- grouped_munis %>% 
+  mutate(yearly_change = log_eav-eav_lag1,
+         yearly_chang_perc =(log_eav-eav_lag1)/eav_lag1,
+         eav_change = cty_total_eav - cty_eav_lag,
+         eav_change_pct = ((cty_total_eav - cty_eav_lag)/cty_eav_lag),
+         av_change = av - av_lag,
+         av_pct_change = (av-av_lag)/av_lag
+       ) %>%
+  mutate(up_down  = ifelse(eav_change > 0, "increased", "decreased"))
+
+
+detach("package:dplyr", unload = TRUE)
+
+# All Agencies-Agency & Year FE"
+grouped_model<- plm(log(total_final_levy) ~ log(cty_total_eav), 
+                   # index = c("grouped_w_hr_ind", "year"), 
+                    model = "within", 
+                    effect= "twoways",                    
+                    data = grouped_munis)
+
+
+
+
+
+
+grouped_cleannames_withHRind <- plm(log(total_final_levy) ~ log(cty_total_eav)+ log(cty_total_eav):Triad, 
+                        #  index = c("grouped_w_hr_ind", "year"), 
+                          model = "within", 
+                        #  effect= "twoways",                    
+                          data = grouped_munis)
+
+#summary(grouped_cleannames_withHRind)
+
+grouped_cleannames_withHRind_lagged <- plm(log(total_final_levy) ~ log(cty_total_eav)+ log(cty_total_eav):Triad + lag(log(cty_total_eav),1) + lag(log(cty_total_eav),2), 
+                          #index = c("grouped_w_hr_ind", "year"), 
+                          model = "within", 
+                        #  effect= "twoways",                    
+                          data = grouped_munis)
+
+#summary(grouped_cleannames_withHRind_lagged)
+
+grouped_cleannames_lag <- plm(log(total_final_levy) ~ log(cty_total_eav)*afterevent + lag(log(cty_total_eav),1) + lag(log(cty_total_eav),2),
+                          #index = c("grouped_w_hr_ind", "year"), 
+                              model = "within", 
+                             # effect= "twoways",                    
+                              data = grouped_munis)
+
+grouped_cleannames_lag2 <- plm(log(total_final_levy) ~ log(cty_total_eav) + lag(log(cty_total_eav),1) + lag(log(cty_total_eav),2)+log(cty_total_eav):Triad + lag(log(cty_total_eav),1):Triad  + lag(log(cty_total_eav),2):Triad  ,
+#                          index = c("uniqueid", "year"), 
+                              model = "within", 
+                             # effect= "twoways",                    
+                              data = grouped_munis)
+#summary(grouped_cleannames_lag2)
+
+
+model_names <- c(grouped_model = "Grouped manually, Summed Levies", 
+                 grouped_cleannames_lag = "with Lags",
+                 grouped_cleannames_withHRind = "with Triad Indicator",
+                 grouped_cleannames_withHRind_lagged = "Triad indacator with Lags",
+                grouped_cleannames_lag2 = "Triad interact with both Lags") # has Chicago
+
+
+# plot(grouped_model)
+
+
+export_summs(grouped_model, grouped_cleannames_lag,  grouped_cleannames_withHRind, grouped_cleannames_withHRind_lagged, grouped_cleannames_lag2, robust = "HC3",  model.names = model_names, statistics = c(N = "nobs", R2 = "r.squared", adj.R2 = "adj.r.squared"))
+
+
+
+```
+
+When using the grouped_labels csv to identify agencies that should be grouped, then there are 124 nonHR and 69 HR grouped taxing districts.
+
+### Event Studies
+
+Regression with interaction
+
+```{r error=TRUE}
+
+grouped_cleannames<- plm(log(total_final_levy) ~ log(cty_total_eav)+ eventyear*factor(afterevent)+Triad*eventyear,
+                          #index = c("grouped_w_hr_ind", "year"), 
+                             model = "within", 
+                           #   effect= "twoways",                    
+                              data = grouped_munis)
+summary(grouped_cleannames)
+
+export_summs(grouped_cleannames, 
+           #  grouped_cleannames_lag,  grouped_cleannames_withHRind, grouped_cleannames_withHRind_lagged, grouped_cleannames_lag2, 
+           #  robust = "HC3", 
+             statistics = c(N = "nobs", R2 = "r.squared", adj.R2 = "adj.r.squared"))
+```
+
+
+
+```{r av-lmdata-triad2014}
+
+#detach("package:dplyr", unload = TRUE)
+
+
+library(dplyr)
+grouped_munis <- grouped_munis %>% 
+  mutate(yearly_change = log_eav-eav_lag1,
+         yearly_chang_perc =(log_eav-eav_lag1)/eav_lag1,
+         eav_change = cty_total_eav - cty_eav_lag,
+         eav_change_pct = ((cty_total_eav - cty_eav_lag)/cty_eav_lag),
+         av_change = av - av_lag,
+         av_pct_change = (av-av_lag)/av_lag
+       ) %>%
+  mutate(up_down  = ifelse(eav_change > 0, "increased", "decreased"),
+         North_reassess = ifelse(reassess_year == "2020", "N_reassess", "no_assess"))
+
+
+detach("package:dplyr", unload = TRUE)
+
+# All Agencies-Agency & Year FE"
+grouped_model<- lm(log(total_final_levy) ~ log(cty_total_eav), 
+                    data = grouped_munis)
+
+
+
+
+
+
+grouped_cleannames_withHRind <- lm(log(total_final_levy) ~ log(cty_total_eav)+ log(cty_total_eav):Triad, 
+                          data = grouped_munis)
+
+#summary(grouped_cleannames_withHRind)
+
+grouped_cleannames_withHRind_lagged <- plm(log(total_final_levy) ~ log(cty_total_eav)+ log(cty_total_eav):Triad + lag(log(cty_total_eav),1) + lag(log(cty_total_eav),2), 
+                          data = grouped_munis)
+
+#summary(grouped_cleannames_withHRind_lagged)
+
+grouped_cleannames_lag <- plm(log(total_final_levy) ~ log(cty_total_eav) + lag(log(cty_total_eav),1) + lag(log(cty_total_eav),2),
+                              data = grouped_munis)
+
+grouped_cleannames_lag2 <- plm(log(total_final_levy) ~ log(cty_total_eav) + lag(log(cty_total_eav),1) + lag(log(cty_total_eav),2)+log(cty_total_eav):Triad + lag(log(cty_total_eav),1):Triad  + lag(log(cty_total_eav),2):Triad ,
+                              data = grouped_munis)
+#summary(grouped_cleannames_lag2)
+
+
+model_names <- c(grouped_model = "Grouped manually, Summed Levies", 
+                 grouped_cleannames_lag = "with Lags",
+                 grouped_cleannames_withHRind = "with Triad Indicator",
+                 grouped_cleannames_withHRind_lagged = "Triad indacator with Lags",
+                grouped_cleannames_lag2 = "Triad interact with both Lags") # has Chicago
+
+
+# plot(grouped_model)
+
+
+export_summs(grouped_model, grouped_cleannames_lag,  grouped_cleannames_withHRind, grouped_cleannames_withHRind_lagged, grouped_cleannames_lag2, robust = "HC3",  model.names = model_names, statistics = c(N = "nobs", R2 = "r.squared", adj.R2 = "adj.r.squared"))
+
+
+
+```
+
+
+```{r av-laggedlevy-triad2014}
+
+#detach("package:dplyr", unload = TRUE)
+
+
+library(dplyr)
+grouped_munis <- grouped_munis %>% 
+  mutate(yearly_change = log_eav-eav_lag1,
+         yearly_chang_perc =(log_eav-eav_lag1)/eav_lag1,
+         eav_change = cty_total_eav - cty_eav_lag,
+         eav_change_pct = ((cty_total_eav - cty_eav_lag)/cty_eav_lag),
+         av_change = av - av_lag,
+         av_pct_change = (av-av_lag)/av_lag
+       ) %>%
+  mutate(up_down  = ifelse(eav_change > 0, "increased", "decreased"),
+         North_reassess = as.factor(ifelse(reassess_year == "2020", "N_reassess", "no_assess")))
+
+
+detach("package:dplyr", unload = TRUE)
+
+# All Agencies-Agency & Year FE"
+grouped_model<- lm(log(total_final_levy) ~ lag(log(total_final_levy)), 
+                    data = grouped_munis)
+
+
+
+
+
+
+grouped_cleannames_withHRind <- lm(log(total_final_levy) ~ log(av)+ log(total_final_levy), 
+                          data = grouped_munis)
+
+#summary(grouped_cleannames_withHRind)
+
+grouped_cleannames_withHRind_lagged <- lm(log(total_final_levy) ~ log(av)+ log(total_final_levy) + Triad, 
+                          data = grouped_munis)
+
+
+grouped_cleannames_lag <- lm(log(total_final_levy) ~ log(av) + lag(log(av),1) + lag(log(av),2),
+                              data = grouped_munis)
+
+grouped_cleannames_lag2 <- lm(log(total_final_levy) ~ log(av) + lag(log(av),1) + lag(log(av),2)+ log(av):Triad + lag(log(av),1):Triad  + lag(log(av),2):Triad ,
+                              data = grouped_munis)
+
+
+model_names <- c(grouped_model = "Grouped manually, Summed Levies", 
+                 grouped_cleannames_lag = "with Lags",
+                 grouped_cleannames_withHRind = "with Triad Indicator",
+                 grouped_cleannames_withHRind_lagged = "Triad indacator with Lags",
+                grouped_cleannames_lag2 = "Triad interact with both Lags") # has Chicago
+
+
+# plot(grouped_model)
+
+
+export_summs(grouped_model, grouped_cleannames_lag,  grouped_cleannames_withHRind, grouped_cleannames_withHRind_lagged, grouped_cleannames_lag2, robust = "HC3",  model.names = model_names, statistics = c(N = "nobs", R2 = "r.squared", adj.R2 = "adj.r.squared"))
+
+
+
+```
+
+
+# 1-year Change
+
+```{r}
+pct <- function(x) {x / lag(x) - 1}
+
+recoded_data %>% 
+  group_by(year, agency_w_hr) %>% 
+  mutate_at(av, funs=pct) 
+
+z %>%
+  group_by(VERTICAL) %>% 
+  arrange(YEAR, .by_group = TRUE) %>%
+  mutate(pct_change = (Profit/lag(Profit) - 1) * 100)
+```
+
+
