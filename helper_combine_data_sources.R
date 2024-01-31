@@ -7,7 +7,7 @@ library(dplyr)
 ## Change database file path to match your computer's location 
 ## of the PTAXSIM database!
 ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), 
-  "C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/ptaxsim.db/ptaxsim-2021.0.4.db")
+  "C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/ptaxsim.db/ptaxsim-2022.0.0.db")
  # C:/Users/_____________/ptaxsim.db/ptaxsim-2021.0.4.db")
 
 muni_agency_names <- DBI::dbGetQuery(
@@ -44,8 +44,10 @@ agency_dt <- agency_dt %>%
 # Manually created based on the 3 year rotation used for reassessments.
 reassessment_years <- read_csv("./Necessary_Files/Triad_reassessment_years.csv")
 
+
 reassessments_long <- reassessment_years %>% 
-  pivot_longer(cols = c(`2006`:`2021`), names_to = "year", values_to = "reassess_year")
+  pivot_longer(cols = c(`2006`:`2022`), names_to = "year", values_to = "reassess_year")
+
 
 nicknames <- readxl::read_xlsx("./Necessary_Files/muni_shortnames.xlsx") %>% 
   select(-c(agency_number, short_name, `Column1`, `Most recent reassessed`))
@@ -82,3 +84,4 @@ raw_data_joined <- left_join(raw_data_joined, reassessments_long, by = c("Triad"
 
 
 raw_data_joined %>% write_csv("agency_raw_joined.csv")
+

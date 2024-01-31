@@ -36,8 +36,11 @@ recoded_data <- raw_data_joined %>%
          cty_cook_eav = as.numeric(cty_cook_eav),      # taxable EAV in cook county only
          pct_in_Cook = cty_cook_eav / cty_total_eav,   # to identify taxing agencies that cross county lines
          total_final_levy = as.numeric(total_final_levy), 
+         total_non_cap_ext = as.numeric(total_non_cap_ext),
+         total_capped_ext = ifelse(home_rule_ind ==0, (total_ext - total_non_cap_ext), NA),
+         total_non_cap_ext = ifelse(home_rule_ind == 1, total_ext, total_non_cap_ext),
          total_reduced_levy = as.numeric(total_reduced_levy), # for non-HR agencies that have their levy reduced
-         av = cty_cook_eav / eq_factor_final,
+         av = cty_cook_eav / eq_factor_final,          # backed out taxable Assessed Value of properties
          first6_w_hr = str_c(first6, "_", home_rule_ind),
          agency_w_hr = str_c(agency_num, "_", home_rule_ind)
          ) %>%
@@ -59,6 +62,8 @@ recoded_data <- recoded_data %>%
     
     log_eav = log(cty_total_eav), # eav within Cook AND neighboring counties.
     log_levy = log(total_final_levy_4log),
+    log_capped = log(total_capped_ext),
+    log_noncapped = log(total_non_cap_ext),
     log_av = log(av),
     
     year = as.factor(year), # for plm()
@@ -68,6 +73,7 @@ recoded_data <- recoded_data %>%
   filter(minor_type != "SSA") # drops 5332 taxing agencies (agency-year combos)
 
 ## 7921 observations remain after removing SSAs ##
+# 8391 with 2022
 
 drop_me <- recoded_data %>% 
   group_by(agency_name, agency_num) %>%
@@ -79,9 +85,10 @@ drop_me <- recoded_data %>%
 drop_me
 
 recoded_data <- recoded_data %>% 
-  filter(!agency_num %in% drop_me$agency_num)
+  filter(!agency_num %in% drop_me$agency_num) %>% 
+  arrange(agency_num, year)
 # 7715 obs after removing
-
+# 8178 with 2022
 
 # turn it into panel data!
 # two way fixed effects will be used for agency and year.
@@ -92,6 +99,9 @@ panel_data <-pdata.frame(recoded_data, index = c("agency_num", "year"))
 detach("package:dplyr", unload = TRUE)
 
 panel_data$lag_totallevy <- plm::lag(panel_data$total_final_levy, 1)
+panel_data$lag_capped <- plm::lag(panel_data$total_capped_ext, 1)
+panel_data$lag_non_capped <- plm::lag(panel_data$total_non_cap_ext, 1)
+
 panel_data$lag_cty_total_eav <- plm::lag(panel_data$cty_total_eav, 1)
 panel_data$lag_av <- plm::lag(panel_data$av, 1)
 
@@ -113,7 +123,11 @@ panel_data <- panel_data %>%
   
   mutate(eav_pct_change = (cty_total_eav - lag_cty_total_eav)/ lag_cty_total_eav,
          tfl_pct_change = (total_final_levy - lag_totallevy) / lag_totallevy,
+         capped_pct_change = (total_capped_ext - lag_capped) / lag_capped,
+         noncapped_pct_change = (total_non_cap_ext - lag_non_capped) / lag_non_capped,
          av_pct_change = (av - lag_av) / lag_av,
+         av_increase = ifelse(av_pct_change > 0, "AV increased", 
+                              ifelse(av_pct_change == 0, "No Change", "AV Increase")),
          up_down  = ifelse(eav_pct_change > 0, "increased", "decreased"))  %>%
   
   mutate(# eav_pct_change = ifelse(is.na(eav_pct_change), 0, eav_pct_change),
