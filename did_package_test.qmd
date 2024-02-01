@@ -14,14 +14,18 @@ source("helper_recode_variables.R")
 
 ```{r}
 
-library(plm)
+TRA <- read_csv("./Necessary_Files/triad_reassessment_years_piv.csv")
+
+TRA2 <- pivot_longer(TRA, cols = `2006`:`2022`, names_to = "year", values_to = "reassess_01")
+
+#panel_data0 <- left_join(panel_data, TRA, by = "Triad")
 ```
 
-```{r}
+```{r eval=FALSE}
 
 panel_data1 <- panel_data %>%
   filter(home_rule_ind == 1) %>%
-  mutate(year_control = as.numeric(if_else(year == 2015, 0,
+  mutate(year_control = as.numeric(ifelse(year == 2015, 0,
                                 ifelse(year == 2016, 1,
                                   ifelse(year == 2017, 2,
                                     ifelse(year == 2018, 3,
@@ -33,24 +37,40 @@ panel_data1 <- panel_data %>%
 
 ```{r}
 
-panel_data1 <- panel_data1 %>%
+panel_data1 <- recoded_data %>%
+  filter(home_rule_ind == 1) %>%
   mutate(reassess_year = as.numeric(reassess_year)) %>%
   mutate(agency_num = as.numeric(agency_num)) %>%
-  mutate(year = as.numeric(as.character(year))) %>%
-  mutate(triad = if_else())
+  mutate(year = as.numeric(as.character(year)))
+
+TRA2 <- TRA2 %>%
+  mutate(year = as.numeric(year))
+
+panel_data2 <- left_join(panel_data1, TRA2, by = c("Triad", "year")) 
+
+panel_data3 <- panel_data2 %>% filter(year > 2014 & year < 2019)
+```
+
+```{r}
+
+panel_data3 <- panel_data3 %>%
+  mutate(AG = if_else(Triad == "North", 1,
+                      if_else(Triad == "South", 2,
+                              if_else(Triad == "City", 3,
+                                      NA))))
 ```
 
 ```{r, warning = F}
 
 att1 <- att_gt(
   yname = "total_final_levy",
-  tname = "reassess_year",
+  tname = "reassess_01",
   idname = "agency_num",
-  gname = "year_control",
-  data = panel_data1,
+  gname = "AG",
+  data = panel_data3,
   panel = F,
-  #allow_unbalanced_panel = F,
-  #control_group = "notyettreated",
+  allow_unbalanced_panel = T,
+  control_group = "notyettreated",
   #anticipation = 0
 )
 
@@ -58,3 +78,20 @@ summary(att1)
 ```
 
 Needs to switch to 1 for all periods after the treatment in the window.
+
+```{r}
+
+att1 <- att_gt(
+  yname = "total_final_levy",
+  tname = "year",
+  idname = "agency_num",
+  gname = "reassess_year",
+  data = panel_data3,
+  panel = F,
+  allow_unbalanced_panel = T,
+  control_group = "notyettreated"
+  #anticipation = 0
+)
+
+summary(att1)
+```
