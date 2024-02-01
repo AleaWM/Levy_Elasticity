@@ -5,11 +5,11 @@ format: pptx
 editor: visual
 ---
 
-\###
+###
 
 Two-way fixed effects (TWFE) does not work in the context of a staggered treatment DiD design. The control group has already been "contaminated." Thus, the "parallel lines" assumption is violated.
 
-\###
+###
 
 A variety of solutions to this problem have been proffered:
 
@@ -21,7 +21,7 @@ A variety of solutions to this problem have been proffered:
 
 None of them have been widely accepted, although some papers (e.g., \[cite\]) have compared the different estimators' RMSE and computational efficiency.
 
-\###
+###
 
 We propose using Callaway and Sant'Anna's (2021) model:
 
@@ -37,7 +37,7 @@ We propose using Callaway and Sant'Anna's (2021) model:
 
 **Bad News: There is an R package but no Stata package.**
 
-\###
+###
 
 TWFE Results
 
@@ -46,7 +46,7 @@ TWFE Results
 
 ```
 
-\###
+###
 
 Group-Time ATE Results
 
@@ -55,7 +55,7 @@ Group-Time ATE Results
 
 ```
 
-\###
+###
 
 Next steps:
 
