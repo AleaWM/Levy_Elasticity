@@ -103,11 +103,12 @@ after2014_hr <- recoded_data %>%
     mutate(cty_cook_eav = total_final_levy / total_final_rate,
          av = cty_cook_eav / eq_factor_final) %>%
   mutate(year_num = as.numeric(as.character(year)) ) %>% 
-  filter(year_num > 2014 & year_num  < 2019) %>%
-    filter(major_type == "MUNICIPALITY/TOWNSHIP" # | major_type == "MISCELLANEOUS"
+  filter(year_num >= 2014 & year_num  < 2019) %>%
+    filter(major_type == "MUNICIPALITY/TOWNSHIP" #  major_type == "MISCELLANEOUS"
            & minor_type != "MISC"
            ) %>%  
   filter(home_rule_ind == 1) %>% 
+  filter(clean_name != "Chicago") %>%
   #group_by(year, grouped_label, home_rule_ind, lim_rate) %>% 
   # summarize(agency_name = first(agency_name),
   #           agency_num = first(agency_num),
@@ -139,7 +140,7 @@ after2014_hr <- recoded_data %>%
 
 
 ```{r}
-after2014_hr <- after2014_hr %>% group_by(agency_name) %>% mutate(year_count = n()) %>% ungroup() %>% filter(year_count == 4)
+after2014_hr <- after2014_hr %>% group_by(agency_name) %>% mutate(year_count = n()) %>% ungroup() %>% filter(year_count == 5)
 table(after2014_hr$year)
 ```
 
@@ -147,17 +148,6 @@ table(after2014_hr$year)
 93 HR if only majortype munis is included. 
 
 ```{r}
-after2014_hr %>% ggplot() + 
-  geom_line(aes(x=year,y=total_final_levy, group = agency_name, alpha = .5, color = Triad)) + 
-  theme_classic()
-
-
-after2014_hr %>% ggplot() + 
-  geom_point(aes(x=log(av), y = log(total_final_levy), color = agency_name)) + theme(legend.position = "none")
-
-after2014_hr %>% ggplot() + 
-  geom_point(aes(x=log(av), y = log(total_final_levy), color = agency_name, shape = year)) + theme(legend.position = "none")
-
 
 after2014_hr %>% ggplot() + 
   geom_point(aes(x=year, y=av,# color = home_rule_ind, 
@@ -172,14 +162,16 @@ after2014_hr %>% ggplot() +
        South Triad was reassessed in 2016,
        Chicago was reassessed in 2017.")
 
+
+
 after2014_hr %>% ggplot() + 
-  geom_point(aes(x=year, y=total_final_levy,# color = home_rule_ind, 
+  geom_point(aes(x=year, y=av,# color = home_rule_ind, 
                  alpha = .1)) +
-  geom_line(aes(x=year, y = total_final_levy, group = agency_name, alpha = .1)) +
-  geom_smooth(aes(x=year, y=total_final_levy, # 
+  geom_line(aes(x=year, y = av, group = agency_name, alpha = .1)) +
+  geom_smooth(aes(x=year, y=av, # 
                   group = Triad,
                  # group = grouped_w_hr_ind, 
-                  color = Triad), se=FALSE, size = 2) + 
+                  color = Triad), se=FALSE, size = 2, method = "lm") + 
   theme_classic()
 
 after2014_hr %>% ggplot() + 
@@ -193,6 +185,18 @@ after2014_hr %>% ggplot() +
   theme_classic()
 
 
+
+```
+```{r}
+after2014_hr %>% ggplot() + 
+  geom_point(aes(x=year, y=total_final_levy,# color = home_rule_ind, 
+                 alpha = .1)) +
+  geom_line(aes(x=year, y = total_final_levy, group = agency_name, alpha = .1)) +
+  geom_smooth(aes(x=year, y=total_final_levy, # 
+                  group = Triad,
+                 # group = grouped_w_hr_ind, 
+                  color = Triad), se=FALSE, size = 2) + 
+  theme_classic()
 ```
 
 ```{r}
@@ -203,31 +207,6 @@ after2014_hr %>%
   theme_classic()
 
 
-after2014_hr %>% 
-    filter(Triad != "City") %>%
-ggplot() + 
-  geom_point(aes(x=log(av), y = log(total_final_levy), color = agency_name)) + theme(legend.position = "none")
-
-after2014_hr %>% 
-    filter(Triad != "City") %>%
-ggplot() + 
-  geom_point(aes(x=log(av), y = log(total_final_levy), color = agency_name, shape = year)) + theme(legend.position = "none")
-
-
-after2014_hr %>% 
-    filter(Triad != "City") %>%
-ggplot() + 
-  geom_point(aes(x=year, y=av,# color = home_rule_ind, 
-                 alpha = .1)) +
-  geom_line(aes(x=year, y = av, group = agency_name, alpha = .1, color = Triad)) +
-  geom_smooth(aes(x=year, y=av, # 
-                  color = Triad, se=FALSE, size = 2)) + 
-  theme_classic() + 
-  labs(title = "Assessment impact on AV",
-       subtitle = "Years shown are Tax Years (Reassessment year + 1)", 
-       caption = "North Triad was reasessed in 2015,
-       South Triad was reassessed in 2016,
-       Chicago was reassessed in 2017.")
 
 after2014_hr %>% 
     filter(Triad != "City") %>%
@@ -258,7 +237,6 @@ after2014_hr %>%   filter(Triad != "City") %>%
 
 # DID 
 ```{r}
-
 TRA <- read_csv("./Necessary_Files/triad_reassessment_years_piv2.csv") %>% 
   select(Triad, `2014`:`2018`)
 
@@ -294,31 +272,36 @@ table(panel_data2$year)
 table(panel_data2$reassess_01)
 
 is.pbalanced(panel_data2)
-panel_data3 <-pdata.frame(panel_data3, index = c("agency_num", "year_num"))
+panel_data3 <-pdata.frame(panel_data2, index = c("agency_num", "year_num"))
 
 
-panel_data3 <- panel_data2 %>% 
+panel_data3 <- panel_data3 %>% 
   select(total_final_levy, reassess_01, year_num, id, av, Triad, agency_num) %>%
-  mutate(triad_group = as.numeric(ifelse(Triad=="City",1, ifelse(Triad=="North",2, "South"))) ) #%>%
+  mutate(triad_group = as.numeric(ifelse(Triad=="City",1, ifelse(Triad=="North",2, 3))) ) %>%
+  mutate(year_num = as.numeric(as.character(year_num)),
+         agency_num = as.numeric(as.character(agency_num)))
  # filter(total_final_levy>0 & !is.na(triad_group) & !is.na(year_num) ) %>% filter(Triad!="City")
 
-  
+head(panel_data3)
+```
 
+
+```{r error = TRUE}
 att1 <- att_gt(
   yname = "total_final_levy",
   tname = "year_num",
-  idname = "id",
+  idname = "agency_num",
   gname = "reassess_01",
   #xformla = ~av,
-  data = panel_data3 #,
-#  panel = FALSE,
- # control_group = "notyettreated"
+  data = panel_data3, #,
+  #panel = FALSE,
+ control_group = "notyettreated"
 )
 
 summary(att1)
 ```
 
-```{r }
+```{r error = TRUE}
 
 after2014_hr2 <- after2014_hr %>%left_join(TRA2, by = c("Triad", "year")) %>%
   mutate(year = as.numeric(as.character(year)),
@@ -362,9 +345,7 @@ group_by(agency_name) %>% mutate(year_count = n())%>% ungroup() %>%
 
 ## OLS and FE 
 
-
-### Event Studies
-
+### asymmetric
 
 ```{r av-lmdata-triad2014, eval=FALSE}
 
