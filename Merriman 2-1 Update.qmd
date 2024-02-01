@@ -1,0 +1,64 @@
+---
+title: "February 1 Update"
+author: "MVH & AWM"
+format: pptx
+editor: visual
+---
+
+\###
+
+Two-way fixed effects (TWFE) does not work in the context of a staggered treatment DiD design. The control group has already been "contaminated." Thus, the "parallel lines" assumption is violated.
+
+\###
+
+A variety of solutions to this problem have been proffered:
+
+1.  List 1
+
+2.  List 2
+
+3.  List 3
+
+None of them have been widely accepted, although some papers (e.g., \[cite\]) have compared the different estimators' RMSE and computational efficiency.
+
+\###
+
+We propose using Callaway and Sant'Anna's (2021) model:
+
+-   Lacks a "no anticipation" requirement.
+
+-   Allows "stacking" treatment periods.
+
+    -   Compare across Triads
+
+    -   Compare across reassessment cycles
+
+-   Allows conditional parallel trends.
+
+**Bad News: There is an R package but no Stata package.**
+
+\###
+
+TWFE Results
+
+```{r, eval = F}
+
+
+```
+
+\###
+
+Group-Time ATE Results
+
+```{r, eval = F}
+
+
+```
+
+\###
+
+Next steps:
+
+1.  Add coviariates to facilitate absence of parallel trends assumption.
+
+2.  Compare to other post-TWFE models.
