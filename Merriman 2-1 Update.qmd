@@ -13,13 +13,13 @@ Two-way fixed effects (TWFE) does not work in the context of a staggered treatme
 
 A variety of solutions to this problem have been proffered:
 
-1.  List 1
+1.  LP-DiD (Dube et al. 2023)
 
-2.  List 2
+2.  Vector autoregressions (Jorda 2023)
 
-3.  List 3
+3.  Group-Time DiD (Callaway and Sant'Anna 2021)
 
-None of them have been widely accepted, although some papers (e.g., \[cite\]) have compared the different estimators' RMSE and computational efficiency.
+None of them have been widely accepted, although some papers (e.g., ) have compared the different estimators' RMSE and computational efficiency.
 
 ### 
 
@@ -41,18 +41,24 @@ We propose using Callaway and Sant'Anna's (2021) model:
 
 TWFE Results
 
-```{r, eval = F}
-
-
-```
-
-### 
+![](images/WhatsApp%20Image%202024-02-01%20at%2010.20.05_b28c0395.jpg)
 
 Group-Time ATE Results
 
 ```{r, eval = F}
 
+att1 <- att_gt(
+  yname = "total_final_levy",
+  tname = "year_num",
+  idname = "agency_num",
+  gname = "reassess_01",
+  #xformla = ~av,
+  data = panel_data3, #,
+  #panel = FALSE,
+ control_group = "notyettreated"
+)
 
+summary(att1)
 ```
 
 ### 
@@ -62,3 +68,5 @@ Next steps:
 1.  Add coviariates to facilitate absence of parallel trends assumption.
 
 2.  Compare to other post-TWFE models.
+
+3.  Discuss not using logs.
