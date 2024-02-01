@@ -1,0 +1,60 @@
+---
+title: "Untitled"
+format: html
+editor: visual
+---
+
+```{r}
+
+library(tidyverse)
+library(did)
+
+source("helper_recode_variables.R")
+```
+
+```{r}
+
+library(plm)
+```
+
+```{r}
+
+panel_data1 <- panel_data %>%
+  filter(home_rule_ind == 1) %>%
+  mutate(year_control = as.numeric(if_else(year == 2015, 0,
+                                ifelse(year == 2016, 1,
+                                  ifelse(year == 2017, 2,
+                                    ifelse(year == 2018, 3,
+                                           NA
+                                           )
+                                ))))) %>%
+  filter(between(year_control, 0, 3))
+```
+
+```{r}
+
+panel_data1 <- panel_data1 %>%
+  mutate(reassess_year = as.numeric(reassess_year)) %>%
+  mutate(agency_num = as.numeric(agency_num)) %>%
+  mutate(year = as.numeric(as.character(year))) %>%
+  mutate(triad = if_else())
+```
+
+```{r, warning = F}
+
+att1 <- att_gt(
+  yname = "total_final_levy",
+  tname = "reassess_year",
+  idname = "agency_num",
+  gname = "year_control",
+  data = panel_data1,
+  panel = F,
+  #allow_unbalanced_panel = F,
+  #control_group = "notyettreated",
+  #anticipation = 0
+)
+
+summary(att1)
+```
+
+Needs to switch to 1 for all periods after the treatment in the window.
