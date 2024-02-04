@@ -35,7 +35,7 @@ library(plm) #for fixed effects
 library(modelsummary)
 library(dplyr)
 
-#ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/ptaxsim.db/ptaxsim-2022.0.0.db")
+ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/ptaxsim.db/ptaxsim-2022.0.0.db")
 #set_summ_defaults(digits = 2, pvals = FALSE, robust = "HC3" )
 
 
@@ -45,18 +45,18 @@ library(dplyr)
 
 #groupies <- readxl::read_excel("./grouped_munis_manual_entry.xlsx")
 
-# muni_agency_names <- DBI::dbGetQuery(
-#   ptaxsim_db_conn,
-#   "SELECT DISTINCT agency_num, agency_name, minor_type
-#   FROM agency_info
-#   WHERE minor_type = 'MUNI'
-#   OR agency_num = '020060000'
-#   "
-#   ) %>% 
-#   mutate(first6 = str_sub(agency_num,1,6),
-#         # first5 = str_sub(agency_num,1,5)
-#          ) %>%
-#   select(-minor_type)
+muni_agency_names <- DBI::dbGetQuery(
+  ptaxsim_db_conn,
+  "SELECT DISTINCT agency_num, agency_name, minor_type
+  FROM agency_info
+  WHERE minor_type = 'MUNI'
+  OR agency_num = '020060000'
+  "
+  ) %>%
+  mutate(first6 = str_sub(agency_num,1,6),
+        # first5 = str_sub(agency_num,1,5)
+         ) %>%
+  select(-minor_type)
 
 ```
 
@@ -82,7 +82,7 @@ all_agencies <- recoded_data
 ```
 
 
-# Models for All Taxing Agencies
+## Models for All Taxing Agencies
 
 Includes schools, and miscellaneous taxing agencies all together. Only for comparison. Excludes SSAs and Cook County taxing agencies.
 
@@ -159,7 +159,7 @@ m3<-  plm(log(total_final_levy_4log) ~ log(cty_total_eav)*up_down,
              data = panel_data)
 
 
-m4 <- plm(log(summed_levy_first6) ~ log(cty_total_eav)*up_down  + lag(log(cty_total_eav), 1)*up_down + lag(log(cty_total_eav),2)*up_down, 
+m4 <- plm(log(total_final_levy_4log) ~ log(cty_total_eav)*up_down  + lag(log(cty_total_eav), 1)*up_down + lag(log(cty_total_eav),2)*up_down, 
              index = c("agency_name", "year"), 
              model = "within", effect= "twoways",                    
              data = governments_panel) 
@@ -205,7 +205,9 @@ export_summs(m1, m2, m3, all_m1_simple, all_m1_lags, m4, model.names = model_nam
              statistics = c(N = "nobs",adj.R2 = "adj.r.squared", R2 = "r.squared"))
 ```
 
-# Grouped by grouped_label from CSV
+# Grouped taxing agencies
+
+Grouped by grouped_label from CSV
 
 Uses manually coded labels that combine both methods of grouping taxing agencies: 
 
@@ -213,12 +215,6 @@ taxing agencies that could be grouped by either the first 6 digits of their  sha
 
 ```{r}
 library(dplyr)
-
-library(openxlsx)
-groupies2 <- read.xlsx("grouped_agencies_28Nov2023.xlsx") %>%          
-  mutate(agency_num = str_pad(agency_num, 9, "left", "0"),
-                                                                        
-         first6 = as.character(first6)) #add missing leading zeros
 
 
 groupies2 <- read_csv("grouped_labels.csv") %>%          
@@ -276,11 +272,11 @@ grouped_manual <- recoded_data %>%
   summarize(count = n())
 ```
 
-72 nonHR and 65 HR if only majortype munis is included. 
+94 nonHR and 76 HR if only majortype munis is included. 
 
 ```{r}
 
-# 1552 obs
+# 2278 obs
 grouped_manual_has16 <- grouped_manual %>%  # 124 nonHR and 69 HR
   ungroup() %>%
  # filter(year == 2021) %>%
@@ -288,39 +284,10 @@ grouped_manual_has16 <- grouped_manual %>%  # 124 nonHR and 69 HR
   group_by(uniqueid) %>%
   distinct() %>%
   mutate(count = n()) %>%
-  filter(count == 16) %>% ungroup()
+  filter(count == 17) %>% ungroup()
 
 
-grouped_manual_has16 %>% ggplot() + 
-  geom_line(aes(x=year,y=total_final_levy, group = uniqueid, alpha = .5, color = home_rule_ind)) + 
-  theme_classic()
 
-
-grouped_manual_has16 %>% ggplot() + 
-  geom_line(aes(x=year,y=total_final_levy, group = uniqueid, alpha = .5, color = home_rule_ind)) + 
-  facet_wrap(~home_rule_ind) +
-  theme_classic() 
-
-grouped_manual_has16 %>% ggplot() + 
-  geom_point(aes(x=year, y=total_final_levy,# color = home_rule_ind, 
-                 alpha = .1)) +
-  geom_line(aes(x=year, y = total_final_levy, group = uniqueid, alpha = .1)) +
-  geom_smooth(aes(x=year, y=total_final_levy, # 
-                  group = home_rule_ind,
-                 # group = grouped_w_hr_ind, 
-                  color = home_rule_ind), se=FALSE, size = 2) + 
-  theme_classic()
-
-grouped_manual_has16 %>% ggplot() + 
-  geom_point(aes(x=year, y=total_final_levy,# color = home_rule_ind, 
-                 alpha = .1)) +
-  geom_line(aes(x=year, y = total_final_levy, group = uniqueid, alpha = .1)) +
-  geom_smooth(aes(x=year, y=total_final_levy, # 
-                  group = home_rule_ind,
-                 # group = grouped_w_hr_ind, 
-                  color = home_rule_ind), se=FALSE, size = 2) + 
-  facet_wrap(~home_rule_ind) +
-  theme_classic()
 ```
 
 
