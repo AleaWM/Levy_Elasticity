@@ -10,8 +10,6 @@
 
 library(tidyverse)
 library(DBI)
-library(here)
-library(data.table)
 library(ptaxsim)
 
 # Instantiate PTAXSIM DB Connection ---------------------------------------
@@ -38,23 +36,27 @@ ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "./ptaxsim.db/ptaxsim-2022.
 ## Maybe we move all the mutates to one section of the file and only put the
 ## DB queries in this section?
 
+## 134 obs.
+
 muni_agency_names <- DBI::dbGetQuery(
   ptaxsim_db_conn,
-  "SELECT DISTINCT agency_num, agency_name, minor_type
+  "SELECT DISTINCT agency_num, agency_name, minor_type 
   FROM agency_info
   WHERE minor_type = 'MUNI'
   OR agency_num = '020060000'
   "
 ) %>% 
-  mutate(first6 = str_sub(agency_num,1,6)) %>%
+  mutate(first6 = str_sub(agency_num,1,6)) %>% #move me!
   select(-minor_type)
 
-## Query agency table
+## Query agency table minor_type
 
 ## Pull all data on all taxing agencies from PTAXSIM's DB's agency table
 
 ## MVH note: Why wouldn't we just query the DB for minor_type = muni and
 ## Cicero? Same as above re: mutate.
+
+# 17294 obs.
 
 agency_dt <- DBI::dbGetQuery(
   ptaxsim_db_conn,
@@ -66,7 +68,7 @@ agency_dt <- DBI::dbGetQuery(
   mutate(year = as.character(year))
 
 ## I think this is redundant with (but more limited than) the code on
-## line 41
+## line 41 (Probably for a merge later)
 
 all_taxing_agencies <- DBI::dbGetQuery(
   ptaxsim_db_conn,
@@ -102,7 +104,7 @@ is.integer64 <- function(x){
 agency_dt <- agency_dt %>%
   mutate_if(is.integer64, as.integer)
 
-## Add explanation.
+## pivot_longer to allow incorpoation of reassesment year into broader agency df
 
 reassessments_long <- reassessment_years %>% 
   pivot_longer(cols = c(`2006`:`2022`), names_to = "year", values_to = "reassess_year")
@@ -119,6 +121,8 @@ all_taxing_agencies <- all_taxing_agencies %>%
          muni_num = agency_num.y,
          agency_name = agency_name.x,
          agency_num = agency_num.x)
+
+## Merge agency levy/tax base data with agency names
 
 raw_data_joined <- left_join(agency_dt, all_taxing_agencies, by = c("agency_num", "first6"))
 
