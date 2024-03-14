@@ -7,8 +7,8 @@ library(dplyr)
 ## Change database file path to match your computer's location 
 ## of the PTAXSIM database!
 ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), 
-  "C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/ptaxsim.db/ptaxsim-2022.0.0.db")
- # C:/Users/_____________/ptaxsim.db/ptaxsim-2021.0.4.db")
+#  "C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/ptaxsim.db/ptaxsim-2022.0.0.db")
+"./ptaxsim.db/ptaxsim-2022.0.0.db")
 
 muni_agency_names <- DBI::dbGetQuery(
   ptaxsim_db_conn,
