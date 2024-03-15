@@ -6,7 +6,6 @@ format: html
 ```{r setup, message = FALSE}
 
 library(tidyverse)
-library(plm)
 library(stargazer)
 
 ```
@@ -43,10 +42,13 @@ Model decisions:
             1.  Change in AV better reflects the change in the tax base and our RQ is about the levy's responsiveness to the tax base. Thus, irrelevant whether we use AV or EAV.
             2.  Downside: Value of exemptions could be high causing a divergence?
                 1.  Alea backs AV out of EAV.
-        2.  lag(AV), lag2(AV)
+        2.  lag(ln(AV)), ln2(log(AV))
             1.  Given 3 year reassessment cycle, we want to account for the effect of the prior reassessment...especially given the trend we see of the initial bump in AV followed by the decrease from appeals.
             2.  We do not need to log them since they are control variables.\*\*
-        3.  log(av)\^2
+            3.  YES WE DO NEED TO LOG THEM
+            4.  WE DO NOT NEED TO LOG THE OTHER NUMERIC CONTROL VARIABLES
+            5.  Scratch work supporting this conclusion is in the "log_scratchwork.R" file
+        3.  (ln(av))\^2
             1.  In case it is a polynomial relationship
             2.  This shouldn't cause a problem like log(av\^2), which is just 2\*log(av), leading to an irritating coefficient to interpret.
             3.  But we need to check this variable improves our model fit
@@ -61,6 +63,7 @@ Model decisions:
         2.  We should double check this item.
     2.  2WFE are OK because we, within each year, 1/3 of the county is reassessed; we are no longer using it as a "treatment" to make causal statements.
     3.  DOUBLE CHECK TO ASSUAGE ALEA'S FEARS RE: NOT LOGGING OTHER STUFF
+        1.  Upon double checking, Alea was right. Damn.
 
 ```{r}
 
