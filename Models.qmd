@@ -3,30 +3,9 @@ title: "Untitled"
 format: html
 ---
 
-```{r setup, message = FALSE}
-
-library(tidyverse)
-library(stargazer)
-
-```
-
-```{r, eval = FALSE}
-detach("package:tidyverse", unload = TRUE)
-
-library(tidyverse)
-
-
-all_agencies %>%
-  filter(home_rule_ind == 1 & year == 2022) %>%
-  summarize(n = n())
-all_agencies %>%
-  filter(home_rule_ind == 1 & year == 2022 & minor_type == "MUNI") %>%
-  summarize(n = n())
-```
-
 Model decisions:
 
-1.  Which agencies in the data set?
+1.  Which agencies in the data set? NOTEL ALL ITEMS EXCEPT d AND e are done.
     a.  Home rule ONLY (evaluate how home rule-y the non municipalities are. Are they just subdivisions of the munis? 63 for munis vs. \~90
     b.  Qual eval of those entities
     c.  Drop border crossers
@@ -34,11 +13,11 @@ Model decisions:
         a.  Create variable to measure property tax dependence. should be (total_rev - total_final_levy)/total_rev (or similar)
     e.  Grouping — it is a concern and should be done by agency digits and eav.
 2.  Variables
-    1.  DV - ln(total_final_levy) - allows calculation of elasticity, which economists \<3
+    1.  DV - ln(total_levy) - allows calculation of elasticity, which economists \<3
         1.  We want the levy value requested by the muni/agency to capture the agency's responsiveness to the change in the tax base. That should be the same as they received since they are HR agencies.
             1.  Check this!
     2.  IV
-        1.  log(AV)
+        1.  ln(AV)
             1.  Change in AV better reflects the change in the tax base and our RQ is about the levy's responsiveness to the tax base. Thus, irrelevant whether we use AV or EAV.
             2.  Downside: Value of exemptions could be high causing a divergence?
                 1.  Alea backs AV out of EAV.
@@ -56,7 +35,7 @@ Model decisions:
         5.  log(AV)\*lag(Reassess)
             1.  check if responsiveness is related to it being an assessment year
             2.  NO
-            3.  Only incorporated into the budget the year after reassessment
+            3.  Only incorporated into the budget the year after reassessment – hence description as "lag"
 3.  Other model items:
     1.  Is "year" the calendar year or the tax year? Determines whether we want to lag the reassess variable.
         1.  Alea: Year in the agency_dt is the tax year. Reassessment year might be calendar year.
@@ -65,10 +44,42 @@ Model decisions:
     3.  DOUBLE CHECK TO ASSUAGE ALEA'S FEARS RE: NOT LOGGING OTHER STUFF
         1.  Upon double checking, Alea was right. Damn.
 
+```{r setup, message = FALSE}
+
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+
+library(tidyverse)
+library(plm)
+library(stargazer)
+
+pd <- read_csv("panel_data.csv")
+
+pd <- pdata.frame(pd, index = c("agency_num", "year"))
+
+```
+
 ```{r}
 
-plm1 <- plm(log(total_final_levy) ~ log(cty_cook_)
+summary(pd)
+```
 
+The pd data frame has 8178 observations.
 
+Let's filter our data set down to reflect the comments above.
 
+```{r}
+
+pd_final <- pd %>%
+  filter(home_rule_ind == 1) %>%
+  select(year, agency_num, agency_name, clean_name, minor_type, 
+         av, total_levy, first6, reassess_year) 
+```
+
+We now have 1591 obs.
+
+Detach dplyr because it breaks shit.
+
+```{r}
+
+detach("package:dplyr", unload = TRUE)
 ```
