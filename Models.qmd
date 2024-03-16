@@ -49,12 +49,9 @@ Model decisions:
 knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 
 library(tidyverse)
-library(plm)
 library(stargazer)
 
 pd <- read_csv("panel_data.csv")
-
-pd <- pdata.frame(pd, index = c("agency_num", "year"))
 
 ```
 
@@ -71,15 +68,122 @@ Let's filter our data set down to reflect the comments above.
 
 pd_final <- pd %>%
   filter(home_rule_ind == 1) %>%
+  filter(agency_num != c('030250000', '030840000', '040830001')) %>%
   select(year, agency_num, agency_name, clean_name, minor_type, 
-         av, total_levy, first6, reassess_year) 
+         av, total_levy, first6, reassess_year) %>%
+  arrange(agency_num, year) %>%
+  mutate(lag_1_av = lag(av)) %>%
+  mutate(lag_2_av = lag(lag_1_av)) %>%
+  filter(year != c("2006", "2007"))
+  
 ```
 
-We now have 1591 obs.
+We now have 1498 obs.
 
 Detach dplyr because it breaks shit.
 
 ```{r}
 
 detach("package:dplyr", unload = TRUE)
+
+library(plm)
+
+pd_final <- pdata.frame(pd_final, index = c("agency_num", "year"))
 ```
+
+Detach plm and reload tidyverse to look at data. (Models not initially running.)
+
+```{r}
+
+pd_final %>%
+  select(agency_name, agency_num, clean_name, total_levy, av) %>%
+  filter(total_levy == 0) %>%
+  group_by(clean_name) %>%
+  summarize(clean_name, agency_num, agency_name, n = n())
+
+pd_final %>%
+  select(agency_name, agency_num, clean_name, total_levy, av) %>%
+  filter(av == 0) %>%
+  group_by(clean_name) %>%
+  summarize(clean_name, agency_name, n = n())
+
+```
+
+Let's drop "CITY OF COUNTRYSIDE" (agency_num = 030250000), "VILLAGE OF NORRIDGE" (agency_num = 030840000), and "SD 122 BOND / PART ANNEXED BY SD 127 1/2 2010" (agency_num = 040830001).
+
+```{r}
+
+pd_final <- pd_final %>%
+  
+
+```
+
+Let's try some models WITHOUT grouping muni entities.
+
+```{r}
+
+detach("package:dplyr", unload = TRUE)
+
+library(plm)
+
+```
+
+```{r}
+
+uglm1 <- plm(total_levy ~ av, 
+              index = c("agency_num", "year"), 
+              model = "within", 
+              effect= "twoways",   
+              data = pd_final)
+
+uglm2 <- plm(total_levy ~ av + lag_1_av,
+             data = pd_final,
+             na.action = na.omit,
+              index = c("agency_num", "year"), 
+              model = "within",
+              effect= "twoways")
+
+uglm3 <- plm(total_levy ~ av + lag_1_av + lag_2_av,
+             data = pd_final,
+             na.action = na.omit,
+              index = c("agency_num", "year"), 
+              model = "within",
+              effect= "twoways")
+
+
+
+export_summs(uglm1, uglm2, uglm3, 
+             robust = "HC3", statistics = c(N = "nobs", adj.R2 = "adj.r.squared", R2 = "r.squared"))
+```
+
+```{r}
+
+luglm1 <- plm(log(total_levy+1) ~ log(av+1), 
+              data = pd_final,
+              na.action = na.omit,
+              index = c("agency_num", "year"), 
+              model = "within", 
+              effect= "twoways")
+
+luglm2 <- plm(log(total_levy + 1) ~ log(av + 1) + log(lag_1_av + 1),
+              data = pd_final,
+              na.action = na.omit,
+              index = c("agency_num", "year"), 
+              model = "within",
+              effect= "twoways")
+
+luglm3 <- plm(log(total_levy + 1) ~ log(av + 1) + 
+                log(lag_1_av + 1) + log(lag_2_av + 1),
+              data = pd_final,
+              na.action = na.omit,
+              index = c("agency_num", "year"), 
+              model = "within",
+              effect= "twoways")
+
+
+
+export_summs(luglm1, luglm2, luglm3, 
+             robust = "HC3", statistics = c(N = "nobs", adj.R2 = "adj.r.squared", R2 = "r.squared"))
+
+```
+
