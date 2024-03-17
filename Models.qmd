@@ -43,6 +43,7 @@ Model decisions:
     2.  2WFE are OK because we, within each year, 1/3 of the county is reassessed; we are no longer using it as a "treatment" to make causal statements.
     3.  DOUBLE CHECK TO ASSUAGE ALEA'S FEARS RE: NOT LOGGING OTHER STUFF
         1.  Upon double checking, Alea was right. Damn.
+    4. No values we plan to log are currently zero (and we can add 1 with no serious problems)
 
 ```{r setup, message = FALSE}
 
@@ -55,6 +56,8 @@ pd <- read_csv("panel_data.csv")
 
 ```
 
+The PD df has 8178 observations. b
+
 ```{r}
 
 summary(pd)
@@ -64,17 +67,48 @@ The pd data frame has 8178 observations.
 
 Let's filter our data set down to reflect the comments above.
 
+1. Create log(av)
+2. Create 2 lags of log(av)
+3. Create log(total_levy) -- note that some of these values are zero. Let's keep these entities by adding 1 for now.
+
+I know you already did this step! Sorry!
 ```{r}
 
+lagged_pd <- pd %>%
+  group_by(agency_num) %>%
+  mutate(
+    av_lag = lag(av)) %>%
+  ungroup()
+
+lagged_pd_2 <- lagged_pd %>%
+  group_by(agency_num) %>%
+  mutate(av_lag_2 = lag(av_lag)) %>%
+  ungroup()
+
+lagged_pd %>%
+  group_by(agency_num) %>%
+  summarize(n = n()) %>%
+  filter(n < 17)
+
+lagged_pd <- create_lags(pd)
+
 pd_final <- pd %>%
-  filter(home_rule_ind == 1) %>%
-  filter(agency_num != c('030250000', '030840000', '040830001')) %>%
+  filter(home_rule_ind == 1) #1591 obs.
+
+
+
+pd_final <- pd_final %>%
+  mutate(log_av = log(av), #no obs have AVs of zero
+         log_levy = log(total_levy + 1))
+  
+
+filter(!agency_num %in% c('030250000', '030840000', '040830001')) %>%
   select(year, agency_num, agency_name, clean_name, minor_type, 
          av, total_levy, first6, reassess_year) %>%
   arrange(agency_num, year) %>%
   mutate(lag_1_av = lag(av)) %>%
   mutate(lag_2_av = lag(lag_1_av)) %>%
-  filter(year != c("2006", "2007"))
+  filter(!year %in% c("2006", "2007"))
   
 ```
 
@@ -109,16 +143,6 @@ pd_final %>%
 
 ```
 
-Let's drop "CITY OF COUNTRYSIDE" (agency_num = 030250000), "VILLAGE OF NORRIDGE" (agency_num = 030840000), and "SD 122 BOND / PART ANNEXED BY SD 127 1/2 2010" (agency_num = 040830001).
-
-```{r}
-
-pd_final <- pd_final %>%
-  
-
-```
-
-Let's try some models WITHOUT grouping muni entities.
 
 ```{r}
 
