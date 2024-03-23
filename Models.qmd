@@ -56,7 +56,7 @@ pd <- read_csv("panel_data.csv")
 
 ```
 
-The PD df has 8178 observations. b
+The PD df has 8178 observations. 
 
 ```{r}
 
@@ -85,15 +85,25 @@ lagged_pd_2 <- lagged_pd %>%
   mutate(av_lag_2 = lag(av_lag)) %>%
   ungroup()
 
-lagged_pd %>%
-  group_by(agency_num) %>%
-  summarize(n = n()) %>%
-  filter(n < 17)
+#lagged_pd %>%
+ # group_by(agency_num) %>%
+  #summarize(n = n()) %>%
+  #filter(n < 17)
 
-lagged_pd <- create_lags(pd)
+# Group by summed_levy_first6; use reframe because that's how you use it!
+# 1591 obs (which is the same number as if we just filtered for HR == 1)
 
-pd_final <- pd %>%
-  filter(home_rule_ind == 1) #1591 obs.
+lagged_pd_grouped_6 <- lagged_pd_2 %>%
+  group_by(first6) %>%
+  reframe(year, clean_name,  agency_name, agency_num, levy = summed_levy_first6, av,
+          av_lag_1 = av_lag, av_lag_2, home_rule_ind) %>%
+  filter(home_rule_ind == 1) %>%
+  arrange(clean_name, desc(year))
+
+# Let's find out how many obs have years w/ no levy
+# Assumption: no levy means rev. coming from somewhere else.
+
+
 
 
 
@@ -102,13 +112,13 @@ pd_final <- pd_final %>%
          log_levy = log(total_levy + 1))
   
 
-filter(!agency_num %in% c('030250000', '030840000', '040830001')) %>%
-  select(year, agency_num, agency_name, clean_name, minor_type, 
-         av, total_levy, first6, reassess_year) %>%
-  arrange(agency_num, year) %>%
-  mutate(lag_1_av = lag(av)) %>%
-  mutate(lag_2_av = lag(lag_1_av)) %>%
-  filter(!year %in% c("2006", "2007"))
+#filter(!agency_num %in% c('030250000', '030840000', '040830001')) %>%
+ # select(year, agency_num, agency_name, clean_name, minor_type, 
+   #      av, total_levy, first6, reassess_year) %>%
+  #arrange(agency_num, year) %>%
+#  mutate(lag_1_av = lag(av)) %>%
+ # mutate(lag_2_av = lag(lag_1_av)) %>%
+  #filter(!year %in% c("2006", "2007"))
   
 ```
 
