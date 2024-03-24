@@ -2,18 +2,30 @@ library(tidyverse)
 library(dplyr)
 library(plm)
 
-#16,354 obs
+# 16,354 obs
 raw_data_joined <- read_csv("agency_raw_joined.csv")
+# 17,294  with 2022 data
+
+raw_data_joined <- raw_data_joined %>% 
+  filter(total_final_levy > 0) %>%
+  mutate(cty_cook_eav = ifelse(is.na(cty_cook_eav) & total_final_levy > 0, total_final_levy / total_final_rate, cty_cook_eav),
+         cty_total_eav = ifelse(is.na(cty_total_eav) & total_final_levy > 0 , total_final_levy / total_final_rate, cty_total_eav)) %>% 
+  filter(minor_type != "SSA") %>% # drops 5332 taxing agencies (agency-year combos)
+  filter(cty_total_eav > 0 )
+## 11,281 obs after removing SSAs
 
 # Tables from PTAXSIM
-cpi <- read_csv("./Necessary_Files/cpi.csv") # has two year variables!!
+cpi <- read_csv("./Necessary_Files/cpi.csv") #%>%
+#  mutate(levy_year = as.character(levy_year)) # has two year variables!!
 eq_factor <- read_csv("./Necessary_Files/eq_factor.csv") %>% 
-  select(-eq_factor_tentative)
+  select(-eq_factor_tentative) # %>%
+#  mutate(year = as.character(year))
 
 
 
 
-dropped_munis <- c("030250000", "030270000", "030300000", "030585000", "030840000", "030890000", "031150000")
+
+dropped_munis <- c("030250000", "030270000", "030300000", "030585000", "030840000", "030890000", "031150000", "031230000")
 
 
 exclude_hr_change <- c("030770000", "030800000","030880000", "031070000", "031190000", "031250000" )
@@ -43,13 +55,13 @@ recoded_data <- raw_data_joined %>%
          av = cty_cook_eav / eq_factor_final,          # backed out taxable Assessed Value of properties
          first6_w_hr = str_c(first6, "_", home_rule_ind),
          agency_w_hr = str_c(agency_num, "_", home_rule_ind)
-         ) %>%
-  group_by(year, cty_total_eav, home_rule_ind) %>%
-  mutate(summed_levy_sharetaxbase = sum(total_final_levy)+1) %>% # grouped by tax base and year
-  ungroup() %>%
-  group_by(year, first6, home_rule_ind) %>%
-  mutate(summed_levy_first6 =sum(total_final_levy)+1) %>% # grouped by first 6 digits in agency number
-  ungroup()
+         ) # %>%
+ # group_by(year, cty_total_eav, home_rule_ind) %>%
+  #mutate(summed_levy_sharetaxbase = sum(total_final_levy)+1) %>% # grouped by tax base and year
+  #ungroup() %>%
+ # group_by(year, first6, home_rule_ind) %>%
+  #mutate(summed_levy_first6 =sum(total_final_levy)+1) %>% # grouped by first 6 digits in agency number
+ # ungroup()
 
 
 recoded_data <- recoded_data %>% 
@@ -69,11 +81,11 @@ recoded_data <- recoded_data %>%
     year = as.factor(year), # for plm()
     agency_num = as.factor(agency_num) # for plm()
     
-  ) %>% 
-  filter(minor_type != "SSA") # drops 5332 taxing agencies (agency-year combos)
-
+  ) 
 ## 7921 observations remain after removing SSAs ##
-# 8391 with 2022
+# 8391 with 2022 
+
+# 10,223 after fixing missing cty_cook_eav, cty_total_eav on Jan. 31
 
 drop_me <- recoded_data %>% 
   group_by(agency_name, agency_num) %>%
@@ -89,6 +101,8 @@ recoded_data <- recoded_data %>%
   arrange(agency_num, year)
 # 7715 obs after removing
 # 8178 with 2022
+# 10,238 after filling in EAV variables on Jan 31. 2024
+
 
 # turn it into panel data!
 # two way fixed effects will be used for agency and year.
@@ -103,7 +117,13 @@ panel_data$lag_capped <- plm::lag(panel_data$total_capped_ext, 1)
 panel_data$lag_non_capped <- plm::lag(panel_data$total_non_cap_ext, 1)
 
 panel_data$lag_cty_total_eav <- plm::lag(panel_data$cty_total_eav, 1)
-panel_data$lag_av <- plm::lag(panel_data$av, 1)
+panel_data$lag_av1 <- plm::lag(panel_data$av, 1)
+panel_data$lag_av2 <- plm::lag(panel_data$av, 2)
+panel_data$lag_av3 <- plm::lag(panel_data$av, 3)
+panel_data$lag_av4 <- plm::lag(panel_data$av, 4)
+
+
+
 
 
 panel_data$eav_lag1 <- plm::lag(panel_data$cty_total_eav, 1)
@@ -125,7 +145,7 @@ panel_data <- panel_data %>%
          tfl_pct_change = (total_final_levy - lag_totallevy) / lag_totallevy,
          capped_pct_change = (total_capped_ext - lag_capped) / lag_capped,
          noncapped_pct_change = (total_non_cap_ext - lag_non_capped) / lag_non_capped,
-         av_pct_change = (av - lag_av) / lag_av,
+         av_pct_change = (av - lag_av1) / lag_av1,
          av_increase = ifelse(av_pct_change > 0, "AV increased", 
                               ifelse(av_pct_change == 0, "No Change", "AV Increase")),
          up_down  = ifelse(eav_pct_change > 0, "increased", "decreased"))  %>%
