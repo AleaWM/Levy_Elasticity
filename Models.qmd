@@ -3,7 +3,7 @@ title: "Untitled"
 format: html
 ---
 
-Model decisions:
+# Model decisions:
 
 1.  Which agencies in the data set? NOTEL ALL ITEMS EXCEPT d AND e are done.
     a.  Home rule ONLY (evaluate how home rule-y the non municipalities are. Are they just subdivisions of the munis? 63 for munis vs. \~90
@@ -11,7 +11,7 @@ Model decisions:
     c.  Drop border crossers
     d.  Drop agencies w/ little prop tax rev.
         a.  Create variable to measure property tax dependence. should be (total_rev - total_final_levy)/total_rev (or similar)
-    e.  Grouping — it is a concern and should be done by agency digits and eav.
+    e.  Grouping --- it is a concern and should be done by agency digits and eav.
 2.  Variables
     1.  DV - ln(total_levy) - allows calculation of elasticity, which economists \<3
         1.  We want the levy value requested by the muni/agency to capture the agency's responsiveness to the change in the tax base. That should be the same as they received since they are HR agencies.
@@ -35,7 +35,7 @@ Model decisions:
         5.  log(AV)\*lag(Reassess)
             1.  check if responsiveness is related to it being an assessment year
             2.  NO
-            3.  Only incorporated into the budget the year after reassessment – hence description as "lag"
+            3.  Only incorporated into the budget the year after reassessment -- hence description as "lag"
 3.  Other model items:
     1.  Is "year" the calendar year or the tax year? Determines whether we want to lag the reassess variable.
         1.  Alea: Year in the agency_dt is the tax year. Reassessment year might be calendar year.
@@ -43,7 +43,7 @@ Model decisions:
     2.  2WFE are OK because we, within each year, 1/3 of the county is reassessed; we are no longer using it as a "treatment" to make causal statements.
     3.  DOUBLE CHECK TO ASSUAGE ALEA'S FEARS RE: NOT LOGGING OTHER STUFF
         1.  Upon double checking, Alea was right. Damn.
-    4. No values we plan to log are currently zero (and we can add 1 with no serious problems)
+    4.  No values we plan to log are currently zero (and we can add 1 with no serious problems)
 
 ```{r setup, message = FALSE}
 
@@ -56,73 +56,190 @@ pd <- read_csv("panel_data.csv")
 
 ```
 
-The PD df has 8178 observations. 
+The PD df has 8178 observations.
 
-```{r}
+```{r pd_summary}
 
 summary(pd)
 ```
 
 The pd data frame has 8178 observations.
 
+# Step 1
+
 Let's filter our data set down to reflect the comments above.
 
-1. Create log(av)
-2. Create 2 lags of log(av)
-3. Create log(total_levy) -- note that some of these values are zero. Let's keep these entities by adding 1 for now.
+Here, we:
+
+1.  Create lags for AV;
+2.  Filter for HR;
+3.  Group by first 6;
+4.  Filter out munis without levies
+5.  Visually evaluate the data for stuff that's broken.
 
 I know you already did this step! Sorry!
-```{r}
 
-lagged_pd <- pd %>%
+I ended up with 1591 obs.
+
+```{r grouping_and_lags}
+
+pd %>%
+  group_by(clean_name) %>%
+  filter(home_rule_ind == 1,
+         is.na(clean_name)) %>%
+  select(-clean_name) %>%
+  group_by(agency_num) %>%
+  summarize(year, agency_name, agency_num, av, total_levy)
+
+lagged_pd_1 <- pd %>%
+  arrange(year) %>%
   group_by(agency_num) %>%
   mutate(
-    av_lag = lag(av)) %>%
+    av_lag_1 = lag(av)) %>%
   ungroup()
 
-lagged_pd_2 <- lagged_pd %>%
+lagged_pd_1 %>%
+  select(year, agency_num, av, av_lag_1) %>%
+  distinct()
+
+lagged_pd_2 <- lagged_pd_1 %>%
   group_by(agency_num) %>%
-  mutate(av_lag_2 = lag(av_lag)) %>%
+  mutate(av_lag_2 = lag(av_lag_1)) %>%
   ungroup()
-
-#lagged_pd %>%
- # group_by(agency_num) %>%
-  #summarize(n = n()) %>%
-  #filter(n < 17)
 
 # Group by summed_levy_first6; use reframe because that's how you use it!
-# 1591 obs (which is the same number as if we just filtered for HR == 1)
+# Let's also take out those two taxing agencies
+# 1591 obs (which is the same number as if we just filtered for HR == 1 earlier on)
 
 lagged_pd_grouped_6 <- lagged_pd_2 %>%
   group_by(first6) %>%
-  reframe(year, clean_name,  agency_name, agency_num, levy = summed_levy_first6, av,
-          av_lag_1 = av_lag, av_lag_2, home_rule_ind) %>%
-  filter(home_rule_ind == 1) %>%
+  reframe(year, clean_name, levy = summed_levy_first6, av,
+          av_lag_1, av_lag_2, home_rule_ind) %>%
+  filter(home_rule_ind == 1,
+         levy >= 1) %>%
+  select(-home_rule_ind) %>%
   arrange(clean_name, desc(year))
 
-# Let's find out how many obs have years w/ no levy
-# Assumption: no levy means rev. coming from somewhere else.
-
-
-
-
-
-pd_final <- pd_final %>%
-  mutate(log_av = log(av), #no obs have AVs of zero
-         log_levy = log(total_levy + 1))
-  
-
-#filter(!agency_num %in% c('030250000', '030840000', '040830001')) %>%
- # select(year, agency_num, agency_name, clean_name, minor_type, 
-   #      av, total_levy, first6, reassess_year) %>%
-  #arrange(agency_num, year) %>%
-#  mutate(lag_1_av = lag(av)) %>%
- # mutate(lag_2_av = lag(lag_1_av)) %>%
-  #filter(!year %in% c("2006", "2007"))
-  
+lagged_pd_grouped_6  
 ```
 
-We now have 1498 obs.
+## Let's check a few other things:
+
+1.  If we group by first_6, how many taxing districts fail to have a clean_name?
+    1.  LAKE CO TAX OBJ CT ORD-220, 044030010; 2022 levy = 649k
+    2.  SD 122 BOND / PART ANNEXED BY SD 127 1/2 2010, 040830001, 2022 levy = 0.
+    3.  Will drop both these taxing agencies for now.
+2.  Some munis have multiple obs/year
+3.  Filter out places with levies of 1. Assume it was to prepare a log transform when making the summed levy amts.
+
+```{r}
+
+lagged_pd_grouped_6 %>%
+  group_by(clean_name) %>%
+  summarize(n = n()) %>%
+  arrange(desc(n))
+
+# Let's kick out everything with 17 obs.
+
+lagged_pd_grouped_6 %>%
+  group_by(clean_name) %>%
+  summarize(n = n()) %>%
+  filter(n != 17) %>%
+  arrange(desc(n))
+
+# What if we brute force our way to success w/ distinct()?
+
+lagged_pd_grouped_6 %>%
+  group_by(clean_name) %>%
+  distinct() %>%
+  summarize(n = n()) %>%
+  filter(n != 17) %>%
+  arrange(desc(n))
+
+# After deduping, only 2 munis have more obs. than years.
+```
+
+-   35 munis have wrong number of obs.
+
+    -   Of those, 33 have more obs than years.
+
+    -   3 have fewer obs than years
+
+-   After deduping, the following munis are ALSO missing obs.
+
+    -   Mt Prospect
+
+    -   Wilmette
+
+    -   Midlothian
+
+    -   Northfield
+
+    -   River Grove
+
+    -   Melrose Park
+
+    -   Palatine
+
+-   After de-duping, Elk Grove Village and Chicago Heights still have too many obs.
+
+```{r}
+
+pd %>%
+  filter(clean_name %in% c('Mt Prospect', 'Wilmette', 'Midlothian', 'Northfield', 'River Grove', 'Melrose Park', 'Palatine')) %>%
+  group_by(clean_name) %>%
+  summarize(clean_name, agency_name, agency_num, n= n()) %>%
+  distinct()
+```
+
+-   Melrose Park and Midlothian have numbers consistent with 2x17, so we need to go back and check.
+
+-   Mt Prospect - 2x16
+
+-   River Grove and Northfield are fine
+
+-   Need to investigate palatine and wilmette
+
+```{r}
+
+pd %>%
+  filter(agency_num %in% c('030960000', '031330000')) %>%
+  group_by(agency_num) %>%
+  ungroup() %>%
+  arrange(agency_num, year) %>%
+  select(year, agency_name, agency_num, av)
+
+```
+
+Let's toss out Mt Prospect, Palatine and Wilmette as well as the obs. without a clean name.
+
+Need to pull back in the dropped obs for: Melrose Park, Midlothian, River Grove, and Northfield.
+
+Let's check out Chicago Heights and Elk Grove Village.
+
+```{r}
+
+pd %>%
+  filter(clean_name %in% c('Chicago Heights', 'Elk Grove Village')) %>%
+  group_by(agency_num) %>%
+  mutate(n = n()) %>%
+  ungroup() %>%
+  select(clean_name, year, agency_name, agency_num, n, av)
+
+```
+
+We need to make sure we have the right number of CITY OF CHICAGO HEIGHTS obs.
+
+## Summary:
+
+We need to retrieve data for the following entities: Melrose Park, Midlothian, River Grove, and Northfield, and Chicago Heights.
+
+We need to remove Mt Prospect, Palatine and Wilmette as well as the obs. without a clean name, and Elk Grove Village
+
+```{r merge_join}
+
+
+```
 
 Detach dplyr because it breaks shit.
 
@@ -152,7 +269,6 @@ pd_final %>%
   summarize(clean_name, agency_name, n = n())
 
 ```
-
 
 ```{r}
 
@@ -220,4 +336,3 @@ export_summs(luglm1, luglm2, luglm3,
              robust = "HC3", statistics = c(N = "nobs", adj.R2 = "adj.r.squared", R2 = "r.squared"))
 
 ```
-
