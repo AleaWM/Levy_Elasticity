@@ -74,7 +74,9 @@ source("helper_recode_variables.R")
 
 library(dplyr)
 
-all_agencies <- recoded_data
+all_agencies <- recoded_data %>%    
+  mutate(cty_cook_eav = total_final_levy / total_final_rate,
+         av = cty_cook_eav / eq_factor_final)
 
 ```
 
@@ -111,32 +113,6 @@ export_summs(all_m1_simple, all_m1_lags,# all_m1, #, all_m1_all_vars,
 
 ```
 
-```{r AV-version, include = FALSE}
-
-
-av_simple<- plm(log(total_final_levy_4log) ~ log(av), 
-             index = c("agency_name", "year"), 
-             model = "within", effect= "twoways",                    
-             data = all_agencies)
-#summary(all_m1_simple)
-
-av_lags<- plm(log(total_final_levy_4log) ~ log(av) + lag(log(av), 1) + lag(log(av),2), 
-             index = c("agency_name", "year"), 
-             model = "within", effect= "twoways",                    
-             data = all_agencies)
-
-
-model_names <- c( av_simple = "All Agencies FE, Naive Levy Requested", 
-                  av_lags = "With Lagged EAV"
-                 # all_m1 = "Leads & Lags"
-                  )
-
-export_summs(av_simple, av_lags,# all_m1, #, all_m1_all_vars, 
-             robust = "HC3",  model.names = model_names, statistics = c(N = "nobs", adj.R2 = "adj.r.squared", R2 = "r.squared"))
-
-
-```
-
 # Grouped taxing agencies
 
 Grouped by grouped_label from CSV
@@ -165,6 +141,8 @@ library(dplyr)
 table(recoded_data$reassess_year, recoded_data$minor_type)
 
 grouped_manual <- recoded_data %>% 
+      mutate(cty_cook_eav = total_final_levy / total_final_rate,
+         av = cty_cook_eav / eq_factor_final) %>%
   left_join(groupies2,
             by = c("agency_name", "agency_num")
             ) %>% 

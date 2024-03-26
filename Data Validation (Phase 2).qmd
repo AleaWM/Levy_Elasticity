@@ -70,11 +70,9 @@ all_agencies <- recoded_data
 
 # Grouped by grouped_label from CSV
 
-Uses manually coded labels that combine both methods of grouping taxing
-agencies:
+Uses manually coded labels that combine both methods of grouping taxing agencies:
 
-taxing agencies that could be grouped by either the first 6 digits of
-their shared tax base (EAV equal during a tax year)
+taxing agencies that could be grouped by either the first 6 digits of their shared tax base (EAV equal during a tax year)
 
 ```{r, eval = FALSE}
 library(dplyr)
@@ -281,8 +279,7 @@ export_summs(grouped_model, grouped_cleannames_lag,  grouped_cleannames_withHRin
 
 ```
 
-When using the grouped_labels csv to identify agencies that should be
-grouped, then there are 124 nonHR and 69 HR grouped taxing districts.
+When using the grouped_labels csv to identify agencies that should be grouped, then there are 124 nonHR and 69 HR grouped taxing districts.
 
 ## Seperating hr and nonhr
 

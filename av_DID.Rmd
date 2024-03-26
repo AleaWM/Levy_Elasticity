@@ -103,7 +103,7 @@ after2014_hr <- recoded_data %>%
     mutate(cty_cook_eav = total_final_levy / total_final_rate,
          av = cty_cook_eav / eq_factor_final) %>%
   mutate(year_num = as.numeric(as.character(year)) ) %>% 
-  filter(year_num >= 2014 & year_num  < 2019) %>%
+  filter(year_num >= 2014 & year_num  <= 2020) %>%
     filter(major_type == "MUNICIPALITY/TOWNSHIP" #  major_type == "MISCELLANEOUS"
            & minor_type != "MISC"
            ) %>%  
@@ -140,7 +140,7 @@ after2014_hr <- recoded_data %>%
 
 
 ```{r}
-after2014_hr <- after2014_hr %>% group_by(agency_name) %>% mutate(year_count = n()) %>% ungroup() %>% filter(year_count == 5)
+after2014_hr <- after2014_hr %>% group_by(agency_name) %>% mutate(year_count = n()) %>% ungroup() %>% filter(year_count == 7)
 table(after2014_hr$year)
 ```
 
@@ -235,6 +235,15 @@ after2014_hr %>%   filter(Triad != "City") %>%
 
 ```
 
+# Take 47: Merriman's Equation
+
+$$ln(levy) = aj + b*ln(AV) + c*ln(AV)*reassess + d*X + (e*i.time)$$
+
+```{r}
+
+```
+
+
 # DID 
 ```{r}
 TRA <- read_csv("./Necessary_Files/triad_reassessment_years_piv2.csv") %>% 
@@ -295,7 +304,7 @@ att1 <- att_gt(
   #xformla = ~av,
   data = panel_data3, #,
   #panel = FALSE,
- control_group = "notyettreated"
+ #control_group = "notyettreated"
 )
 
 summary(att1)
