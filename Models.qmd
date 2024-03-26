@@ -1,9 +1,17 @@
 ---
-title: "Untitled"
-format: html
+title: "Model Decisions, Discussions, & Output"
+subtitle: "Responsiveness of the Levy to the Tax Base"
+author: "Michael Van Hulle"
+date: "March 26, 2024"
+format: 
+  html:
+    code-folding: hide
+    code-line-numbers: true
+    toc: true
+    toc-location: left-body
 ---
 
-Model decisions:
+# Model parameters discussion.
 
 1.  Which agencies in the data set? NOTEL ALL ITEMS EXCEPT d AND e are done.
     a.  Home rule ONLY (evaluate how home rule-y the non municipalities are. Are they just subdivisions of the munis? 63 for munis vs. \~90
@@ -11,7 +19,7 @@ Model decisions:
     c.  Drop border crossers
     d.  Drop agencies w/ little prop tax rev.
         a.  Create variable to measure property tax dependence. should be (total_rev - total_final_levy)/total_rev (or similar)
-    e.  Grouping — it is a concern and should be done by agency digits and eav.
+    e.  Grouping --- it is a concern and should be done by agency digits and eav.
 2.  Variables
     1.  DV - ln(total_levy) - allows calculation of elasticity, which economists \<3
         1.  We want the levy value requested by the muni/agency to capture the agency's responsiveness to the change in the tax base. That should be the same as they received since they are HR agencies.
@@ -35,7 +43,7 @@ Model decisions:
         5.  log(AV)\*lag(Reassess)
             1.  check if responsiveness is related to it being an assessment year
             2.  NO
-            3.  Only incorporated into the budget the year after reassessment – hence description as "lag"
+            3.  Only incorporated into the budget the year after reassessment -- hence description as "lag"
 3.  Other model items:
     1.  Is "year" the calendar year or the tax year? Determines whether we want to lag the reassess variable.
         1.  Alea: Year in the agency_dt is the tax year. Reassessment year might be calendar year.
@@ -43,181 +51,99 @@ Model decisions:
     2.  2WFE are OK because we, within each year, 1/3 of the county is reassessed; we are no longer using it as a "treatment" to make causal statements.
     3.  DOUBLE CHECK TO ASSUAGE ALEA'S FEARS RE: NOT LOGGING OTHER STUFF
         1.  Upon double checking, Alea was right. Damn.
-    4. No values we plan to log are currently zero (and we can add 1 with no serious problems)
+    4.  No values we plan to log are currently zero (and we can add 1 with no serious problems)
+
+# Models
+
+We're using the "grouped_munis.csv" data set that Alea cleaned in "CookCounty_PanelData_TFL.rmd"
 
 ```{r setup, message = FALSE}
 
-knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+knitr::opts_chunk$set(warning = FALSE, message = FALSE, error = TRUE)
 
-library(tidyverse)
+library(plm)
 library(stargazer)
 
-pd <- read_csv("panel_data.csv")
+gm <- read.csv("grouped_munis.csv")
 
 ```
 
-The PD df has 8178 observations. 
+## AV lags, 2WFE
+
+-   Note: lagged av variables have already been logged.
 
 ```{r}
 
-summary(pd)
-```
+gm_pd <- pdata.frame(gm, index = c("uniqueid", "year")) 
 
-The pd data frame has 8178 observations.
-
-Let's filter our data set down to reflect the comments above.
-
-1. Create log(av)
-2. Create 2 lags of log(av)
-3. Create log(total_levy) -- note that some of these values are zero. Let's keep these entities by adding 1 for now.
-
-I know you already did this step! Sorry!
-```{r}
-
-lagged_pd <- pd %>%
-  group_by(agency_num) %>%
-  mutate(
-    av_lag = lag(av)) %>%
-  ungroup()
-
-lagged_pd_2 <- lagged_pd %>%
-  group_by(agency_num) %>%
-  mutate(av_lag_2 = lag(av_lag)) %>%
-  ungroup()
-
-#lagged_pd %>%
- # group_by(agency_num) %>%
-  #summarize(n = n()) %>%
-  #filter(n < 17)
-
-# Group by summed_levy_first6; use reframe because that's how you use it!
-# 1591 obs (which is the same number as if we just filtered for HR == 1)
-
-lagged_pd_grouped_6 <- lagged_pd_2 %>%
-  group_by(first6) %>%
-  reframe(year, clean_name,  agency_name, agency_num, levy = summed_levy_first6, av,
-          av_lag_1 = av_lag, av_lag_2, home_rule_ind) %>%
-  filter(home_rule_ind == 1) %>%
-  arrange(clean_name, desc(year))
-
-# Let's find out how many obs have years w/ no levy
-# Assumption: no levy means rev. coming from somewhere else.
-
-
-
-
-
-pd_final <- pd_final %>%
-  mutate(log_av = log(av), #no obs have AVs of zero
-         log_levy = log(total_levy + 1))
-  
-
-#filter(!agency_num %in% c('030250000', '030840000', '040830001')) %>%
- # select(year, agency_num, agency_name, clean_name, minor_type, 
-   #      av, total_levy, first6, reassess_year) %>%
-  #arrange(agency_num, year) %>%
-#  mutate(lag_1_av = lag(av)) %>%
- # mutate(lag_2_av = lag(lag_1_av)) %>%
-  #filter(!year %in% c("2006", "2007"))
-  
-```
-
-We now have 1498 obs.
-
-Detach dplyr because it breaks shit.
-
-```{r}
-
-detach("package:dplyr", unload = TRUE)
-
-library(plm)
-
-pd_final <- pdata.frame(pd_final, index = c("agency_num", "year"))
-```
-
-Detach plm and reload tidyverse to look at data. (Models not initially running.)
-
-```{r}
-
-pd_final %>%
-  select(agency_name, agency_num, clean_name, total_levy, av) %>%
-  filter(total_levy == 0) %>%
-  group_by(clean_name) %>%
-  summarize(clean_name, agency_num, agency_name, n = n())
-
-pd_final %>%
-  select(agency_name, agency_num, clean_name, total_levy, av) %>%
-  filter(av == 0) %>%
-  group_by(clean_name) %>%
-  summarize(clean_name, agency_name, n = n())
-
-```
-
-
-```{r}
-
-detach("package:dplyr", unload = TRUE)
-
-library(plm)
-
-```
-
-```{r}
-
-uglm1 <- plm(total_levy ~ av, 
-              index = c("agency_num", "year"), 
-              model = "within", 
-              effect= "twoways",   
-              data = pd_final)
-
-uglm2 <- plm(total_levy ~ av + lag_1_av,
-             data = pd_final,
-             na.action = na.omit,
-              index = c("agency_num", "year"), 
+simple1 <- plm(log_levy ~ log_av,
               model = "within",
-              effect= "twoways")
+              effect = "twoways",
+              data = gm_pd)
 
-uglm3 <- plm(total_levy ~ av + lag_1_av + lag_2_av,
-             data = pd_final,
-             na.action = na.omit,
-              index = c("agency_num", "year"), 
+simple2 <- plm(log_levy ~ log_av + av_lag,
               model = "within",
-              effect= "twoways")
+              effect = "twoways",
+              data = gm_pd)
 
+simple3 <- plm(log_levy ~ log_av + av_lag + av_lag2,
+              model = "within",
+              effect = "twoways",
+              data = gm_pd)
 
-
-export_summs(uglm1, uglm2, uglm3, 
-             robust = "HC3", statistics = c(N = "nobs", adj.R2 = "adj.r.squared", R2 = "r.squared"))
+summary(simple1)
+summary(simple2)
+summary(simple3)
 ```
+
+## reassess_lag dummy, av lags, 2WFE
 
 ```{r}
 
-luglm1 <- plm(log(total_levy+1) ~ log(av+1), 
-              data = pd_final,
-              na.action = na.omit,
-              index = c("agency_num", "year"), 
-              model = "within", 
-              effect= "twoways")
-
-luglm2 <- plm(log(total_levy + 1) ~ log(av + 1) + log(lag_1_av + 1),
-              data = pd_final,
-              na.action = na.omit,
-              index = c("agency_num", "year"), 
+med1 <- plm(log_levy ~ log_av + reassess_lag1 + log_av*reassess_lag1,
               model = "within",
-              effect= "twoways")
+              effect = "twoways",
+              data = gm_pd)
 
-luglm3 <- plm(log(total_levy + 1) ~ log(av + 1) + 
-                log(lag_1_av + 1) + log(lag_2_av + 1),
-              data = pd_final,
-              na.action = na.omit,
-              index = c("agency_num", "year"), 
+med2 <- plm(log_levy ~ log_av + av_lag + reassess_lag1 + log_av*reassess_lag1,
               model = "within",
-              effect= "twoways")
+              effect = "twoways",
+              data = gm_pd)
 
+med3 <- plm(log_levy ~ log_av + av_lag + av_lag2 + reassess_lag1 + log_av*reassess_lag1,
+              model = "within",
+              effect = "twoways",
+              data = gm_pd)
 
+summary(med1)
+summary(med2)
+summary(med3)
 
-export_summs(luglm1, luglm2, luglm3, 
-             robust = "HC3", statistics = c(N = "nobs", adj.R2 = "adj.r.squared", R2 = "r.squared"))
+stargazer(med1, type = "html")
 
 ```
 
+## reassess_year dummy, av lags, 2WFE
+
+```{r}
+
+med1.1 <- plm(log_levy ~ log_av + reassess_year + log_av*reassess_year,
+              model = "within",
+              effect = "twoways",
+              data = gm_pd)
+
+med2.1 <- plm(log_levy ~ log_av + av_lag + reassess_year + log_av*reassess_year,
+              model = "within",
+              effect = "twoways",
+              data = gm_pd)
+
+med3.1 <- plm(log_levy ~ log_av + av_lag + av_lag2 + reassess_year + log_av*reassess_year,
+              model = "within",
+              effect = "twoways",
+              data = gm_pd)
+
+summary(med1.1)
+summary(med2.1)
+summary(med3.1)
+
+```
