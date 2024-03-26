@@ -1,9 +1,17 @@
 ---
-title: "Untitled"
-format: html
+title: "Model Decisions, Discussions, & Output"
+subtitle: "Responsiveness of the Levy to the Tax Base"
+author: "Michael Van Hulle"
+date: "March 26, 2024"
+format: 
+  html:
+    code-folding: hide
+    code-line-numbers: true
+    toc: true
+    toc-location: left-body
 ---
 
-# Model decisions:
+# Model parameters discussion.
 
 1.  Which agencies in the data set? NOTEL ALL ITEMS EXCEPT d AND e are done.
     a.  Home rule ONLY (evaluate how home rule-y the non municipalities are. Are they just subdivisions of the munis? 63 for munis vs. \~90
@@ -45,27 +53,111 @@ format: html
         1.  Upon double checking, Alea was right. Damn.
     4.  No values we plan to log are currently zero (and we can add 1 with no serious problems)
 
+# Models
+
+We're using the "grouped_munis.csv" data set that Alea cleaned in "CookCounty_PanelData_TFL.rmd"
+
 ```{r setup, message = FALSE}
 
-knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+knitr::opts_chunk$set(warning = FALSE, message = FALSE, error = TRUE)
 
-library(tidyverse)
+library(plm)
 library(stargazer)
 
-pd <- read_csv("panel_data.csv")
+gm <- read.csv("grouped_munis.csv")
+
+```
+
+## AV lags, 2WFE
+
+-   Note: lagged av variables have already been logged.
+
+```{r}
+
+gm_pd <- pdata.frame(gm, index = c("uniqueid", "year")) 
+
+simple1 <- plm(log_levy ~ log_av,
+              model = "within",
+              effect = "twoways",
+              data = gm_pd)
+
+simple2 <- plm(log_levy ~ log_av + av_lag,
+              model = "within",
+              effect = "twoways",
+              data = gm_pd)
+
+simple3 <- plm(log_levy ~ log_av + av_lag + av_lag2,
+              model = "within",
+              effect = "twoways",
+              data = gm_pd)
+
+summary(simple1)
+summary(simple2)
+summary(simple3)
+```
+
+## reassess_lag dummy, av lags, 2WFE
+
+```{r}
+
+med1 <- plm(log_levy ~ log_av + reassess_lag1 + log_av*reassess_lag1,
+              model = "within",
+              effect = "twoways",
+              data = gm_pd)
+
+med2 <- plm(log_levy ~ log_av + av_lag + reassess_lag1 + log_av*reassess_lag1,
+              model = "within",
+              effect = "twoways",
+              data = gm_pd)
+
+med3 <- plm(log_levy ~ log_av + av_lag + av_lag2 + reassess_lag1 + log_av*reassess_lag1,
+              model = "within",
+              effect = "twoways",
+              data = gm_pd)
+
+summary(med1)
+summary(med2)
+summary(med3)
+
+stargazer(med1, type = "html")
+
+```
+
+## reassess_year dummy, av lags, 2WFE
+
+```{r}
+
+med1.1 <- plm(log_levy ~ log_av + reassess_year + log_av*reassess_year,
+              model = "within",
+              effect = "twoways",
+              data = gm_pd)
+
+med2.1 <- plm(log_levy ~ log_av + av_lag + reassess_year + log_av*reassess_year,
+              model = "within",
+              effect = "twoways",
+              data = gm_pd)
+
+med3.1 <- plm(log_levy ~ log_av + av_lag + av_lag2 + reassess_year + log_av*reassess_year,
+              model = "within",
+              effect = "twoways",
+              data = gm_pd)
+
+summary(med1.1)
+summary(med2.1)
+summary(med3.1)
 
 ```
 
 The PD df has 8178 observations.
 
-```{r pd_summary}
+```{r pd_summary, eval=FALSE}
 
 summary(pd)
 ```
 
 The pd data frame has 8178 observations.
 
-# Step 1
+Step 1
 
 Let's filter our data set down to reflect the comments above.
 
@@ -81,7 +173,9 @@ I know you already did this step! Sorry!
 
 I ended up with 1591 obs.
 
-```{r grouping_and_lags}
+```{r grouping_and_lags, eval=FALSE}
+
+table(pd$minor_type)
 
 pd %>%
   group_by(clean_name) %>%
@@ -123,7 +217,7 @@ lagged_pd_grouped_6 <- lagged_pd_2 %>%
 lagged_pd_grouped_6  
 ```
 
-## Let's check a few other things:
+Let's check a few other things:
 
 1.  If we group by first_6, how many taxing districts fail to have a clean_name?
     1.  LAKE CO TAX OBJ CT ORD-220, 044030010; 2022 levy = 649k
@@ -132,7 +226,7 @@ lagged_pd_grouped_6
 2.  Some munis have multiple obs/year
 3.  Filter out places with levies of 1. Assume it was to prepare a log transform when making the summed levy amts.
 
-```{r}
+```{r, eval=FALSE}
 
 lagged_pd_grouped_6 %>%
   group_by(clean_name) %>%
@@ -183,7 +277,7 @@ lagged_pd_grouped_6 %>%
 
 -   After de-duping, Elk Grove Village and Chicago Heights still have too many obs.
 
-```{r}
+```{r, eval=FALSE}
 
 pd %>%
   filter(clean_name %in% c('Mt Prospect', 'Wilmette', 'Midlothian', 'Northfield', 'River Grove', 'Melrose Park', 'Palatine')) %>%
@@ -200,7 +294,7 @@ pd %>%
 
 -   Need to investigate palatine and wilmette
 
-```{r}
+```{r, eval=FALSE}
 
 pd %>%
   filter(agency_num %in% c('030960000', '031330000')) %>%
@@ -217,7 +311,7 @@ Need to pull back in the dropped obs for: Melrose Park, Midlothian, River Grove,
 
 Let's check out Chicago Heights and Elk Grove Village.
 
-```{r}
+```{r, eval=FALSE}
 
 pd %>%
   filter(clean_name %in% c('Chicago Heights', 'Elk Grove Village')) %>%
@@ -230,7 +324,7 @@ pd %>%
 
 We need to make sure we have the right number of CITY OF CHICAGO HEIGHTS obs.
 
-## Summary:
+Summary:
 
 We need to retrieve data for the following entities: Melrose Park, Midlothian, River Grove, and Northfield, and Chicago Heights.
 
