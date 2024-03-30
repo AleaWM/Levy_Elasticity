@@ -5,8 +5,9 @@ author: "Michael Van Hulle"
 date: "March 26, 2024"
 format: 
   html:
-    code-folding: hide
+    code-fold: true
     code-line-numbers: true
+    code-overflow: wrap
     toc: true
     toc-location: left-body
 ---
@@ -55,16 +56,16 @@ format:
 
 # Models
 
-We're using the "grouped_munis.csv" data set that Alea cleaned in "CookCounty_PanelData_TFL.rmd". This has also been recreatd in the new chunk named "AWM-setup" that is set to eval=FALSE for non-Alea coders. 
+We're using the "grouped_munis.csv" data set that Alea cleaned in "CookCounty_PanelData_TFL.rmd". This has also been recreatd in the new chunk named "AWM-setup" that is set to eval=FALSE for non-Alea coders.
 
-```{r setup, eval=FALSE, message = FALSE}
-knitr::opts_chunk$set(warning = FALSE, message = FALSE, error = TRUE)
+```{r setup, message = FALSE, eval = FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 
 library(plm)
 # library(stargazer) Is that even the right name of the package? it says it doesn't exist?
 library(modelsummary) # Added instead for summary tables - AWM 3/25/2024
 
-
+library(tidyverse)
 library(stars)
 library(lmtest)
 library(huxtable)
@@ -93,8 +94,7 @@ gm <- grouped_manual_has17
 
 ```
 
-
-```{r AWM-setup, eval=FALSE}
+```{r AWM-setup, warning = FALSE, message=FALSE}
 
 knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 
@@ -169,7 +169,7 @@ grouped_manual_has16 <- grouped_manual %>%  # 124 nonHR and 69 HR
   group_by(uniqueid) %>%
   distinct() %>%
   mutate(count = n()) %>%
-  filter(count == 17) %>% ungroup()
+  filter(count == 17 & home_rule_ind == 1) %>% ungroup()
 
 
 gm <- grouped_manual_has16
