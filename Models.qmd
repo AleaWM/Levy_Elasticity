@@ -175,9 +175,10 @@ grouped_manual_has16 <- grouped_manual %>%  # 124 nonHR and 69 HR
 gm <- grouped_manual_has16
 
 
-
+#write.csv(gm, "gm_for_pivots.csv")
 ```
 
+We're going to look at some pivot tables 
 ## AV lags, 2WFE
 
 -   Note: lagged av variables have already been logged.
