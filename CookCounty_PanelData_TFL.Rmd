@@ -155,7 +155,7 @@ grouped_manual <- recoded_data %>%
             agency_num = first(agency_num),
             total_final_levy = sum(total_final_levy, na.rm=TRUE)+1,
             cty_total_eav = first(cty_total_eav), 
-            av = sum(av, na.rm=TRUE),
+            av = first(av), ## fixed from sum() to first() on 3/31/2024
             Triad = first(Triad), 
             agency_count = n(),
             reassess_year = first(reassess_year),
