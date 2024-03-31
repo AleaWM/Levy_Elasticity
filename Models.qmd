@@ -78,14 +78,12 @@ gm <- read.csv("grouped_munis.csv")
 # Observations must exist every year. Done manually below
 # Otherwise, there is a command in the plm() package that makes it rectangular for you. 
 # 2278 obs after 2022 update
-grouped_manual_has17 <- gm %>%  # 124 nonHR and 69 HR
+grouped_manual_has17 <- gm %>%
   ungroup() %>%
- # filter(year == 2021) %>%
-  arrange(home_rule_ind) %>%
   group_by(uniqueid) %>%
-  distinct() %>%
   mutate(count = n()) %>%
-  filter(count == 17) %>% ungroup()
+  filter(count == 17) %>% 
+  ungroup()
 
 
 # rename it back to gm so that you don't have to update the model commands. 
@@ -98,12 +96,12 @@ gm <- grouped_manual_has17
 
 knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 
+library(tidyverse)
 library(plm)
 library(stars)
 library(lmtest)
 library(huxtable)
 library(jtools)
-# library(stargazer)
 
 source("helper_recode_variables.R")
 
@@ -118,7 +116,7 @@ grouped_manual <- recoded_data %>%
   left_join(groupies2,
             by = c("agency_name", "agency_num")
             ) %>% 
-    filter(major_type == "MUNICIPALITY/TOWNSHIP" # | major_type == "MISCELLANEOUS"
+    filter(major_type == "MUNICIPALITY/TOWNSHIP" ### |   major_type == "MISCELLANEOUS"
            & minor_type != "MISC"
            ) %>%
   filter(minor_type != "SSA") %>% 
@@ -127,7 +125,7 @@ grouped_manual <- recoded_data %>%
             agency_num = first(agency_num),
             total_final_levy = sum(total_final_levy, na.rm=TRUE)+1,
             cty_total_eav = first(cty_total_eav), 
-            av = sum(av, na.rm=TRUE),
+            av = first(av),   # should be first() not sum() --- AWM 3/30/24
             Triad = first(Triad), 
             agency_count = n(),
             reassess_year = first(reassess_year),
@@ -162,6 +160,7 @@ grouped_manual %>%  # 236 nonHR and 68 HR
 
 # 1552 obs
 # 2278 obs after 2022 update
+# 1122 homerule munis after adding home_rule_ind filter
 grouped_manual_has16 <- grouped_manual %>%  # 124 nonHR and 69 HR
   ungroup() %>%
  # filter(year == 2021) %>%
@@ -169,7 +168,8 @@ grouped_manual_has16 <- grouped_manual %>%  # 124 nonHR and 69 HR
   group_by(uniqueid) %>%
   distinct() %>%
   mutate(count = n()) %>%
-  filter(count == 17 & home_rule_ind == 1) %>% ungroup()
+  filter(count == 17 & home_rule_ind == 1) %>% 
+  ungroup()
 
 
 gm <- grouped_manual_has16
@@ -199,6 +199,35 @@ simple2 <- plm(log_levy ~ log_av + lag(log_av),
               data = gm_pd)
 
 simple3 <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av,2),
+              model = "within",
+              effect = "twoways",
+              data = gm_pd)
+
+#summary(simple1)
+#summary(simple2)
+#summary(simple3)
+
+export_summs(simple1, simple2,  simple3, robust = "HC3", 
+             statistics = c(N = "nobs", R2 = "r.squared", adj.R2 = "adj.r.squared"))
+```
+
+```{r}
+#detach("package:dplyr", unload = TRUE)
+
+
+gm_pd <- pdata.frame(gm, index = c("uniqueid", "year")) 
+
+simple1 <- plm(total_final_levy ~ av,
+              model = "within",
+              effect = "twoways",
+              data = gm_pd)
+
+simple2 <- plm(total_final_levy ~ av + lag(av, 1),
+              model = "within",
+              effect = "twoways",
+              data = gm_pd)
+
+simple3 <- plm(total_final_levy ~ av + lag(av, 1) + lag(av,2),
               model = "within",
               effect = "twoways",
               data = gm_pd)
