@@ -11,7 +11,7 @@ editor: visual
 
 1.  Load packages/global options
 
-```{r, message = FALSE}
+```{r, message = FALSE, warning = FALSE}
 
 knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 
@@ -25,16 +25,21 @@ library(jtools)
 library(plm)
 library(modelsummary)
 
-set_summ_defaults(digits = 2, pvals = FALSE, robust = "HC3")
+# set_summ_defaults(digits = 2, pvals = FALSE, robust = "HC3")
 
 ```
 
 2.  Open PTAXSIM DB connection
 
-```{r, message = FALSE}
+```{r mvh-setup, message = FALSE, eval=FALSE, include = FALSE}
 
 ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "G:/My Drive/PhD/Cook County Property Taxes/Data Analysis/Working Directory/ptaxsim.db")
 
+```
+
+```{r awm-setup, message=FALSE, include = FALSE}
+
+ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/ptaxsim.db/ptaxsim-2022.0.0.db")
 ```
 
 3.  Query PTAXSIM DB for minor_type == "muni" and Cicero names
@@ -43,13 +48,22 @@ ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "G:/My Drive/PhD/Cook Count
 
 ```{r}
 
+agency <- DBI::dbGetQuery(
+  ptaxsim_db_conn,
+  "SELECT *
+  FROM agency
+  "
+  ) 
+
+hr_agency <- agency %>% 
+  select(-c(cty_dupage_eav:cty_livingston_eav)) %>%  # drop extra columns of eav in other counties
+  filter(home_rule_ind == 1)
+
 muni_agency_names <- DBI::dbGetQuery(
   ptaxsim_db_conn,
   "SELECT DISTINCT agency_num, agency_name, minor_type
   FROM agency_info
-  WHERE minor_type = 'MUNI'
-  OR agency_num = '020060000'
-  "
+  WHERE minor_type = 'MUNI'"
   ) %>% 
   mutate(first6 = str_sub(agency_num,1,6)) %>%
   select(-minor_type)
@@ -74,7 +88,7 @@ Uses manually coded labels that combine both methods of grouping taxing agencies
 
 taxing agencies that could be grouped by either the first 6 digits of their shared tax base (EAV equal during a tax year)
 
-```{r, eval = FALSE}
+```{r}
 library(dplyr)
 
 library(openxlsx)
@@ -107,16 +121,16 @@ grouped_manual <- recoded_data %>%
             agency_num = first(agency_num),
             total_final_levy = sum(total_final_levy, na.rm=TRUE)+1,
             cty_total_eav = first(cty_total_eav), 
-            av = sum(av, na.rm=TRUE),
+            av = first(av), ## mistake fixed: was sum, now is first()
             Triad = first(Triad), 
             agency_count = n(),
             reassess_year = first(reassess_year),
             home_rule_ind = first(home_rule_ind)) %>% 
     left_join(muni_agency_names) %>% 
-    #select(-c(Column1, `Most recent reassessed`)) %>% 
     mutate(
       log_eav = log(cty_total_eav),
       log_levy = log(total_final_levy),
+      log_av =  log(av),
       bundled = ifelse(agency_count > 1, 1, 0),
       uniqueid = str_c(grouped_label, "_", home_rule_ind, "_", bundled),
       panel_id = str_c(grouped_label, "_", home_rule_ind, "_", bundled, "_", lim_rate),
@@ -127,9 +141,9 @@ grouped_manual <- recoded_data %>%
 
 
 
- grouped_manual %>%  # 236 nonHR and 68 HR
+ grouped_manual %>%  # 94 and 76 HR
   ungroup() %>%
-  filter(year == 2021) %>%
+  filter(year == 2022) %>%
   group_by(home_rule_ind) %>%
   summarize(count = n())
 ```
@@ -139,27 +153,38 @@ grouped_manual <- recoded_data %>%
 ```{r}
 
 # 1552 obs
-grouped_manual_has16 <- grouped_manual %>%  # 124 nonHR and 69 HR
+# 2278 - 3/31/2024
+grouped_manual_has17 <- grouped_manual %>%  # 124 nonHR and 69 HR
   ungroup() %>%
  # filter(year == 2021) %>%
   arrange(home_rule_ind) %>%
   group_by(uniqueid) %>%
-  distinct() %>%
+  #distinct() %>%
   mutate(count = n()) %>%
-  filter(count == 16) %>% ungroup()
+  filter(count == 17) %>% ungroup()
 
 
-grouped_manual_has16 %>% ggplot() + 
+chicago_obs <- grouped_manual_has17 %>% filter(grouped_label == "Chicago")
+
+
+grouped_manual_has17 %>% 
+  filter(grouped_label != "Chicago") %>%
+  ggplot() + 
   geom_line(aes(x=year,y=total_final_levy, group = uniqueid, alpha = .5, color = home_rule_ind)) + 
   theme_classic()
 
 
-grouped_manual_has16 %>% ggplot() + 
+grouped_manual_has17 %>%     
+  filter(grouped_label != "Chicago") %>%
+ggplot() + 
+
   geom_line(aes(x=year,y=total_final_levy, group = uniqueid, alpha = .5, color = home_rule_ind)) + 
   facet_wrap(~home_rule_ind) +
   theme_classic() 
 
-grouped_manual_has16 %>% ggplot() + 
+grouped_manual_has17 %>%  
+    filter(grouped_label != "Chicago") %>%
+ggplot() +
   geom_point(aes(x=year, y=total_final_levy,# color = home_rule_ind, 
                  alpha = .1)) +
   geom_line(aes(x=year, y = total_final_levy, group = uniqueid, alpha = .1)) +
@@ -169,7 +194,9 @@ grouped_manual_has16 %>% ggplot() +
                   color = home_rule_ind), se=FALSE, size = 2) + 
   theme_classic()
 
-grouped_manual_has16 %>% ggplot() + 
+grouped_manual_has17 %>% 
+    filter(grouped_label != "Chicago") %>%
+ggplot() + 
   geom_point(aes(x=year, y=total_final_levy,# color = home_rule_ind, 
                  alpha = .1)) +
   geom_line(aes(x=year, y = total_final_levy, group = uniqueid, alpha = .1)) +
@@ -185,7 +212,7 @@ grouped_manual_has16 %>% ggplot() +
 
 detach("package:dplyr", unload = TRUE)
 
-grouped_munis <- pdata.frame(grouped_manual_has16, index = c("uniqueid", "year")) 
+grouped_munis <- pdata.frame(grouped_manual_has17, index = c("uniqueid", "year")) 
 
 table(grouped_munis$year)
 grouped_munis <- make.pbalanced(grouped_munis)
@@ -449,7 +476,7 @@ plm(log(total_final_levy) ~ log(cty_total_eav), #*year + log(cty_total_eav)*up_d
 library(dplyr)
 library(tidyverse)
 
-indexed_munis <- grouped_manual_has16 %>%
+indexed_munis <- grouped_manual_has17 %>%
 #  mutate(year = as.factor(year)) %>%
   ungroup() %>%
  # filter(minor_type == "MUNI") %>%
