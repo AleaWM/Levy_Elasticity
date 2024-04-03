@@ -54,7 +54,7 @@ format:
         1.  Upon double checking, Alea was right. Damn.
     4.  No values we plan to log are currently zero (and we can add 1 with no serious problems)
 
-# Models
+# Models with Chicago
 
 We're using the "grouped_munis.csv" data set that Alea cleaned in "CookCounty_PanelData_TFL.rmd". This has also been recreatd in the new chunk named "AWM-setup" that is set to eval=FALSE for non-Alea coders.
 
@@ -174,14 +174,12 @@ grouped_manual_has16 <- grouped_manual %>%  # 124 nonHR and 69 HR
 
 gm <- grouped_manual_has16
 
-
 #write.csv(gm, "gm_for_pivots.csv")
 ```
 
-We're going to look at some pivot tables 
-## AV lags, 2WFE
+We're going to look at some pivot tables... And we're back!
 
--   Note: lagged av variables have already been logged.
+## AV lags, 2WFE
 
 ```{r}
 detach("package:dplyr", unload = TRUE)
@@ -298,3 +296,359 @@ export_summs(med1.1, med2.1,  med3.1, robust = "HC3" #,
           )
 
 ```
+
+## AV lags, Polynomial, 2WFE
+
+```{r}
+
+poly.1 <- plm(log_levy ~ log_av,
+              model = "within",
+              effect = "twoways",
+              data = gm_pd)
+
+poly.2 <- plm(log_levy ~ log_av + lag(log_av),
+              model = "within",
+              effect = "twoways",
+              data = gm_pd)
+
+poly.3 <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av, 2) + reassess_year + log_av*reassess_year,
+              model = "within",
+              effect = "twoways",
+              data = gm_pd)
+
+poly.3 <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av, 2) + lag(log_av^2),
+              model = "within",
+              effect = "twoways",
+              data = gm_pd)
+
+poly.4 <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av^2),
+              model = "within",
+              effect = "twoways",
+              data = gm_pd)
+
+export_summs(poly.1, poly.2, poly.3, poly.4, robust = "HC3", 
+             statistics = c(N = "nobs", R2 = "r.squared", adj.R2 = "adj.r.squared"))
+```
+
+```{r}
+
+library(prediction)
+
+poly4_resids <- prediction(poly.4)
+
+poly4_resids %>%
+  ggplot(aes(fitted)) +
+  geom_density()
+
+simple3_resids <- prediction(simple3)
+
+simple3_resids %>%
+  ggplot(aes(fitted)) +
+  geom_density()
+
+```
+
+::: aside
+Why are the residuals changing so hard once we remove Chicago???
+:::
+
+
+
+# Models Without Chicago
+
+```{r setup, message = FALSE, eval = FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+
+library(plm)
+# library(stargazer) Is that even the right name of the package? it says it doesn't exist?
+library(modelsummary) # Added instead for summary tables - AWM 3/25/2024
+
+library(tidyverse)
+library(stars)
+library(lmtest)
+library(huxtable)
+library(jtools)
+
+gm <- read.csv("grouped_munis.csv")
+
+
+# panel data needs to be rectangular. 
+# Observations must exist every year. Done manually below
+# Otherwise, there is a command in the plm() package that makes it rectangular for you. 
+# 2278 obs after 2022 update
+grouped_manual_has17 <- gm %>%
+  ungroup() %>%
+  group_by(uniqueid) %>%
+  mutate(count = n()) %>%
+  filter(count == 17) %>% 
+  ungroup()
+
+
+# rename it back to gm so that you don't have to update the model commands. 
+gm <- grouped_manual_has17
+
+gm <- gm %>% filter(grouped_label!="Chicago")
+
+
+```
+
+```{r AWM-setup, warning = FALSE, message=FALSE}
+
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+
+library(tidyverse)
+library(plm)
+library(stars)
+library(lmtest)
+library(huxtable)
+library(jtools)
+
+source("helper_recode_variables.R")
+
+groupies2 <- read_csv("grouped_labels.csv") %>%          
+  mutate(agency_num = str_pad(agency_num, 9, "left", "0"),
+         first6 = as.character(first6), # make character
+        # home_rule_ind = as.character(home_rule_ind),
+         first6 = str_pad(first6, 6, "left", "0"), # add leading zeros
+         first6_w_hr_ind = str_c(first6, "_", hr_ind))
+
+grouped_manual <- recoded_data %>% 
+  left_join(groupies2,
+            by = c("agency_name", "agency_num")
+            ) %>% 
+    filter(major_type == "MUNICIPALITY/TOWNSHIP" ### |   major_type == "MISCELLANEOUS"
+           & minor_type != "MISC"
+           ) %>%
+  filter(minor_type != "SSA") %>% 
+  group_by(year, grouped_label, home_rule_ind, lim_rate) %>% 
+  summarize(agency_name = first(agency_name),
+            agency_num = first(agency_num),
+            total_final_levy = sum(total_final_levy, na.rm=TRUE)+1,
+            cty_total_eav = first(cty_total_eav), 
+            av = first(av),   # should be first() not sum() --- AWM 3/30/24
+            Triad = first(Triad), 
+            agency_count = n(),
+            reassess_year = first(reassess_year),
+            home_rule_ind = first(home_rule_ind)) %>% 
+   # left_join(muni_agency_names) %>% 
+    #select(-c(Column1, `Most recent reassessed`)) %>% 
+    mutate(
+      log_eav = log(cty_total_eav),
+      log_levy = log(total_final_levy),
+      log_av = log(av),  # added AWM 3/25/2024
+      bundled = ifelse(agency_count > 1, 1, 0),
+      uniqueid = str_c(grouped_label, "_", home_rule_ind, "_", bundled),
+      panel_id = str_c(grouped_label, "_", home_rule_ind, "_", bundled, "_", lim_rate),
+    first2_dig = str_sub(agency_num, 1,2),
+    town = ifelse(first2_dig == "02" | agency_name == "TOWN CICERO", "Town", "Muni")) %>% 
+  filter(total_final_levy > 1) %>%
+  select(year, uniqueid, everything())
+
+ grouped_manual %>%  # 236 nonHR and 68 HR
+  ungroup() %>%
+  filter(year == 2021) %>%
+  group_by(home_rule_ind) %>%
+  summarize(count = n())
+ 
+grouped_manual %>%  # 236 nonHR and 68 HR
+  ungroup() %>%
+  filter(year == 2022) %>%
+  group_by(home_rule_ind) %>%
+  summarize(count = n())
+
+
+
+# 1552 obs
+# 2278 obs after 2022 update
+# 1122 homerule munis after adding home_rule_ind filter
+grouped_manual_has16 <- grouped_manual %>%  # 124 nonHR and 69 HR
+  ungroup() %>%
+ # filter(year == 2021) %>%
+  arrange(home_rule_ind) %>%
+  group_by(uniqueid) %>%
+  distinct() %>%
+  mutate(count = n()) %>%
+  filter(count == 17 & home_rule_ind == 1) %>% 
+  ungroup()
+
+
+gm <- grouped_manual_has16
+
+gm <- gm %>% filter(grouped_label!="Chicago")
+
+
+#write.csv(gm, "gm_for_pivots.csv")
+```
+
+## AV lags, 2WFE
+
+```{r}
+detach("package:dplyr", unload = TRUE)
+
+
+gm_pd <- pdata.frame(gm, index = c("uniqueid", "year")) 
+
+simple1 <- plm(log_levy ~ log_av,
+              model = "within",
+              effect = "twoways",
+              data = gm_pd)
+
+simple2 <- plm(log_levy ~ log_av + lag(log_av),
+              model = "within",
+              effect = "twoways",
+              data = gm_pd)
+
+simple3 <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av,2),
+              model = "within",
+              effect = "twoways",
+              data = gm_pd)
+
+#summary(simple1)
+#summary(simple2)
+#summary(simple3)
+
+export_summs(simple1, simple2,  simple3, robust = "HC3", 
+             statistics = c(N = "nobs", R2 = "r.squared", adj.R2 = "adj.r.squared"))
+```
+
+```{r}
+#detach("package:dplyr", unload = TRUE)
+
+
+gm_pd <- pdata.frame(gm, index = c("uniqueid", "year")) 
+
+simple1 <- plm(total_final_levy ~ av,
+              model = "within",
+              effect = "twoways",
+              data = gm_pd)
+
+simple2 <- plm(total_final_levy ~ av + lag(av, 1),
+              model = "within",
+              effect = "twoways",
+              data = gm_pd)
+
+simple3 <- plm(total_final_levy ~ av + lag(av, 1) + lag(av,2),
+              model = "within",
+              effect = "twoways",
+              data = gm_pd)
+
+#summary(simple1)
+#summary(simple2)
+#summary(simple3)
+
+export_summs(simple1, simple2,  simple3, robust = "HC3", 
+             statistics = c(N = "nobs", R2 = "r.squared", adj.R2 = "adj.r.squared"))
+```
+
+## reassess_lag dummy, av lags, 2WFE
+
+```{r}
+
+med1 <- plm(log_levy ~ log_av + lag(reassess_year) + log_av*lag(reassess_year),
+              model = "within",
+              effect = "twoways",
+              data = gm_pd)
+
+med2 <- plm(log_levy ~ log_av + lag(log_av) + lag(reassess_year) + log_av*lag(reassess_year),
+              model = "within",
+              effect = "twoways",
+              data = gm_pd)
+
+med3 <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av, 2) + lag(reassess_year) + log_av*lag(reassess_year),
+              model = "within",
+              effect = "twoways",
+              data = gm_pd)
+# 
+# summary(med1)
+# summary(med2)
+# summary(med3)
+# 
+
+export_summs(med1, med2,  med3, robust = "HC3", 
+             statistics = c(N = "nobs", R2 = "r.squared", adj.R2 = "adj.r.squared"))
+
+```
+
+## reassess_year dummy, av lags, 2WFE
+
+```{r}
+
+med1.1 <- plm(log_levy ~ log_av + reassess_year + log_av*reassess_year,
+              model = "within",
+              effect = "twoways",
+              data = gm_pd)
+
+med2.1 <- plm(log_levy ~ log_av + lag(log_av) + reassess_year + log_av*reassess_year,
+              model = "within",
+              effect = "twoways",
+              data = gm_pd)
+
+med3.1 <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av, 2) + reassess_year + log_av*reassess_year,
+              model = "within",
+              effect = "twoways",
+              data = gm_pd)
+
+# summary(med1.1)
+# summary(med2.1)
+# summary(med3.1)
+
+export_summs(med1.1, med2.1,  med3.1, robust = "HC3" #, 
+          #   statistics = c(N = "nobs", R2 = "r.squared", adj.R2 = "adj.r.squared")
+          )
+
+```
+
+## AV lags, Polynomial, 2WFE
+
+```{r}
+
+poly.1 <- plm(log_levy ~ log_av,
+              model = "within",
+              effect = "twoways",
+              data = gm_pd)
+
+poly.2 <- plm(log_levy ~ log_av + lag(log_av),
+              model = "within",
+              effect = "twoways",
+              data = gm_pd)
+
+poly.3 <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av, 2) + reassess_year + log_av*reassess_year,
+              model = "within",
+              effect = "twoways",
+              data = gm_pd)
+
+poly.3 <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av, 2) + lag(log_av^2),
+              model = "within",
+              effect = "twoways",
+              data = gm_pd)
+
+poly.4 <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av^2),
+              model = "within",
+              effect = "twoways",
+              data = gm_pd)
+
+export_summs(poly.1, poly.2, poly.3, poly.4, robust = "HC3", 
+             statistics = c(N = "nobs", R2 = "r.squared", adj.R2 = "adj.r.squared"))
+```
+
+```{r}
+
+library(prediction)
+
+poly4_resids <- prediction(poly.4)
+
+poly4_resids %>%
+  ggplot(aes(fitted)) +
+  geom_density()
+
+simple3_resids <- prediction(simple3)
+
+simple3_resids %>%
+  ggplot(aes(fitted)) +
+  geom_density()
+
+```
+
+::: aside
+Why are the residuals changing so hard once we remove Chicago???
+:::
