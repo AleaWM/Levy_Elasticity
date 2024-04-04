@@ -1,6 +1,6 @@
 ---
 title: "Replication Code for Panel Data"
-subtitle: "Creates Data Used in Measure the Responsiveness of the Levy to the Tax Base"
+subtitle: "Creates Data Used in Home Rule Municipalities' Levies' Responsiveness to the Tax Base"
 author: "AWM"
 format: 
   html:
@@ -9,7 +9,11 @@ format:
     toc: true
     toc-location: left
     cap-location: margin
-    df-print: kable
+    df-print: default
+    grid:
+      sidebar-width: 200px
+      body-width: 900px
+      margin-width: 200px
 ---
 
 **Files needed for panel creation replication:**
@@ -344,6 +348,7 @@ gm_nochi <- grouped_manual_has17 %>%
 
 ```{r}
 #| layout-ncol: 2
+#| column: body
 
 
 gm %>% distinct(grouped_label)
