@@ -315,7 +315,90 @@ grouped_manual <- recoded_data %>%
 ### Create panel data, Export
 
 ```{r}
-# 2916 observations in grouped_manual before making data rectangular
+# 2916 observations in grouped_manual before making data rectangular and before HR only
+
+# 1122 homerule munis after adding home_rule_ind filter
+grouped_manual_has17 <- grouped_manual %>%  
+  ungroup() %>%
+  arrange(home_rule_ind) %>%
+  group_by(uniqueid) %>%
+  distinct() %>%
+  mutate(count = n()) %>%
+  filter(count == 17 & home_rule_ind == 1) %>% 
+  ungroup()
+
+
+gm <- grouped_manual_has17
+
+# write_csv(gm, "gm_for_pivots.csv")
+
+
+gm_nochi <- grouped_manual_has17 %>% 
+  filter(grouped_label != "Chicago") 
+
+# write_csv(gm_nochi, "gm_nochi_for_pivots.csv")
+```
+
+#### List of Grouped Taxing Agencies
+
+
+```{r}
+#| layout-ncol: 2
+
+
+gm %>% distinct(grouped_label)
+gm %>% distinct(uniqueid)
+
+```
+
+
+
+
+## Alternate sample option:
+Keeps major_type == Miscellaneous taxing agencies
+
+### Merge Grouped Labels and Recoded Data & Summarize to Grouped Taxing Agency Level
+
+```{r}
+grouped_manual <- recoded_data %>% 
+  left_join(groupies,
+            by = c("agency_name", "agency_num")
+            ) %>% 
+    filter(major_type == "MUNICIPALITY/TOWNSHIP" |   major_type == "MISCELLANEOUS"
+           & minor_type != "MISC"
+           ) %>%
+  filter(minor_type != "SSA") %>% 
+  group_by(year, grouped_label, home_rule_ind, lim_rate) %>% 
+  summarize(agency_name = first(agency_name),
+            agency_num = first(agency_num),
+            total_final_levy = sum(total_final_levy, na.rm=TRUE)+1,
+            cty_total_eav = first(cty_total_eav), 
+            av = first(av),   # should be first() not sum() --- AWM 3/30/24
+            Triad = first(Triad), 
+            agency_count = n(),
+            reassess_year = first(reassess_year),
+            home_rule_ind = first(home_rule_ind)) %>% 
+    mutate(
+      log_eav = log(cty_total_eav),
+      log_levy = log(total_final_levy),
+      log_av = log(av),  # added AWM 3/25/2024
+      bundled = ifelse(agency_count > 1, 1, 0),
+      uniqueid = str_c(grouped_label, "_", home_rule_ind, "_", bundled),
+      panel_id = str_c(grouped_label, "_", home_rule_ind, "_", bundled, "_", lim_rate),
+    first2_dig = str_sub(agency_num, 1,2),
+    town = ifelse(first2_dig == "02" | agency_name == "TOWN CICERO", "Town", "Muni")) %>% 
+  filter(total_final_levy > 1) %>%
+  select(year, uniqueid, everything())
+#6011 observations before filter for home rule only
+
+# remove non-HR agencies: 1263 obs remain
+grouped_manual <- grouped_manual %>% filter(home_rule_ind == 1)
+```
+
+### Create panel data, Export
+
+```{r}
+# 6011 observations in grouped_manual before making data rectangular
 # 1122 homerule munis after adding home_rule_ind filter
 grouped_manual_has17 <- grouped_manual %>%  
   ungroup() %>%
