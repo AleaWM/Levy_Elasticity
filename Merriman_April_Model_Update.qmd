@@ -24,12 +24,13 @@ ln(levy) = ln(av) + lag(ln(av)) + lag(ln(av), 2) + lag(ln(av)\^2)
 
 Plain language: regress the log of the levy on the log of av, two lags of the log of av, and a lagged binomial of logged av.
 
-
 # Model Discussion
 
-## Variables
+## Sample
 
-\[Mention grouping and how we'll move forward calling them municipalities or something.\]
+Taxing agencies are grouped together if they share a geographic tax base with other taxing agencies. This allows ups to sum the amount levied against the taxable AV. The final version of the grouped labels were created manually, but they were largely based off of taxing agencies the shared taxable EAVs, or the first 6 digits of their agency number. `grouped_labels.csv` contains the names used for grouping taxing agencies that share a geographic location. It also helps address the concern of creation or ending of taxing agencies (e.g. specific taxing agencies for Libraries within a municipality).
+
+## Variables
 
 ### Dependent Variable
 
@@ -37,17 +38,13 @@ ln(levy)
 
 ### Independent Variables
 
-ln(av) - natural log of the muni's levy. Used to reflect the tax base in lieu of EAV because it shows greater variation, lacks the EQ factor, doesn't include exemptions.
+-   ln(av) - natural log of the municipalities taxable assessed value.
 
-::: {style="color:red"}
-\[Alea add stuff\]
-:::
+-   lag(ln(av)) - assessment years are 1 year before the tax year. There is also a 1 year delay were the AV declines slightly due to appeals.
 
-lag(ln(av)) - it is likely that policy makers
+-   lag(ln(av)\^2)
 
-lag(ln(av)\^2)
-
-Two reasons:
+Two reasons for the polynomial:
 
 1\) We hypothesize that the levy's responsiveness to the tax base's size is non-linear because \[of diminishing marginal returns\].
 
@@ -63,13 +60,13 @@ During an earlier iteration of our research design, we argued that two-way fixed
 
 # Data Discussion
 
-We are using the `gm_for_pivots.csv` and `gm_nochi_for_pivots.csv` file made in "models.qmd".
+We are using the `gm_for_pivots.csv` and `gm_nochi_for_pivots.csv` file made in `models.qmd` & `panel_replication.qmd`.
 
-Creation of the data set can be replicated with the whatever.qmd file.
+Creation of the data set can be replicated with the `panel_replication.qmd` file.
 
-# Outstanding Question
+## Outstanding Question
 
--   Our results are robust to Chicago's inclusion/exclusion from the model. 
+-   Our results are robust to Chicago's inclusion/exclusion from the model.
 
 Which goes into the appendix?
 
@@ -104,6 +101,10 @@ nochi_pd <- pdata.frame(gm_nochi,
 ```
 
 ## Basic Models (e.g., ln(levy) \~ ln(av) + e)
+
+::: callout-warning
+## Note: If you have tidyverse loaded from working on some other file in R, the output in all models will be WRONG because the lagged variable will not be calculated correctly. Either close R and open only this file and run it OR use \`detach("package:dplyr", unload = TRUE)\` and \`detach("package:dplyr", unload = TRUE )\`
+:::
 
 ```{r}
 #| label: tbl-basic_w_Chi
@@ -527,7 +528,6 @@ pred_best <- pred_best %>%
 pred_best_nochi <- pred_best_nochi %>%
   mutate(resid = log_levy - fitted)
 ```
-
 
 ```{r}
 #| label: fig-residuals
