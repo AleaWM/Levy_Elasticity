@@ -41,7 +41,7 @@ library(jtools)
 library(prediction)
 
 
-set_summ_defaults(digits = 2, robust = "HC3")
+set_summ_defaults(digits = 2, robust = "HC5")
 
 gm <- read.csv("gm_for_pivots.csv")
 
@@ -73,7 +73,7 @@ modnames <- list("0 AV Lags", "1 AV Lag", "2 AV Lags")
 
 ht <- export_summs(mods,
              model.names = modnames,
-             robust = "HC3",
+             robust = "hc5",
              statistics = c(N = "nobs", 
                             R2 = "r.squared", 
                             adj.R2 = "adj.r.squared", 
@@ -111,7 +111,7 @@ modnames <- list("0 AV Lags", "1 AV Lag", "2 AV Lags")
 
 ht <- export_summs(mods,
              model.names = modnames,
-             robust = "HC3",
+             robust = "hc5",
              statistics = c(N = "nobs", 
                             R2 = "r.squared", 
                             adj.R2 = "adj.r.squared", 
@@ -157,7 +157,7 @@ modnames <- list("Interaction w/ AV", "Interaction w/ AV, 1 Lag", "Interaction w
 
 ht <- export_summs(mods,
              model.names = modnames,
-             robust = "HC3",
+             robust = "hc5",
              statistics = c(N = "nobs", 
                             R2 = "r.squared", 
                             adj.R2 = "adj.r.squared", 
@@ -211,7 +211,7 @@ modnames <- list("No AV Lag", "No AV Lag w/ Poly", "1 AV Lag", "1 AV Lag w/ Poly
 
 ht <- export_summs(mods,
              model.names = modnames,
-             robust = "HC3",
+             robust = "hc5",
              statistics = c(N = "nobs", 
                             R2 = "r.squared", 
                             adj.R2 = "adj.r.squared", 
@@ -226,6 +226,8 @@ print(lag_table)
 
 # Goodness of Fit
 
+[TBD]
+
 ```{r, eval = FALSE}
 
 
@@ -239,194 +241,3 @@ print(lag_table)
 
 ⁠1 - (1 - m1.r2)*((N - 1)/(N - length(coef(m1)) - 1))
 ```
-
-# A Quick Note on Chicago
-
-```{r nochi_load}
-
-library(dplyr)
-
-gm_pd <- gm_pd %>%
-  filter(grouped_label != "Chicago")
-
-detach("package:dplyr", unload = TRUE)
-
-```
-
-
-## Basic Models (e.g., ln(levy) \~ ln(av) + e)
-
-```{r basic_nochi}
-
-basic1 <- plm(log_levy ~ log_av,
-              model = "within",
-              effect = "twoways",
-              data = gm_pd)
-
-basic2 <- plm(log_levy ~ log_av + lag(log_av),
-              model = "within",
-              effect = "twoways",
-              data = gm_pd)
-
-basic3 <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av,2),
-              model = "within",
-              effect = "twoways",
-              data = gm_pd)
-
-mods <- list(basic1, basic2, basic3)
-
-modnames <- list("0 AV Lags", "1 AV Lag", "2 AV Lags")
-
-ht <- export_summs(mods,
-             model.names = modnames,
-             robust = "HC3",
-             statistics = c(N = "nobs", 
-                            R2 = "r.squared", 
-                            adj.R2 = "adj.r.squared", 
-                            AIC = "AIC",
-                            "F-statistic" = "statistic",
-                            "p-value" = "p.value"))
-
-basic_table <- set_caption(ht, "Dependent Variable: ln(levy)")
-
-print(basic_table)
-```
-
-## Inclusion of Reassessment Dummy Variable
-
-```{r reassess_dummy_nochi}
-
-re1 <- plm(log_levy ~ log_av + lag(reassess_year) + log_av*lag(reassess_year),
-              model = "within",
-              effect = "twoways",
-              data = gm_pd)
-
-re2 <- plm(log_levy ~ log_av + lag(log_av) + lag(reassess_year) + log_av*lag(reassess_year),
-              model = "within",
-              effect = "twoways",
-              data = gm_pd)
-
-re3 <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av, 2) + lag(reassess_year) + log_av*lag(reassess_year),
-              model = "within",
-              effect = "twoways",
-              data = gm_pd)
-
-mods <- list(re1, re2, re3)
-
-modnames <- list("0 AV Lags", "1 AV Lag", "2 AV Lags")
-
-ht <- export_summs(mods,
-             model.names = modnames,
-             robust = "HC3",
-             statistics = c(N = "nobs", 
-                            R2 = "r.squared", 
-                            adj.R2 = "adj.r.squared", 
-                            AIC = "AIC",
-                            "F-statistic" = "statistic",
-                            "p-value" = "p.value"))
-
-reassess_table_1 <- set_caption(ht, "Dependent Variable: ln(levy); Interactions w/ lag(reassess_year)")
-
-print(reassess_table_1)
-```
-
-```{r reassess_table_2_nochi}
-
-ass1 <- plm(log_levy ~ log_av + reassess_year + log_av*reassess_year,
-              model = "within",
-              effect = "twoways",
-              data = gm_pd)
-
-ass2 <- plm(log_levy ~ log_av + lag(log_av) + reassess_year + log_av*reassess_year,
-              model = "within",
-              effect = "twoways",
-              data = gm_pd)
-
-ass3 <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av, 2) + reassess_year + log_av*reassess_year,
-              model = "within",
-              effect = "twoways",
-              data = gm_pd)
-
-ass4 <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av, 2) + reassess_year + lag(log_av)*reassess_year,
-              model = "within",
-              effect = "twoways",
-              data = gm_pd)
-
-ass5 <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av, 2) + reassess_year + lag(log_av, 2)*reassess_year,
-              model = "within",
-              effect = "twoways",
-              data = gm_pd)
-
-mods <- list(ass1, ass2, ass3, ass4, ass5)
-
-modnames <- list("Interaction w/ AV", "Interaction w/ AV, 1 Lag", "Interaction w/ AV, 2 Lag", "Interaction w/ Lag AV", "Interaction w/ 2 Lags AV")
-
-ht <- export_summs(mods,
-             model.names = modnames,
-             robust = "HC3",
-             statistics = c(N = "nobs", 
-                            R2 = "r.squared", 
-                            adj.R2 = "adj.r.squared", 
-                            AIC = "AIC",
-                            "F-statistic" = "statistic",
-                            "p-value" = "p.value"))
-
-reassess_table_2 <- set_caption(ht, "Dependent Variable: ln(levy); Interactions with Reassessment Year")
-
-print(reassess_table_2)
-
-```
-
-## Polynomial Models
-
-```{r polymodels_nochi}
-
-poly1 <- plm(log_levy ~ log_av,
-              model = "within",
-              effect = "twoways",
-              data = gm_pd)
-
-poly2 <- plm(log_levy ~ log_av + lag(log_av^2),
-              model = "within",
-              effect = "twoways",
-              data = gm_pd)
-
-poly3 <- plm(log_levy ~ log_av + lag(log_av),
-              model = "within",
-              effect = "twoways",
-              data = gm_pd)
-
-poly4 <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av^2),
-              model = "within",
-              effect = "twoways",
-              data = gm_pd)
-
-poly5 <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av, 2),
-              model = "within",
-              effect = "twoways",
-              data = gm_pd)
-
-poly6 <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av, 2) + lag(log_av^2),
-              model = "within",
-              effect = "twoways",
-              data = gm_pd)
-
-mods <- list(poly1, poly2, poly3, poly4, poly5, poly6)
-
-modnames <- list("No AV Lag", "No AV Lag w/ Poly", "1 AV Lag", "1 AV Lag w/ Poly", "2 AV Lags", "2 AV Lags w/ Poly")
-
-ht <- export_summs(mods,
-             model.names = modnames,
-             robust = "HC3",
-             statistics = c(N = "nobs", 
-                            R2 = "r.squared", 
-                            adj.R2 = "adj.r.squared", 
-                            AIC = "AIC",
-                            "F-statistic" = "statistic",
-                            "p-value" = "p.value"))
-
-lag_table <- set_caption(ht, "Dependent Variable: ln(levy); includes lagged AV^2")
-
-print(lag_table)
-```
-
