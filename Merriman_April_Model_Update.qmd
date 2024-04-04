@@ -39,16 +39,13 @@ ln(levy)
 ### Independent Variables
 
 -   ln(av) - natural log of the municipalities taxable assessed value.
-
 -   lag(ln(av)) - assessment years are 1 year before the tax year. There is also a 1 year delay were the AV declines slightly due to appeals.
-
 -   lag(ln(av)\^2)
 
-Two reasons for the polynomial:
+*Two reasons for the polynomial:*
 
-1\) We hypothesize that the levy's responsiveness to the tax base's size is non-linear because \[of diminishing marginal returns\].
-
-2)  Exploratory data analysis (visualizations) further suggested diminishing marginal returns in responsiveness to the tax base.
+1.  We hypothesize that the levy's responsiveness to the tax base's size is non-linear because \[of diminishing marginal returns\].
+2.  Exploratory data analysis (visualizations) further suggested diminishing marginal returns in responsiveness to the tax base.
 
 We *did not* try throwing this variable into the model first to see what happened second.
 
@@ -76,7 +73,9 @@ Which goes into the appendix?
 
 # Models
 
-```{r setup, output = FALSE}
+```{r setup}
+#| code-fold: false
+#| output: false
 
 knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 
@@ -533,7 +532,7 @@ pred_best_nochi <- pred_best_nochi %>%
 #| label: fig-residuals
 #| layout-ncol: 2
 #| fig-subcap: 
-#|      - "Best Model Residuals"
+#|      - "Best Model Residuals (Includes Chicago)"
 #|      - "Best Model Residuals (Excludes Chicago)"
 
 pred_best %>%
