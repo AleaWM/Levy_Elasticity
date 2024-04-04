@@ -25,6 +25,7 @@ library(jtools)
 library(plm)
 library(modelsummary)
 
+# Stata uses HC1 as its default standard errors 
 # set_summ_defaults(digits = 2, pvals = FALSE, robust = "HC3")
 
 ```
@@ -174,6 +175,7 @@ grouped_manual_has17 %>%
   theme_classic()
 
 
+
 grouped_manual_has17 %>%     
   filter(grouped_label != "Chicago") %>%
 ggplot() + 
@@ -206,6 +208,192 @@ ggplot() +
                   color = home_rule_ind), se=FALSE, size = 2) + 
   facet_wrap(~home_rule_ind) +
   theme_classic()
+```
+
+```{r}
+grouped_manual_has17 %>% 
+    filter(grouped_label != "Chicago") %>%
+  filter(home_rule_ind == 1) %>%
+ggplot() + 
+  geom_point(aes(x=year, y=total_final_levy,
+                 alpha = .1)) +
+  geom_line(aes(x=year, y = total_final_levy, group = grouped_label, alpha = .1)) +
+  geom_smooth(aes(x=year, y=total_final_levy, 
+                  group = grouped_label
+                  ), se=FALSE, size = 1, method = "lm") + 
+  theme_classic()+
+  facet_wrap(~Triad)
+
+grouped_manual_has17 %>% 
+    filter(grouped_label != "Chicago") %>%
+  filter(home_rule_ind == 1) %>%
+ggplot() + 
+  geom_point(aes(x=year, y=av,
+                 alpha = .1)) +
+  geom_line(aes(x=year, y = av, group = grouped_label, alpha = .1)) +
+  geom_smooth(aes(x=year, y=av, 
+                  group = grouped_label
+                  ), se=FALSE, size = 1, method = "lm") + 
+  theme_classic()+
+  facet_wrap(~Triad)
+
+grouped_manual_has17 %>% 
+    filter(grouped_label != "Chicago") %>%
+  filter(home_rule_ind == 1) %>%
+ggplot() + 
+  geom_point(aes(x=year, y=(total_final_levy/av),
+                 alpha = .1)) +
+  geom_line(aes(x=year, y = (total_final_levy/av), group = grouped_label, alpha = .1)) +
+  geom_smooth(aes(x=year, y=(total_final_levy/av), 
+                  group = grouped_label
+                  ), se=FALSE, size = 1, method = "lm") + 
+  theme_classic()+
+  facet_wrap(~Triad)
+
+
+
+
+grouped_manual_has17 %>% 
+    filter(grouped_label != "Chicago") %>%
+  filter(home_rule_ind == 1) %>%
+ggplot() + 
+  geom_point(aes(x=year, y=(log(total_final_levy)/log(av)),
+                 alpha = .1)) +
+  geom_line(aes(x=year, y = (log(total_final_levy)/log(av)), group = grouped_label, alpha = .1)) +
+  geom_smooth(aes(x=year, y = (log(total_final_levy)/log(av)), 
+                  group = grouped_label
+                  ), se=FALSE, size = 1, method = "lm") + 
+  theme_classic()+
+  facet_wrap(~Triad)
+
+
+```
+
+```{r}
+#| layout-ncol: 2
+#| column: page
+
+
+grouped_manual_has17 %>% 
+    filter(grouped_label != "Chicago") %>%
+  filter(home_rule_ind == 1) %>%
+ggplot() + 
+  geom_point(aes(x=year, y=(log(total_final_levy)/log(av)),
+                 alpha = .1)) +
+  geom_line(aes(x=year, y = (log(total_final_levy)/log(av)), group = grouped_label, alpha = .1)) +
+  geom_smooth(aes(x=year, y = (log(total_final_levy)/log(av)), 
+                  group = grouped_label
+                  ), se=FALSE, size = 1, method = "lm"
+              ) + 
+  theme_classic()+
+  facet_wrap(~Triad)
+
+grouped_manual_has17 %>% 
+    filter(grouped_label != "Chicago") %>%
+  filter(home_rule_ind == 1) %>%
+ggplot() + 
+  geom_point(aes(x=year, y=(log(total_final_levy)/log(av)),
+                 alpha = .1)) +
+  geom_line(aes(x=year, y = (log(total_final_levy)/log(av)), group = grouped_label, alpha = .1)) +
+  geom_smooth(aes(x=year, y = (log(total_final_levy)/log(av)), 
+                  group = grouped_label
+                  ), se=FALSE, size = 1,# method = "lm"
+              ) + 
+  theme_classic()+
+  facet_wrap(~Triad)
+
+grouped_manual_has17 %>% 
+    filter(grouped_label != "Chicago") %>%
+  filter(home_rule_ind == 1) %>%
+ggplot() + 
+  geom_point(aes(x=year, y=(log(total_final_levy)/log(av)),
+                 alpha = .1)) +
+  geom_line(aes(x=year, y = (log(total_final_levy)/log(av)), group = grouped_label, alpha = .1)) +
+  
+  geom_smooth(aes(x=year, y = (log(total_final_levy)/log(av)) , 
+                  group = Triad
+                  ), size = 2,# method = "lm"
+              ) + 
+  theme_classic()
+```
+
+```{r}
+
+grouped_manual_has17 %>% 
+    filter(home_rule_ind == 1) %>%
+
+  filter(grouped_label != "Chicago") %>%
+  ggplot() + 
+  geom_point(aes(x= total_final_levy, y=av)) + 
+  theme_classic() +
+  facet_wrap(~year)
+
+grouped_manual_has17 %>% 
+    filter(home_rule_ind == 1) %>%
+
+  filter(grouped_label != "Chicago") %>%
+  ggplot() + 
+  geom_point(aes(x= av, y=total_final_levy, color = Triad)) + 
+  theme_classic() +
+  facet_wrap(~year)
+
+```
+
+```{r}
+# 
+# grouped_manual_has17 %>% 
+#   filter(grouped_label != "Chicago") %>%
+#   filter(home_rule_ind == 1) %>%
+#   ggplot() + 
+#   geom_point(aes(x= av, y=total_final_levy)) + 
+#   theme_classic() +
+#   facet_wrap(~grouped_label, scales = "free")
+
+grouped_manual_has17 %>% 
+  filter(grouped_label != "Chicago") %>% 
+  filter(Triad == "North") %>%
+  filter(home_rule_ind == 1) %>%
+  ggplot() + 
+  geom_point(aes(x= av, y=total_final_levy)) + 
+  theme_classic() +
+  facet_wrap(~grouped_label, scales = "free")
+
+grouped_manual_has17 %>% 
+  filter(grouped_label != "Chicago") %>% 
+  filter(Triad == "South") %>%
+  filter(home_rule_ind == 1) %>%
+  ggplot() + 
+  geom_point(aes(x= av, y=total_final_levy)) + 
+  theme_classic() +
+  facet_wrap(~grouped_label, scales = "free" )
+```
+
+```{r}
+# grouped_manual_has17 %>% 
+#   filter(grouped_label != "Chicago") %>%
+#   filter(home_rule_ind == 1) %>%
+#   ggplot() + 
+#   geom_point(aes(x= log_av, y=log_levy)) + 
+#   theme_classic() +
+#   facet_wrap(~grouped_label, scales = "free")
+
+grouped_manual_has17 %>% 
+  filter(grouped_label != "Chicago") %>% 
+  filter(Triad == "North") %>%
+  filter(home_rule_ind == 1) %>%
+  ggplot() + 
+  geom_point(aes(x= log_av, y=log_levy)) + 
+  theme_classic() +
+  facet_wrap(~grouped_label, scales = "free")
+
+grouped_manual_has17 %>% 
+  filter(grouped_label != "Chicago") %>% 
+  filter(Triad == "South") %>%
+  filter(home_rule_ind == 1) %>%
+  ggplot() + 
+  geom_point(aes(x= log_av, y=log_levy)) + 
+  theme_classic() +
+  facet_wrap(~grouped_label, scales = "free" )
 ```
 
 ```{r}
