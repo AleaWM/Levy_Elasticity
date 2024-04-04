@@ -1,0 +1,117 @@
+---
+title: "Levy Elasticity"
+subtitle: "April 2024 Update"
+author: "MVH & AWM"
+format: 
+  docx:
+    code-fold: true
+    code-line-numbers: true
+    code-overflow: wrap
+    toc: true
+    toc-location: left-body
+---
+
+# Model Discussion
+
+## Variables
+
+### Independent Variable
+
+### Dependent Variables
+
+## To Fixed or Not Fixed Effects
+
+# Data Discussion
+
+We are using the "gm_for_pivots.csv" file made in "models.qmd".
+
+Creation of the data set can be replicated with the whatever.qmd file.
+
+# Models
+
+```{r setup, output = FALSE}
+
+knitr::opts_chunk$set(warning = FALSE, message = FALSE, error = TRUE)
+
+library(plm)
+library(stars)
+library(lmtest)
+library(huxtable)
+library(jtools)
+library(prediction)
+
+
+set_summ_defaults(digits = 2, robust = "HC3")
+
+gm <- read.csv("gm_for_pivots.csv")
+
+gm_pd <- pdata.frame(gm, index = c("uniqueid", "year")) 
+```
+
+## Basic Models (e.g., ln(levy) \~ ln(av) + e)
+
+```{r basic}
+
+basic1 <- plm(log_levy ~ log_av,
+              model = "within",
+              effect = "twoways",
+              data = gm_pd)
+
+basic2 <- plm(log_levy ~ log_av + lag(log_av),
+              model = "within",
+              effect = "twoways",
+              data = gm_pd)
+
+basic3 <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av,2),
+              model = "within",
+              effect = "twoways",
+              data = gm_pd)
+
+mods <- list(basic1, basic2, basic3)
+
+modnames <- list("0 Lags", "1 Lag", "2 Lags")
+
+#coefs = c("ln(av)" = log_av, "lag1(ln(av))", "lag2(ln(av))")
+
+export_summs(mods,
+             model.names = modnames,
+             robust = "HC3",
+             statistics = c(N = "nobs", 
+                            R2 = "r.squared", 
+                            adj.R2 = "adj.r.squared", 
+                            AIC = "AIC",
+                            "F-stat" = "statistic",
+                            "p-value"))
+```
+
+## Inclusion of Reassessment Dummy Variable
+
+```{r reassess_dummy}
+
+
+```
+
+## Polynomial Models
+
+```{r polymodels}
+
+
+```
+
+# Goodness of Fit
+
+```{r}
+
+
+⁠sst <- with(panel.data, sum((lifeExp - mean(lifeExp))^2))
+
+⁠m1.sse <- t(residuals(m1)) %*% residuals(m1)
+
+⁠m1.r2 <- (sst - m1.sse) / sst
+
+⁠N = dim(panel.data[1]
+
+⁠1 - (1 - m1.r2)*((N - 1)/(N - length(coef(m1)) - 1))
+```
+
+# A Quick Note on Chicago
