@@ -9,7 +9,6 @@ format:
     code-line-numbers: true
     code-overflow: wrap
     toc: true
-    toc-location: left-body
 ---
 
 # Model parameters discussion.
@@ -72,6 +71,8 @@ library(lmtest)
 library(huxtable)
 library(jtools)
 library(prediction)
+library(modelsummary)
+
 
 source("helper_recode_variables.R")
 
@@ -144,7 +145,11 @@ grouped_manual_has16 <- grouped_manual %>%  # 124 nonHR and 69 HR
 
 gm <- grouped_manual_has16
 
-#write.csv(gm, "gm_for_pivots.csv")
+write.csv(gm, "gm_for_pivots.csv")
+
+
+grouped_manual_has16 %>% filter(grouped_label != "Chicago") %>%  write_csv("gm_nochi_for_pivots.csv")
+
 ```
 
 We're going to look at some pivot tables... And we're back!
@@ -179,6 +184,39 @@ simple3 <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av,2),
 export_summs(simple1, simple2,  simple3, robust = "HC3", 
              statistics = c(N = "nobs", R2 = "r.squared", adj.R2 = "adj.r.squared"))
 ```
+
+#### Goodness of Fit stuff
+
+```{r}
+
+laggedDV <- plm(log_levy ~  lag(log_levy) + log_av + lag(log_av, 1) + lag(log_av,2), 
+             index = c("grouped_label", "year"),
+             model = "within",
+             effect = "twoways",
+             data = gm_pd)
+
+export_summs(laggedDV)
+
+gm$e <- simple1$residuals
+# test of rho hat
+aux_1 <- lm(e~ -1 + lag(e), data = gm)
+aux_1 %>% tidy()
+
+aux_2 <- plm(e ~ lag(e), 
+             index = c("grouped_label", "year"),
+             model = "within",
+             effect = "twoways",
+             data = gm)
+
+nR2 <- aux_2 %>% r.squared*aux_2$df.residual
+nR2 %>% 
+  pchisq(1, lower.tail = F)
+```
+
+Can not reject the null hypothesis that there is no autocorelation --> 
+Therefore there is autocorrelation in our panel data. Use HC5 type erroro
+
+The estimate for correcting the autocorrelation is 0.851...
 
 ```{r}
 #detach("package:dplyr", unload = TRUE)
