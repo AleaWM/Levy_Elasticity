@@ -47,6 +47,8 @@ format:
 <!--Drop agencies w/ little prop tax rev. a. Create variable to measure property tax dependence. should be (total_rev - total_final_levy)/total_rev (or similar)-->
 
 ```{r warning = FALSE, message=FALSE}
+#| code-fold: true
+
 knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 
 library(tidyverse)
@@ -59,11 +61,13 @@ library(prediction)
 library(modelsummary)
 ```
 
+
+
+## Join initial data from CSVs
+
 ::: aside
 If you do not want to deal with updating the ptaxsim database and trust our initial data joining process, you can view and use the `raw_agency_joined.csv` without running these lines. This chunk takes the `agency` data table from PTAXSIM, a csv file that contains an indicator for if a municipality was reassessed during a certain year, and a csv file containing different naming options for summarizing the taxing agencies.
 :::
-
-## Join initial data from CSVs
 
 ```{r eval = FALSE}
 
@@ -151,13 +155,15 @@ raw_data_joined %>% write_csv("agency_raw_joined.csv")
 
 ```
 
+
+
+> Include cpi and eq_factor, triad reassessments, and muni_shortname CSVs for replication.
+
+## Clean variables from joined data
+
 ::: aside
 Check the cpi join line of code. Year to levy year join. Influences interpretation of which years matter in the model output
 :::
-
-> Include cpi and eq_factor CSVs for replication.
-
-## Clean variables from joined data
 
 ```{r}
 raw_data_joined <- read_csv("agency_raw_joined.csv")    # 17,2294 obs
@@ -241,11 +247,15 @@ recoded_data <- recoded_data %>%
   )
 ```
 
+
+
+## Add grouping labels for taxing agencies
+
+> Add grouped_labels csv to replication thing we share with him
+
 ::: aside
 grouped_labels.csv contains the names used for grouping taxing agencies that share a geographic location. This allows ups to sum the amount levied against the taxable AV. The grouped labels were created manually but were largely based off of taxing agencies the shared taxable EAVs, or the first 6 digits of their agency number.
 :::
-
-## Add grouping labels for taxing agencies
 
 ```{r}
 #| code-fold: true
@@ -262,7 +272,12 @@ groupies <- groupies %>%
         # home_rule_ind = as.character(home_rule_ind),
          first6 = str_pad(first6, 6, "left", "0"), # add leading zeros
          first6_w_hr_ind = str_c(first6, "_", hr_ind))
+```
 
+### Merge Groupled Labels and Recoded Data & Summarize to Grouped Taxing Agency Level
+
+
+```{r}
 grouped_manual <- recoded_data %>% 
   left_join(groupies,
             by = c("agency_name", "agency_num")
@@ -294,6 +309,7 @@ grouped_manual <- recoded_data %>%
   select(year, uniqueid, everything())
 ```
 
+### Create panel data, Export
 ```{r}
 # 2916 observations in grouped_manual before making data rectangular
 # 1122 homerule munis after adding home_rule_ind filter
