@@ -58,10 +58,11 @@ library(modelsummary)
 ```
 
 :::aside
-If you do not want to deal with updating the ptaxsim database and trust our initial data joining process, you can view and use the `raw_agency_joined.csv` without running these lines.
+If you do not want to deal with updating the ptaxsim database and trust our initial data joining process, you can view and use the `raw_agency_joined.csv` without running these lines. This chunk takes the `agency` data table from PTAXSIM, a csv file that contains an indicator for if a municipality was reassessed during a certain year, and a csv file containing different naming options for summarizing the taxing agencies. 
 :::
 
-```{r}
+```{r eval = FALSE}
+
 ## Change database file path to match your computer's location 
 ## of the PTAXSIM database!
 ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), 
@@ -140,9 +141,103 @@ raw_data_joined <- left_join(raw_data_joined, reassessments_long, by = c("Triad"
 # If manipulating in Stata or Excel, have NAs be blank:
 #agency_dt %>% write_csv("agency_raw_joined.csv", na = "")
 
+
 # exported file used in R code:
 raw_data_joined %>% write_csv("agency_raw_joined.csv")
 
+```
+
+
+```{r}
+raw_data_joined <- read_csv("agency_raw_joined.csv")    # 17,2294 obs
+
+## Fill in missing data for taxable EAV variables
+## uses logic that EAV = levy / tax rate = EAV
+raw_data_joined <- raw_data_joined %>%
+  
+  # drops 5332 taxing agencies (agency-year combos)
+  filter(minor_type != "SSA") %>% 
+  
+  # fills in missing cty_cook_eav variables. 
+  mutate(cty_cook_eav = ifelse(is.na(cty_cook_eav) & total_final_levy > 0, 
+                               total_final_levy / (total_final_rate/100), cty_cook_eav),
+         cty_total_eav = ifelse(is.na(cty_total_eav) & total_final_levy > 0 , 
+                                total_final_levy / (total_final_rate/100), cty_total_eav)) %>% 
+  
+  # then keeps only taxing agencies that have a taxable EAV > 0
+  filter(cty_total_eav > 0 )
+
+## 11,533 obs - AWM 3/31/2024
+
+
+
+# pulls in additional tables that exist in PTAXSIM database
+# for calculating taxable AV: Taxable EAV / 
+cpi <- read_csv("./Necessary_Files/cpi.csv") #%>%
+
+eq_factor <- read_csv("./Necessary_Files/eq_factor.csv") %>% 
+  select(-eq_factor_tentative)
+
+# Remove taxing agnecies that had a levy of $0 for any year. 
+# drop all occurances of the taxing agency
+# Countryside, Deer Park, Homer Glen, Norridge, Oak Brook, Schaumburg, Dixmoor (2011 only) are dropped using `dropped_munis 
+dropped_munis <- c("030250000", "030270000", "030300000", "030585000", "030840000", "030890000", "031150000", "031230000")
+
+
+exclude_hr_change <- c("030770000", "030800000","030880000", "031070000", "031190000", "031250000" )
+
+
+recoded_data <- raw_data_joined %>% 
+  left_join(cpi, by = c("year" = "levy_year")) %>%
+  left_join(eq_factor) %>%
+  mutate(
+    # year = as.factor(year) 
+    agency_num = as.character(agency_num),
+    
+    agency_num = str_pad(agency_num, 9, "left", "0"), # add missing leading zeros
+    first6 = str_pad(first6, 6, "left", "0"),
+    home_rule_ind = as.character(home_rule_ind),      # change reference category
+    minor_type = as.factor(minor_type),
+    reassess_year = as.character(reassess_year)) %>%
+  
+  mutate(cty_total_eav = as.numeric(cty_total_eav),    # taxable eav in cook and neighboring counties
+         cty_cook_eav = as.numeric(cty_cook_eav),      # taxable EAV in cook county only
+         pct_in_Cook = cty_cook_eav / cty_total_eav,   # to identify taxing agencies that cross county lines
+         total_final_levy = as.numeric(total_final_levy), 
+         total_non_cap_ext = as.numeric(total_non_cap_ext),
+        # total_capped_ext = ifelse(home_rule_ind == 0, (total_ext - total_non_cap_ext), NA),
+        # total_non_cap_ext = ifelse(home_rule_ind == 1, total_ext, total_non_cap_ext),
+         total_reduced_levy = as.numeric(total_reduced_levy), # for non-HR agencies that have their levy reduced
+         av = cty_cook_eav / eq_factor_final,          # backed out taxable Assessed Value of properties
+         first6_w_hr = str_c(first6, "_", home_rule_ind),
+         agency_w_hr = str_c(agency_num, "_", home_rule_ind)
+         ) # %>%
+ # group_by(year, cty_total_eav, home_rule_ind) %>%
+  #mutate(summed_levy_sharetaxbase = sum(total_final_levy)+1) %>% # grouped by tax base and year
+  #ungroup() %>%
+ # group_by(year, first6, home_rule_ind) %>%
+  #mutate(summed_levy_first6 =sum(total_final_levy)+1) %>% # grouped by first 6 digits in agency number
+ # ungroup()
+
+
+recoded_data <- recoded_data %>% 
+  
+  filter(pct_in_Cook > 0.9) %>% #keep only agencies greater than 90% in Cook
+  
+  mutate(
+    total_final_levy_4log = total_final_levy + 1,
+    #Add 1 to total_final_levy to allow ln transformation.
+    
+    log_eav = log(cty_total_eav), # eav within Cook AND neighboring counties.
+    log_levy = log(total_final_levy_4log),
+   # log_capped = log(total_capped_ext),
+   # log_noncapped = log(total_non_cap_ext),
+    log_av = log(av),
+    
+    year = as.factor(year), # for plm()
+    agency_num = as.factor(agency_num) # for plm()
+    
+  )
 ```
 
 ```{r warning = FALSE, message=FALSE}

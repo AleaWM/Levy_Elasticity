@@ -24,13 +24,6 @@ ln(levy) = ln(av) + lag(ln(av)) + lag(ln(av), 2) + lag(ln(av)\^2)
 
 Plain language: regress the log of the levy on the log of av, two lags of the log of av, and a lagged binomial of logged av.
 
-# Outstanding Question
-
--   Our results are robust to Chicago's inclusion/exclusion from the model. Which goes into the appendix?
-
-::: {style="color:red"}
-(Michael thinks Chicago inflates our standard errors and thus including it in our data is unsporting.)
-:::
 
 # Model Discussion
 
@@ -73,6 +66,16 @@ During an earlier iteration of our research design, we argued that two-way fixed
 We are using the `gm_for_pivots.csv` and `gm_nochi_for_pivots.csv` file made in "models.qmd".
 
 Creation of the data set can be replicated with the whatever.qmd file.
+
+# Outstanding Question
+
+-   Our results are robust to Chicago's inclusion/exclusion from the model. 
+
+Which goes into the appendix?
+
+::: {style="color:red"}
+(Michael thinks Chicago inflates our standard errors and thus including it in our data is unsporting.)
+:::
 
 # Models
 
