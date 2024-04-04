@@ -1,5 +1,5 @@
 ---
-title: "Levy Elasticity"
+title: "Home Rule Municipalities' Levies' Responsiveness to the Tax Base"
 subtitle: "April 2024 Update"
 author: "MVH & AWM"
 format: 
@@ -24,7 +24,7 @@ ln(levy) = ln(av) + lag(ln(av)) + lag(ln(av), 2) + lag(ln(av)\^2)
 
 Plain language: regress the log of the levy on the log of av, two lags of the log of av, and a lagged binomial of logged av.
 
-# Model Discussion
+# Data and Variables Discussion
 
 ## Sample
 
@@ -39,12 +39,12 @@ ln(levy)
 ### Independent Variables
 
 -   ln(av) - natural log of the municipalities taxable assessed value.
--   lag(ln(av)) - assessment years are 1 year before the tax year. There is also a 1 year delay were the AV declines slightly due to appeals.
+-   lag(ln(av)) - assessment years are 1 year before the tax year. There is also a 1 year delay where the AV declines slightly due to appeals.
 -   lag(ln(av)\^2)
 
 *Two reasons for the polynomial:*
 
-1.  We hypothesize that the levy's responsiveness to the tax base's size is non-linear because \[of diminishing marginal returns\].
+1.  We hypothesize that the levy's responsiveness to the tax base's size is non-linear.
 2.  Exploratory data analysis (visualizations) further suggested diminishing marginal returns in responsiveness to the tax base.
 
 We *did not* try throwing this variable into the model first to see what happened second.
@@ -73,6 +73,8 @@ Which goes into the appendix?
 
 # Models
 
+Load necessary packages, import data, convert to panel data.
+
 ```{r setup}
 #| code-fold: false
 #| output: false
@@ -99,10 +101,10 @@ nochi_pd <- pdata.frame(gm_nochi,
                         index = c("uniqueid", "year"))
 ```
 
-## Basic Models (e.g., ln(levy) \~ ln(av) + e)
+## Basic Model: ln(levy) ~ ln(av)
 
 ::: callout-warning
-## Note: If you have tidyverse loaded from working on some other file in R, the output in all models will be WRONG because the lagged variable will not be calculated correctly. Either close R and open only this file and run it OR use \`detach("package:dplyr", unload = TRUE)\` and \`detach("package:dplyr", unload = TRUE )\`
+Note: If you have tidyverse loaded from working on some other file in R, the output in all models will be WRONG because the lagged variable will not be calculated correctly. Either close R and open only this file and run it OR use \`detach("package:dplyr", unload = TRUE)\` and \`detach("package:dplyr", unload = TRUE )\`
 :::
 
 ```{r}
@@ -180,236 +182,7 @@ basic_table_nochi <- set_caption(ht, "Dependent Variable: ln(levy) (Excludes Chi
 print(basic_table_nochi)
 ```
 
-## Reassessment Lag Dummy Variable
-
-```{r tbl-reassess_lag_table}
-
-relag1 <- plm(log_levy ~ log_av + lag(reassess_year) + log_av*lag(reassess_year),
-              model = "within",
-              effect = "twoways",
-              data = gm_pd)
-
-relag2 <- plm(log_levy ~ log_av + lag(log_av) + lag(reassess_year) + log_av*lag(reassess_year),
-              model = "within",
-              effect = "twoways",
-              data = gm_pd)
-
-relag3 <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av, 2) + lag(reassess_year) + log_av*lag(reassess_year),
-              model = "within",
-              effect = "twoways",
-              data = gm_pd)
-
-mods <- list(relag1, relag2, relag3)
-
-modnames <- list("0 AV Lags", "1 AV Lag", "2 AV Lags")
-
-ht <- export_summs(mods,
-             model.names = modnames,
-             robust = "HC5",
-             statistics = c(N = "nobs", 
-                            R2 = "r.squared", 
-                            adj.R2 = "adj.r.squared",
-                            "F-stat" = "statistic",
-                            "p-value" = "p.value"))
-
-reassess_lag_table <- set_caption(ht, "Dependent Variable: ln(levy); Interactions w/ lag(reassess_year)")
-
-print(reassess_lag_table)
-```
-
-```{r tbl-reassess_lag_table_nochi}
-
-relag1_nochi <- plm(log_levy ~ log_av + lag(reassess_year) + log_av*lag(reassess_year),
-              model = "within",
-              effect = "twoways",
-              data = nochi_pd)
-
-relag2_nochi <- plm(log_levy ~ log_av + lag(log_av) + lag(reassess_year) + log_av*lag(reassess_year),
-              model = "within",
-              effect = "twoways",
-              data = nochi_pd)
-
-relag3_nochi <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av, 2) + lag(reassess_year) + log_av*lag(reassess_year),
-              model = "within",
-              effect = "twoways",
-              data = nochi_pd)
-
-mods <- list(relag1_nochi, relag2_nochi, relag3_nochi)
-
-modnames <- list("0 AV Lags", "1 AV Lag", "2 AV Lags")
-
-ht <- export_summs(mods,
-             model.names = modnames,
-             robust = "HC5",
-             statistics = c(N = "nobs", 
-                            R2 = "r.squared", 
-                            adj.R2 = "adj.r.squared",
-                            "F-stat" = "statistic",
-                            "p-value" = "p.value"))
-
-reassess_lag_table_nochi <- set_caption(ht, "Dependent Variable: ln(levy); Interactions w/ lag(reassess_year) (Excludes Chicago)")
-
-print(reassess_lag_table_nochi)
-```
-
-Let's try playing adding regular reassessment_year!
-
-```{r reassess_table_1}
-
-reass1_1 <- plm(log_levy ~ log_av + reassess_year + log_av*reassess_year,
-              model = "within",
-              effect = "twoways",
-              data = gm_pd)
-
-reass1_2 <- plm(log_levy ~ log_av + lag(log_av) + reassess_year + log_av*reassess_year,
-              model = "within",
-              effect = "twoways",
-              data = gm_pd)
-
-reass1_3 <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av, 2) + reassess_year + log_av*reassess_year,
-              model = "within",
-              effect = "twoways",
-              data = gm_pd)
-
-mods <- list(reass1_1, reass1_2, reass1_3)
-
-modnames <- list("0 AV Lag", "1 AV Lag", "2 AV Lag")
-
-ht <- export_summs(mods,
-             model.names = modnames,
-             robust = "HC5",
-             statistics = c(N = "nobs", 
-                            R2 = "r.squared", 
-                            adj.R2 = "adj.r.squared",
-                            "F-stat" = "statistic",
-                            "p-value" = "p.value"))
-
-reassess_table_1 <- set_caption(ht, "Dependent Variable: ln(levy)")
-
-print(reassess_table_1)
-
-```
-
-```{r reassess_table_1_nochi}
-
-reass1_1_nochi <- plm(log_levy ~ log_av + reassess_year + log_av*reassess_year,
-              model = "within",
-              effect = "twoways",
-              data = nochi_pd)
-
-reass1_2_nochi <- plm(log_levy ~ log_av + lag(log_av) + reassess_year + log_av*reassess_year,
-              model = "within",
-              effect = "twoways",
-              data = nochi_pd)
-
-reass1_3_nochi <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av, 2) + reassess_year + log_av*reassess_year,
-              model = "within",
-              effect = "twoways",
-              data = nochi_pd)
-
-mods <- list(reass1_1_nochi, reass1_2_nochi, reass1_3_nochi)
-
-modnames <- list("0 AV Lag", "1 AV Lag", "2 AV Lag")
-
-ht <- export_summs(mods,
-             model.names = modnames,
-             robust = "HC5",
-             statistics = c(N = "nobs", 
-                            R2 = "r.squared", 
-                            adj.R2 = "adj.r.squared", 
-                            "AIC" = "AIC",
-                            "F-stat" = "statistic",
-                            "p-value" = "p.value"))
-
-reassess_table_1_nochi <- set_caption(ht, "Dependent Variable: ln(levy) (Excludes Chicago)")
-
-print(reassess_table_1_nochi)
-```
-
-Crazy LSAT mix-and-match time!
-
-```{r reassess_table_LSAT}
-
-reass2_1 <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av, 2),
-              model = "within",
-              effect = "twoways",
-              data = gm_pd)
-
-reass2_2 <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av, 2) + reassess_year + log_av*reassess_year,
-              model = "within",
-              effect = "twoways",
-              data = gm_pd)
-
-reass2_3 <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av, 2) + reassess_year + lag(log_av)*reassess_year,
-              model = "within",
-              effect = "twoways",
-              data = gm_pd)
-
-reass2_4 <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av, 2) + reassess_year + lag(log_av, 2)*reassess_year,
-              model = "within",
-              effect = "twoways",
-              data = gm_pd)
-
-mods <- list(reass2_1, reass2_2, reass2_3, reass2_4)
-
-modnames <- list("Standard Model (2 AV Lags)", "ln(AV)", "1st AV Lag", "2nd AV Lag")
-
-ht <- export_summs(mods,
-             model.names = modnames,
-             robust = "HC5",
-             statistics = c(N = "nobs", 
-                            R2 = "r.squared", 
-                            adj.R2 = "adj.r.squared",
-                            "F-stat" = "statistic",
-                            "p-value" = "p.value"))
-
-reassess_table_LSAT <- set_caption(ht, "Dependent Variable: ln(levy); Interactions w/ Reassessment Year")
-
-print(reassess_table_LSAT)
-
-```
-
-```{r reassess_table_LSAT_nochi}
-
-reass2_1_nochi <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av, 2),
-              model = "within",
-              effect = "twoways",
-              data = nochi_pd)
-
-reass2_2_nochi <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av, 2) + reassess_year + log_av*reassess_year,
-              model = "within",
-              effect = "twoways",
-              data = nochi_pd)
-
-reass2_3_nochi <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av, 2) + reassess_year + lag(log_av)*reassess_year,
-              model = "within",
-              effect = "twoways",
-              data = nochi_pd)
-
-reass2_4_nochi <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av, 2) + reassess_year + lag(log_av, 2)*reassess_year,
-              model = "within",
-              effect = "twoways",
-              data = nochi_pd)
-
-mods <- list(reass2_1_nochi, reass2_2_nochi, reass2_3_nochi, reass2_4_nochi)
-
-modnames <- list("Standard Model (2 AV Lags)", "ln(AV)", "1st AV Lag", "2nd AV Lag")
-
-ht <- export_summs(mods,
-             model.names = modnames,
-             robust = "HC5",
-             statistics = c(N = "nobs", 
-                            R2 = "r.squared", 
-                            adj.R2 = "adj.r.squared",
-                            "F-stat" = "statistic",
-                            "p-value" = "p.value"))
-
-reassess_table_LSAT_nochi <- set_caption(ht, "Dependent Variable: ln(levy); Interactions w/ Reassessment Year (Excludes Chicago)")
-
-print(reassess_table_LSAT_nochi)
-```
-
-## Polynomial Models
+## Basic Model w/ Polynomial
 
 ```{r tbl-polymodels}
 
@@ -492,9 +265,9 @@ print(poly_table_nochi)
 
 ```
 
-# Goodness of Fit
+# Robustness Checks
 
-## Plot Model Residuals
+2## Plot Model Residuals
 
 The best model appears to use 1 lag of ln(av) and the binomial lag(ln(av)\^2).
 
@@ -511,21 +284,10 @@ best_mod_nochi <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av^2),
               effect = "twoways",
               data = nochi_pd)
 
-###TIDYVERSE CANNOT BE LOADED FOR THE NEXT TWO COMMANDS
-
 pred_best <- prediction(best_mod, data = gm_pd)
 
 pred_best_nochi <- prediction(best_mod_nochi, data = nochi_pd)
 
-library(tidyverse)
-
-pred_best <- pred_best %>%
-  mutate(resid = log_levy - fitted)
-
-
-
-pred_best_nochi <- pred_best_nochi %>%
-  mutate(resid = log_levy - fitted)
 ```
 
 ```{r}
@@ -534,6 +296,14 @@ pred_best_nochi <- pred_best_nochi %>%
 #| fig-subcap: 
 #|      - "Best Model Residuals (Includes Chicago)"
 #|      - "Best Model Residuals (Excludes Chicago)"
+
+library(tidyverse)
+
+pred_best <- pred_best %>%
+  mutate(resid = log_levy - fitted)
+
+pred_best_nochi <- pred_best_nochi %>%
+  mutate(resid = log_levy - fitted)
 
 pred_best %>%
   ggplot(aes(x = log_levy, y = resid), alpha = .5) +
@@ -546,3 +316,235 @@ pred_best_nochi %>%
   theme_classic() # + labs(title = "Best Model Residuals (Excludes Chicago)" )
 
 ```
+
+## Other models
+
+### Reassessment Lag Dummy Interacted w/ ln(av)
+
+```{r tbl-reassess_lag_table}
+
+relag1 <- plm(log_levy ~ log_av + lag(reassess_year) + log_av*lag(reassess_year),
+              model = "within",
+              effect = "twoways",
+              data = gm_pd)
+
+relag2 <- plm(log_levy ~ log_av + lag(log_av) + lag(reassess_year) + log_av*lag(reassess_year),
+              model = "within",
+              effect = "twoways",
+              data = gm_pd)
+
+relag3 <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av, 2) + lag(reassess_year) + log_av*lag(reassess_year),
+              model = "within",
+              effect = "twoways",
+              data = gm_pd)
+
+mods <- list(relag1, relag2, relag3)
+
+modnames <- list("0 AV Lags", "1 AV Lag", "2 AV Lags")
+
+ht <- export_summs(mods,
+             model.names = modnames,
+             robust = "HC5",
+             statistics = c(N = "nobs", 
+                            R2 = "r.squared", 
+                            adj.R2 = "adj.r.squared",
+                            "F-stat" = "statistic",
+                            "p-value" = "p.value"))
+
+reassess_lag_table <- set_caption(ht, "Dependent Variable: ln(levy)")
+
+print(reassess_lag_table)
+```
+
+```{r tbl-reassess_lag_table_nochi}
+
+relag1_nochi <- plm(log_levy ~ log_av + lag(reassess_year) + log_av*lag(reassess_year),
+              model = "within",
+              effect = "twoways",
+              data = nochi_pd)
+
+relag2_nochi <- plm(log_levy ~ log_av + lag(log_av) + lag(reassess_year) + log_av*lag(reassess_year),
+              model = "within",
+              effect = "twoways",
+              data = nochi_pd)
+
+relag3_nochi <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av, 2) + lag(reassess_year) + log_av*lag(reassess_year),
+              model = "within",
+              effect = "twoways",
+              data = nochi_pd)
+
+mods <- list(relag1_nochi, relag2_nochi, relag3_nochi)
+
+modnames <- list("0 AV Lags", "1 AV Lag", "2 AV Lags")
+
+ht <- export_summs(mods,
+             model.names = modnames,
+             robust = "HC5",
+             statistics = c(N = "nobs", 
+                            R2 = "r.squared", 
+                            adj.R2 = "adj.r.squared",
+                            "F-stat" = "statistic",
+                            "p-value" = "p.value"))
+
+reassess_lag_table_nochi <- set_caption(ht, "Dependent Variable: ln(levy) (Excludes Chicago)")
+
+print(reassess_lag_table_nochi)
+```
+
+### Reassment Dummy Interacted w/ ln(AV)
+
+```{r reassess_table_1}
+
+reass1_1 <- plm(log_levy ~ log_av + reassess_year + log_av*reassess_year,
+              model = "within",
+              effect = "twoways",
+              data = gm_pd)
+
+reass1_2 <- plm(log_levy ~ log_av + lag(log_av) + reassess_year + log_av*reassess_year,
+              model = "within",
+              effect = "twoways",
+              data = gm_pd)
+
+reass1_3 <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av, 2) + reassess_year + log_av*reassess_year,
+              model = "within",
+              effect = "twoways",
+              data = gm_pd)
+
+mods <- list(reass1_1, reass1_2, reass1_3)
+
+modnames <- list("0 AV Lag", "1 AV Lag", "2 AV Lag")
+
+ht <- export_summs(mods,
+             model.names = modnames,
+             robust = "HC5",
+             statistics = c(N = "nobs", 
+                            R2 = "r.squared", 
+                            adj.R2 = "adj.r.squared",
+                            "F-stat" = "statistic",
+                            "p-value" = "p.value"))
+
+reassess_table_1 <- set_caption(ht, "Dependent Variable: ln(levy)")
+
+print(reassess_table_1)
+
+```
+
+```{r reassess_table_1_nochi}
+
+reass1_1_nochi <- plm(log_levy ~ log_av + reassess_year + log_av*reassess_year,
+              model = "within",
+              effect = "twoways",
+              data = nochi_pd)
+
+reass1_2_nochi <- plm(log_levy ~ log_av + lag(log_av) + reassess_year + log_av*reassess_year,
+              model = "within",
+              effect = "twoways",
+              data = nochi_pd)
+
+reass1_3_nochi <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av, 2) + reassess_year + log_av*reassess_year,
+              model = "within",
+              effect = "twoways",
+              data = nochi_pd)
+
+mods <- list(reass1_1_nochi, reass1_2_nochi, reass1_3_nochi)
+
+modnames <- list("0 AV Lag", "1 AV Lag", "2 AV Lag")
+
+ht <- export_summs(mods,
+             model.names = modnames,
+             robust = "HC5",
+             statistics = c(N = "nobs", 
+                            R2 = "r.squared", 
+                            adj.R2 = "adj.r.squared", 
+                            "AIC" = "AIC",
+                            "F-stat" = "statistic",
+                            "p-value" = "p.value"))
+
+reassess_table_1_nochi <- set_caption(ht, "Dependent Variable: ln(levy) (Excludes Chicago)")
+
+print(reassess_table_1_nochi)
+```
+
+### Interact reassessment w/ each AV lag.
+
+```{r reassess_table_LSAT}
+
+reass2_1 <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av, 2),
+              model = "within",
+              effect = "twoways",
+              data = gm_pd)
+
+reass2_2 <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av, 2) + reassess_year + log_av*reassess_year,
+              model = "within",
+              effect = "twoways",
+              data = gm_pd)
+
+reass2_3 <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av, 2) + reassess_year + lag(log_av)*reassess_year,
+              model = "within",
+              effect = "twoways",
+              data = gm_pd)
+
+reass2_4 <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av, 2) + reassess_year + lag(log_av, 2)*reassess_year,
+              model = "within",
+              effect = "twoways",
+              data = gm_pd)
+
+mods <- list(reass2_1, reass2_2, reass2_3, reass2_4)
+
+modnames <- list("Standard Model (2 AV Lags)", "ln(AV)", "1st AV Lag", "2nd AV Lag")
+
+ht <- export_summs(mods,
+             model.names = modnames,
+             robust = "HC5",
+             statistics = c(N = "nobs", 
+                            R2 = "r.squared", 
+                            adj.R2 = "adj.r.squared",
+                            "F-stat" = "statistic",
+                            "p-value" = "p.value"))
+
+reassess_table_LSAT <- set_caption(ht, "Dependent Variable: ln(levy)")
+
+print(reassess_table_LSAT)
+
+```
+
+```{r reassess_table_LSAT_nochi}
+
+reass2_1_nochi <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av, 2),
+              model = "within",
+              effect = "twoways",
+              data = nochi_pd)
+
+reass2_2_nochi <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av, 2) + reassess_year + log_av*reassess_year,
+              model = "within",
+              effect = "twoways",
+              data = nochi_pd)
+
+reass2_3_nochi <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av, 2) + reassess_year + lag(log_av)*reassess_year,
+              model = "within",
+              effect = "twoways",
+              data = nochi_pd)
+
+reass2_4_nochi <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av, 2) + reassess_year + lag(log_av, 2)*reassess_year,
+              model = "within",
+              effect = "twoways",
+              data = nochi_pd)
+
+mods <- list(reass2_1_nochi, reass2_2_nochi, reass2_3_nochi, reass2_4_nochi)
+
+modnames <- list("Standard Model (2 AV Lags)", "ln(AV)", "1st AV Lag", "2nd AV Lag")
+
+ht <- export_summs(mods,
+             model.names = modnames,
+             robust = "HC5",
+             statistics = c(N = "nobs", 
+                            R2 = "r.squared", 
+                            adj.R2 = "adj.r.squared",
+                            "F-stat" = "statistic",
+                            "p-value" = "p.value"))
+
+reassess_table_LSAT_nochi <- set_caption(ht, "Dependent Variable: ln(levy) (Excludes Chicago)")
+
+print(reassess_table_LSAT_nochi)
+```
+
