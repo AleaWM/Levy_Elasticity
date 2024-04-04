@@ -1,8 +1,7 @@
 ---
 title: "Model Decisions, Discussions, & Output"
 subtitle: "Responsiveness of the Levy to the Tax Base"
-author: "Michael Van Hulle"
-date: "March 26, 2024"
+author: "AWM"
 format: 
   html:
     code-line-numbers: true
@@ -11,7 +10,7 @@ format:
     cap-location: margin
 ---
 
-# Model parameters discussion.
+# Code Cleaning Steps
 
 1.  Which agencies in the data set? NOTE: ALL ITEMS EXCEPT d AND e are done.
     a.  Home rule ONLY (evaluate how home rule-y the non municipalities are. Are they just subdivisions of the munis? 63 for munis vs. \~90
@@ -60,6 +59,8 @@ library(modelsummary)
 :::aside
 If you do not want to deal with updating the ptaxsim database and trust our initial data joining process, you can view and use the `raw_agency_joined.csv` without running these lines. This chunk takes the `agency` data table from PTAXSIM, a csv file that contains an indicator for if a municipality was reassessed during a certain year, and a csv file containing different naming options for summarizing the taxing agencies. 
 :::
+
+## Join initial data from CSVs
 
 ```{r eval = FALSE}
 
@@ -154,6 +155,7 @@ Check the cpi join line of code. Year to levy year join. Influences interpretati
 
 > Include cpi and eq_factor CSVs for replication. 
 
+## Clean variables from joined data
 
 ```{r}
 raw_data_joined <- read_csv("agency_raw_joined.csv")    # 17,2294 obs
@@ -241,17 +243,25 @@ recoded_data <- recoded_data %>%
 grouped_labels.csv contains the names used for grouping taxing agencies that share a geographic location. This allows ups to sum the amount levied against the taxable AV. The grouped labels were created manually but were largely based off of taxing agencies the shared taxable EAVs, or the first 6 digits of their agency number.
 :::
 
-```{r}
+## Add grouping labels for taxing agencies
 
-groupies2 <- read_csv("grouped_labels.csv") %>%          
+```{r}
+groupies <- read_csv("grouped_labels.csv") 
+groupies
+```
+
+
+```{r}
+groupies <- groupies %>%          
   mutate(agency_num = str_pad(agency_num, 9, "left", "0"),
+         agency_num = as.factor(agency_num), 
          first6 = as.character(first6), # make character
         # home_rule_ind = as.character(home_rule_ind),
          first6 = str_pad(first6, 6, "left", "0"), # add leading zeros
          first6_w_hr_ind = str_c(first6, "_", hr_ind))
 
 grouped_manual <- recoded_data %>% 
-  left_join(groupies2,
+  left_join(groupies,
             by = c("agency_name", "agency_num")
             ) %>% 
     filter(major_type == "MUNICIPALITY/TOWNSHIP" ### |   major_type == "MISCELLANEOUS"
@@ -279,8 +289,11 @@ grouped_manual <- recoded_data %>%
     town = ifelse(first2_dig == "02" | agency_name == "TOWN CICERO", "Town", "Muni")) %>% 
   filter(total_final_levy > 1) %>%
   select(year, uniqueid, everything())
+```
 
- grouped_manual %>%  # 236 nonHR and 68 HR
+
+```{r}
+grouped_manual %>%  # 236 nonHR and 68 HR
   ungroup() %>%
   filter(year == 2021) %>%
   group_by(home_rule_ind) %>%
@@ -318,9 +331,8 @@ grouped_manual_has16 %>% filter(grouped_label != "Chicago") %>%  write_csv("gm_n
 ```
 
 
-## AV lags, 2WFE
 
-```{r}
+```{r eval = FALSE}
 detach("package:dplyr", unload = TRUE)
 
 
