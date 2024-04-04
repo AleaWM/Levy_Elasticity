@@ -1,47 +1,50 @@
 ---
-title: "Model Decisions, Discussions, & Output"
-subtitle: "Responsiveness of the Levy to the Tax Base"
+title: "Replication Code for Panel Data"
+subtitle: "Creates Data Used in Measure the Responsiveness of the Levy to the Tax Base"
 author: "AWM"
 format: 
   html:
     code-line-numbers: true
     code-overflow: wrap
     toc: true
+    toc-location: left
     cap-location: margin
+    df-print: kable
 ---
 
-# Code Cleaning Steps
+## Code Cleaning Steps
 
-1.  Which agencies in the data set? NOTE: ALL ITEMS EXCEPT d AND e are done.
-    a.  Home rule ONLY (evaluate how home rule-y the non municipalities are. Are they just subdivisions of the munis? 63 for munis vs. \~90
-    b.  Qual eval of those entities
-    c.  Drop border crossers
-    d.  Drop agencies w/ little prop tax rev.
-        a.  Create variable to measure property tax dependence. should be (total_rev - total_final_levy)/total_rev (or similar)
-    e.  Grouping --- it is a concern and should be done by agency digits and eav.
-2.  Variables
-    1.  DV - ln(total_levy) - allows calculation of elasticity, which economists \<3
-        1.  We want the levy value requested by the muni/agency to capture the agency's responsiveness to the change in the tax base. That should be the same as they received since they are HR agencies.
-            1.  Check this!
-    2.  IV
-        1.  ln(AV)
-            1.  Change in AV better reflects the change in the tax base and our RQ is about the levy's responsiveness to the tax base. Thus, irrelevant whether we use AV or EAV.
-            2.  Downside: Value of exemptions could be high causing a divergence?
-                1.  Alea backs AV out of EAV.
-        2.  lag(ln(AV)), ln2(log(AV))
-            1.  Given 3 year reassessment cycle, we want to account for the effect of the prior reassessment...especially given the trend we see of the initial bump in AV followed by the decrease from appeals.
-        4.  lag(Reassessment year) dummy (to use with interaction term)
-        5.  log(AV)\*lag(Reassess)
-            1.  check if responsiveness is related to it being an assessment year
-            2.  NO
-            3.  Only incorporated into the budget the year after reassessment -- hence description as "lag"
-3.  Other model items:
-    1.  Is "year" the calendar year or the tax year? Determines whether we want to lag the reassess variable.
-        1.  Alea: Year in the agency_dt is the tax year. Reassessment year might be calendar year.
-        2.  We should double check this item.
-    2.  2WFE are OK because we, within each year, 1/3 of the county is reassessed; we are no longer using it as a "treatment" to make causal statements.
+**After the tables from PTAXSIM are joined together (saved as “agency_raw_joined.csv”) observations are filtered out based on our desired sample criteria.** 
 
+-   Has Taxable Assessed Value \> 0 
+-   Has a levy \> 0 for all sample years  
+-   90% within Cook County 
+-   Does not change home rule status during sample years 
 
+### Slightly more detail on cleaning process:
+
+**Some taxing agencies are missing their cty_cook_eav & cty_total_eav even though they have a total_final_levy value** 
+
+-   Using the logic that the tax rate = levy / taxable EAV, then we can back out the EAV by  using the total_final_levy and total_final_rate variables. 
+-   Taxable EAV = total_final_levy / (total_final_rate) / 100 
+
+**Remove taxing agencies that had a levy = \$0 for any year. Drop values for all years.**  
+
+-   Countryside, Deer Park, Homer Glen, Norridge, Oak Brook, Schaumburg, Dixmoor (2011 only) are dropped using \`dropped_munis \<- c("030250000", "030270000", "030300000", "030585000", "030840000", "030890000", "031150000")\` 
+
+**Remove Municipalities that change home rule status:**
+
+-   Midlothian, Northfield, River Grove became home rule in 2010.
+-   Melrose Park became home rule in 2011.
+-   South Chicago Heights became home rule in 2019.
+-   Summit became home rule in 2016.
+-   exclude_hr_change \<- c("030770000", "030800000","030880000", "031070000", "031190000", "031250000"
+
+**Keep taxing agencies that are within Cook County**
+
+-   Create variable `pct_in_Cook` = cty_cook_eav / cty_total_eav. Keep all taxing agencies that are 95% or more in Cook County. Use cty_total_eav in the models since we are using the full levy amount in the models
+
+<!--Drop agencies w/ little prop tax rev. a. Create variable to measure property tax dependence. should be (total_rev - total_final_levy)/total_rev (or similar)-->
 
 ```{r warning = FALSE, message=FALSE}
 knitr::opts_chunk$set(warning = FALSE, message = FALSE)
@@ -56,8 +59,8 @@ library(prediction)
 library(modelsummary)
 ```
 
-:::aside
-If you do not want to deal with updating the ptaxsim database and trust our initial data joining process, you can view and use the `raw_agency_joined.csv` without running these lines. This chunk takes the `agency` data table from PTAXSIM, a csv file that contains an indicator for if a municipality was reassessed during a certain year, and a csv file containing different naming options for summarizing the taxing agencies. 
+::: aside
+If you do not want to deal with updating the ptaxsim database and trust our initial data joining process, you can view and use the `raw_agency_joined.csv` without running these lines. This chunk takes the `agency` data table from PTAXSIM, a csv file that contains an indicator for if a municipality was reassessed during a certain year, and a csv file containing different naming options for summarizing the taxing agencies.
 :::
 
 ## Join initial data from CSVs
@@ -148,12 +151,11 @@ raw_data_joined %>% write_csv("agency_raw_joined.csv")
 
 ```
 
-:::aside 
+::: aside
 Check the cpi join line of code. Year to levy year join. Influences interpretation of which years matter in the model output
 :::
 
-
-> Include cpi and eq_factor CSVs for replication. 
+> Include cpi and eq_factor CSVs for replication.
 
 ## Clean variables from joined data
 
@@ -239,17 +241,18 @@ recoded_data <- recoded_data %>%
   )
 ```
 
-:::aside
+::: aside
 grouped_labels.csv contains the names used for grouping taxing agencies that share a geographic location. This allows ups to sum the amount levied against the taxable AV. The grouped labels were created manually but were largely based off of taxing agencies the shared taxable EAVs, or the first 6 digits of their agency number.
 :::
 
 ## Add grouping labels for taxing agencies
 
 ```{r}
-groupies <- read_csv("grouped_labels.csv") 
-groupies
-```
+#| code-fold: true
 
+groupies <- read_csv("grouped_labels.csv") 
+head(groupies)
+```
 
 ```{r}
 groupies <- groupies %>%          
@@ -291,28 +294,11 @@ grouped_manual <- recoded_data %>%
   select(year, uniqueid, everything())
 ```
 
-
 ```{r}
-grouped_manual %>%  # 236 nonHR and 68 HR
-  ungroup() %>%
-  filter(year == 2021) %>%
-  group_by(home_rule_ind) %>%
-  summarize(count = n())
- 
-grouped_manual %>%  # 236 nonHR and 68 HR
-  ungroup() %>%
-  filter(year == 2022) %>%
-  group_by(home_rule_ind) %>%
-  summarize(count = n())
-
-
-
-# 1552 obs
-# 2278 obs after 2022 update
+# 2916 observations in grouped_manual before making data rectangular
 # 1122 homerule munis after adding home_rule_ind filter
-grouped_manual_has16 <- grouped_manual %>%  # 124 nonHR and 69 HR
+grouped_manual_has17 <- grouped_manual %>%  
   ungroup() %>%
- # filter(year == 2021) %>%
   arrange(home_rule_ind) %>%
   group_by(uniqueid) %>%
   distinct() %>%
@@ -321,38 +307,14 @@ grouped_manual_has16 <- grouped_manual %>%  # 124 nonHR and 69 HR
   ungroup()
 
 
-gm <- grouped_manual_has16
+gm <- grouped_manual_has17
 
-write.csv(gm, "gm_for_pivots.csv")
-
-
-grouped_manual_has16 %>% filter(grouped_label != "Chicago") %>%  write_csv("gm_nochi_for_pivots.csv")
-
-```
+# write_csv(gm, "gm_for_pivots.csv")
 
 
+gm_nochi <- grouped_manual_has17 %>% 
+  filter(grouped_label != "Chicago") 
 
-```{r eval = FALSE}
-detach("package:dplyr", unload = TRUE)
+# write_csv(gm_nochi, "gm_nochi_for_pivots.csv")
 
-
-gm_pd <- pdata.frame(gm, index = c("uniqueid", "year")) 
-
-simple1 <- plm(log_levy ~ log_av,
-              model = "within",
-              effect = "twoways",
-              data = gm_pd)
-
-simple2 <- plm(log_levy ~ log_av + lag(log_av),
-              model = "within",
-              effect = "twoways",
-              data = gm_pd)
-
-simple3 <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av,2),
-              model = "within",
-              effect = "twoways",
-              data = gm_pd)
-
-export_summs(simple1, simple2,  simple3, robust = "HC3", 
-             statistics = c(N = "nobs", R2 = "r.squared", adj.R2 = "adj.r.squared"))
 ```
