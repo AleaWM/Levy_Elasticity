@@ -4,6 +4,7 @@ subtitle: "April 2024 Update"
 author: "MVH & AWM"
 format: 
   html:
+    theme: lumen
     code-fold: true
     code-line-numbers: true
     code-overflow: wrap
@@ -13,21 +14,17 @@ format:
 
 # Model Decision
 
-ln(levy) = ln(av) + lag(ln(av)) + lag(ln(av), 2) + lag(ln(av)\^2) + e
+ln(levy) = ln(av) + lag(ln(av)) + lag(ln(av), 2) + lag(ln(av)\^2)
 
 Plain language: regress the log of the levy on the log of av, two lags of the log of av, and a lagged binomial of logged av.
 
-# Outstanding Questions
+# Outstanding Question
 
-1.  Chicago: Our results are robust to Chicago's inclusion/exclusion from the model. Which goes into the appendix?
+-   Our results are robust to Chicago's inclusion/exclusion from the model. Which goes into the appendix?
 
 (Michael thinks Chicago inflates our standard errors and thus including it in our data is unsporting.)
 
-2.  Need to decide between one or two lags in our model--neither is clearly superior aside from more observations. They tell the same story with roughly the same quality of fit.
-
 # Model Discussion
-
-We believe \[MODEL\] represents the best model.
 
 ## Variables
 
@@ -119,8 +116,7 @@ ht <- export_summs(mods,
              robust = "HC5",
              statistics = c(N = "nobs", 
                             R2 = "r.squared", 
-                            adj.R2 = "adj.r.squared", 
-                            AIC = "AIC",
+                            adj.R2 = "adj.r.squared",
                             "F-stat" = "statistic",
                             "p-value" = "p.value"))
 
@@ -131,22 +127,22 @@ print(basic_table)
 
 ```{r basic_wo_Chi}
 
-basic1 <- plm(log_levy ~ log_av,
+basic1_nochi <- plm(log_levy ~ log_av,
               model = "within",
               effect = "twoways",
               data = nochi_pd)
 
-basic2 <- plm(log_levy ~ log_av + lag(log_av),
+basic2_nochi <- plm(log_levy ~ log_av + lag(log_av),
               model = "within",
               effect = "twoways",
               data = nochi_pd)
 
-basic3 <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av, 2),
+basic3_nochi <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av, 2),
               model = "within",
               effect = "twoways",
               data = nochi_pd)
 
-mods <- list(basic1, basic2, basic3)
+mods <- list(basic1_nochi, basic2_nochi, basic3_nochi)
 
 modnames <- list("No AV Lags", "1 AV Lag", "2 AV Lags")
 
@@ -155,14 +151,13 @@ ht <- export_summs(mods,
              robust = "HC5",
              statistics = c(N = "nobs", 
                             R2 = "r.squared", 
-                            adj.R2 = "adj.r.squared", 
-                            AIC = "AIC",
+                            adj.R2 = "adj.r.squared",
                             "F-stat" = "statistic",
                             "p-value" = "p.value"))
 
-basic_table <- set_caption(ht, "Dependent Variable: ln(levy) (Excludes Chicago)")
+basic_table_nochi <- set_caption(ht, "Dependent Variable: ln(levy) (Excludes Chicago)")
 
-print(basic_table)
+print(basic_table_nochi)
 ```
 
 ## Reassessment Lag Dummy Variable
@@ -265,8 +260,7 @@ ht <- export_summs(mods,
              robust = "HC5",
              statistics = c(N = "nobs", 
                             R2 = "r.squared", 
-                            adj.R2 = "adj.r.squared", 
-                            "AIC" = "AIC",
+                            adj.R2 = "adj.r.squared",
                             "F-stat" = "statistic",
                             "p-value" = "p.value"))
 
@@ -312,7 +306,6 @@ reassess_table_1_nochi <- set_caption(ht, "Dependent Variable: ln(levy) (Exclude
 print(reassess_table_1_nochi)
 ```
 
-
 Crazy LSAT mix-and-match time!
 
 ```{r reassess_table_LSAT}
@@ -355,6 +348,7 @@ reassess_table_LSAT <- set_caption(ht, "Dependent Variable: ln(levy); Interactio
 print(reassess_table_LSAT)
 
 ```
+
 ```{r reassess_table_LSAT_nochi}
 
 reass2_1_nochi <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av, 2),
@@ -394,7 +388,6 @@ reassess_table_LSAT_nochi <- set_caption(ht, "Dependent Variable: ln(levy); Inte
 
 print(reassess_table_LSAT_nochi)
 ```
-
 
 ## Polynomial Models
 
@@ -437,6 +430,7 @@ poly_table <- set_caption(ht, "Dependent Variable: ln(levy)")
 
 print(poly_table)
 ```
+
 ```{r polymodels_nochi}
 
 poly1_nochi <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av, 2),
@@ -478,9 +472,50 @@ print(poly_table_nochi)
 
 ```
 
-
 # Goodness of Fit
 
 ## Plot Model Residuals
 
-When we include Chicago, the best model appears to use 
+The best model appears to use 1 lag of ln(av) and the binomial lag(ln(av)\^2).
+
+```{r}
+
+best_mod <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av^2),
+              model = "within",
+              effect = "twoways",
+              data = gm_pd)
+
+best_mod_nochi <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av^2),
+              model = "within",
+              effect = "twoways",
+              data = nochi_pd)
+
+###TIDYVERSE CANNOT BE LOADED FOR THE NEXT TWO COMMANDS
+
+pred_best <- prediction(best_mod, data = gm_pd)
+
+pred_best_nochi <- prediction(best_mod_nochi, data = nochi_pd)
+
+library(tidyverse)
+
+pred_best <- pred_best %>%
+  mutate(resid = log_levy - fitted)
+
+pred_best %>%
+  ggplot(aes(x = log_levy, y = resid), alpha = .5) +
+  geom_point() +
+  labs(
+    title = "Best Model Residuals"
+  )
+
+pred_best_nochi <- pred_best_nochi %>%
+  mutate(resid = log_levy - fitted)
+
+pred_best_nochi %>%
+  ggplot(aes(x = log_levy, y = resid), alpha = .5) +
+  geom_point() +
+  labs(
+    title = "Best Model Residuals (Excludes Chicago)"
+  )
+
+```
