@@ -12,6 +12,14 @@ format:
     df-print: kable
 ---
 
+**Files needed for panel creation replication:**
+
+-   Triad_reassessment_years.csv
+-   muni_shortnames.xlsx
+-   cpi.csv
+-   eq_factor.csv
+-   grouped_labels.csv
+
 ## Code Cleaning Steps
 
 **After the tables from PTAXSIM are joined together (saved as “agency_raw_joined.csv”) observations are filtered out based on our desired sample criteria.** 
@@ -60,8 +68,6 @@ library(jtools)
 library(prediction)
 library(modelsummary)
 ```
-
-
 
 ## Join initial data from CSVs
 
@@ -155,11 +161,13 @@ raw_data_joined %>% write_csv("agency_raw_joined.csv")
 
 ```
 
-
-
-> Include cpi and eq_factor, triad reassessments, and muni_shortname CSVs for replication.
-
 ## Clean variables from joined data
+
+
+::: aside
+Can start here with the `agency_raw_joined.csv` file.
+:::
+
 
 ::: aside
 Check the cpi join line of code. Year to levy year join. Influences interpretation of which years matter in the model output
@@ -247,11 +255,7 @@ recoded_data <- recoded_data %>%
   )
 ```
 
-
-
 ## Add grouping labels for taxing agencies
-
-> Add grouped_labels csv to replication thing we share with him
 
 ::: aside
 grouped_labels.csv contains the names used for grouping taxing agencies that share a geographic location. This allows ups to sum the amount levied against the taxable AV. The grouped labels were created manually but were largely based off of taxing agencies the shared taxable EAVs, or the first 6 digits of their agency number.
@@ -274,8 +278,7 @@ groupies <- groupies %>%
          first6_w_hr_ind = str_c(first6, "_", hr_ind))
 ```
 
-### Merge Groupled Labels and Recoded Data & Summarize to Grouped Taxing Agency Level
-
+### Merge Grouped Labels and Recoded Data & Summarize to Grouped Taxing Agency Level
 
 ```{r}
 grouped_manual <- recoded_data %>% 
@@ -310,6 +313,7 @@ grouped_manual <- recoded_data %>%
 ```
 
 ### Create panel data, Export
+
 ```{r}
 # 2916 observations in grouped_manual before making data rectangular
 # 1122 homerule munis after adding home_rule_ind filter
@@ -332,5 +336,16 @@ gm_nochi <- grouped_manual_has17 %>%
   filter(grouped_label != "Chicago") 
 
 # write_csv(gm_nochi, "gm_nochi_for_pivots.csv")
+```
+
+#### List of Grouped Taxing Agencies
+
+
+```{r}
+#| layout-ncol: 2
+
+
+gm %>% distinct(grouped_label)
+gm %>% distinct(uniqueid)
 
 ```
