@@ -18,6 +18,7 @@ format:
       margin-width: 200px
 ---
 
+
 # Model Decision
 
 ln(levy) = ln(av) + lag(ln(av)) + lag(ln(av), 2) + lag(ln(av)\^2)
@@ -101,7 +102,136 @@ nochi_pd <- pdata.frame(gm_nochi,
                         index = c("uniqueid", "year"))
 ```
 
-## Basic Model: ln(levy) ~ ln(av)
+
+# Percent Change Over Time
+
+```{r}
+
+
+
+nochi_pd$av_pct_change = round((nochi_pd$av - lag(nochi_pd$av,1)) / (nochi_pd$av), digits = 4)
+
+nochi_pd$levy_pct_change = round((nochi_pd$total_final_levy - lag(nochi_pd$total_final_levy,1)) / (nochi_pd$total_final_levy), digits = 4)
+
+library(tidyverse)
+```
+
+
+
+```{r}
+ggplot(data = nochi_pd %>% filter(av_pct_change > -.1 & av_pct_change < .1), 
+aes(x=year, y = av_pct_change, group = grouped_label, color = Triad)) + geom_line() + labs(title="Obs between -.1 & +.1")
+ 
+ggplot(data = nochi_pd %>% filter(av_pct_change > -.2 & av_pct_change < .2), 
+aes(x=year, y = av_pct_change, group = grouped_label, color = Triad)) + geom_line() + labs(title="Obs between -.2 & +.2") 
+
+# ggplot(data = nochi_pd %>% filter(av_pct_change < -.1 | av_pct_change > .1), 
+#        aes(x=year, y = av_pct_change, group = grouped_label, color = Triad, label = grouped_label) ) + 
+#   geom_line() + 
+#   labs(title = "Above 10% or -10% yearly change. \nobs dropped from other graph")
+```
+
+
+```{r}
+
+ggplot(data = nochi_pd %>% filter( levy_pct_change > -.5),
+       aes(x=year, y = levy_pct_change, group = grouped_label, color = Triad)) +
+  geom_line() +
+  labs(title = "Levy Growth")
+
+
+ggplot(data = nochi_pd %>% filter( levy_pct_change > -.2),
+       aes(x=year, y = levy_pct_change, group = grouped_label, color = Triad)) +
+  geom_line() +
+  labs(title = "Levy Growth")
+
+ggplot(data = nochi_pd,
+       aes(x=year, y = total_final_levy, group = grouped_label, color = Triad)) +
+  geom_line() +
+  labs(title = "Levy Growth")
+
+ggplot(data = nochi_pd %>% 
+         filter(levy_pct_change > -.1 & levy_pct_change < .1), 
+       aes(x=year, y = levy_pct_change, group = grouped_label, color = Triad)) +
+  geom_line() +
+ # geom_smooth() + 
+  labs(title = "Levy Growth", subtitle = "Obs between -.1 & +.1")
+
+
+ggplot(data = nochi_pd %>% filter(levy_pct_change > -.2 & levy_pct_change < .2), 
+aes(x=year, y = levy_pct_change, group = grouped_label, color = Triad)) + geom_line() + labs(title = "Levy Growth", subtitle="Obs between -.2 & +.2")
+
+ggplot(data = nochi_pd %>% filter(levy_pct_change < -.1 | av_pct_change > .1), 
+aes(x=year, y = levy_pct_change, group = grouped_label, color = Triad)) + geom_line() +
+  labs(title = "Levy Growth", subtitle = "Above 10% or -10% yearly change. \nobs dropped from other graph")
+```
+
+```{r}
+gm_nochi <- read.csv("gm_nochi_for_pivots.csv")
+
+
+gm_nochi <- gm_nochi %>% 
+  group_by(grouped_label) %>% 
+  # filter(year >= 2011) %>%
+  mutate(
+  levy_idx = total_final_levy / (total_final_levy[year == "2011"]),
+  av_idx = av / (av[year == "2011"])) 
+
+ggplot() +
+  geom_line(data = gm_nochi %>% filter(year > 2011),
+       aes(x=year, y = av_idx, group = grouped_label, color = Triad), alpha = .2) +
+  geom_smooth(data = gm_nochi %>% filter(year > 2011), aes(x=year, y = av_idx, color = Triad)) + 
+  labs(title = "Indexed Assessed Value")
+
+
+gm_nochi %>% 
+  group_by(grouped_label) %>% 
+  summarize(
+    #levy_cagr17 = round((((total_final_levy[year == 2022] / total_final_levy[year == 2006])^(1/17) - 1 ) * 100), digits = 3),
+            
+            
+    #av_cagr17 = round((((av[year == 2022] / av[year == 2006])^(1/17) - 1 ) * 100), digits = 3),
+            
+            levy_cagr12 = round((((total_final_levy[year == 2022] / total_final_levy[year == 2011])^(1/12) - 1 ) * 100), digits = 3),
+            
+            av_cagr12 = round((((av[year == 2022] / av[year == 2011])^(1/12) - 1 ) * 100), digits = 3) ) %>% arrange(av_cagr12)
+
+gm_nochi %>% 
+  group_by(grouped_label) %>% 
+  summarize(levy_cagr12 = round((((total_final_levy[year == 2022] / total_final_levy[year == 2011])^(1/12) - 1 ) * 100), digits = 3),
+            
+            av_cagr12 = round((((av[year == 2022] / av[year == 2011])^(1/12) - 1 ) * 100), digits = 3) ) %>% arrange(av_cagr12) %>%
+  ggplot() + 
+  geom_point(aes(x=levy_cagr12, y = av_cagr12, group = grouped_label) ) + 
+  geom_text(aes(x=levy_cagr12, y = av_cagr12 + .5, label = grouped_label), size = 3) + theme_classic() + 
+  labs(title = "12-year CAGR, 2011-2022", x = "Levy CAGR", y = "AV CAGR") + 
+  scale_x_continuous(limits = c(-3, 9), breaks = c(-3, 0, 3, 6, 9) ) 
+
+
+
+gm_nochi %>% 
+  group_by(grouped_label) %>% 
+  summarize(levy_cagr12 = round((((total_final_levy[year == 2022] / total_final_levy[year == 2011])^(1/12) - 1 ) * 100), digits = 3),
+            
+            av_cagr12 = round((((av[year == 2022] / av[year == 2011])^(1/12) - 1 ) * 100), digits = 3) ) %>% arrange(av_cagr12) %>%
+  ggplot() + 
+  geom_point(aes(y=levy_cagr12, x = av_cagr12, group = grouped_label) ) + 
+  geom_text(aes(y=levy_cagr12, x = av_cagr12 + .5, label = grouped_label), size = 3) +  
+  labs(title = "12-year CAGR, 2011-2022", y = "Levy CAGR", x = "AV CAGR") + 
+  scale_y_continuous(limits = c(-3, 9), breaks = c(-3, 0, 3, 6, 9) ) 
+
+
+# 
+# gm_nochi %>% 
+#   as.data.frame() %>% ungroup() %>%
+#   reframe(levy_cagr12 = round((((total_final_levy[year == 2022] / total_final_levy[year == 2011])^(1/12) - 1 ) * 100), digits = 3),
+#             
+#             av_cagr12 = round((((av[year == 2022] / av[year == 2011])^(1/12) - 1 ) * 100), digits = 3), by = NULL )
+
+```
+
+
+## Basic Model: ln(levy) \~ ln(av)
 
 ::: callout-warning
 Note: If you have tidyverse loaded from working on some other file in R, the output in all models will be WRONG because the lagged variable will not be calculated correctly. Either close R and open only this file and run it OR use \`detach("package:dplyr", unload = TRUE)\` and \`detach("package:dplyr", unload = TRUE )\`
@@ -110,6 +240,10 @@ Note: If you have tidyverse loaded from working on some other file in R, the out
 ```{r}
 #| label: tbl-basic_w_Chi
 #| tbl-cap: Includes Chicago
+# 
+detach("package:dplyr", unload = TRUE)
+detach("package:tidyverse", unload = TRUE)
+
 
 basic1_1 <- plm(log_levy ~ log_av,
               model = "within",
@@ -547,4 +681,3 @@ reassess_table_LSAT_nochi <- set_caption(ht, "Dependent Variable: ln(levy) (Excl
 
 print(reassess_table_LSAT_nochi)
 ```
-
