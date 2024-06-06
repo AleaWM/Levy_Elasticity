@@ -1,0 +1,50 @@
+---
+title: "ABFM Levy Elasticity Models"
+author: "MVH & AW"
+format: 
+  html:
+    theme: lumen
+    code-fold: true
+    code-line-numbers: true
+    code-overflow: wrap
+    toc: true
+    toc-location: left
+    tbl-cap-location: margin
+    fig-cap-location: top
+    grid:
+      sidebar-width: 200px
+      body-width: 900px
+      margin-width: 200px
+---
+
+```{r setup}
+
+#| code-fold: false
+#| output: false
+
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+
+library(plm)
+library(stars)
+library(lmtest)
+library(huxtable)
+library(jtools)
+```
+
+```{r}
+
+df <- read.csv("panel_data.csv")
+
+summary(df)
+
+df_panel <- pdata.frame(df, index = c("agency_num", "year")) 
+```
+
+# Two-Way Fixed Effects Models
+
+## Naive Model
+
+```{r}
+
+
+```
