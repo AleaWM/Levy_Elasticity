@@ -19,7 +19,7 @@ format:
 
 ```{r setup}
 
-#| code-fold: false
+#| code-fold: true
 #| output: false
 
 knitr::opts_chunk$set(warning = FALSE, message = FALSE)
@@ -31,7 +31,10 @@ library(huxtable)
 library(jtools)
 ```
 
-```{r}
+```{r load_data}
+
+#| code-fold: true
+#| output: false
 
 df <- read.csv("panel_data.csv")
 
@@ -44,7 +47,53 @@ df_panel <- pdata.frame(df, index = c("agency_num", "year"))
 
 ## Naive Model
 
-```{r}
+```{r twfe_naive}
 
+#| code-fold: true
 
+naive_mod <- plm(log_levy ~ log_av,
+                 model = "within",
+                 effect = "twoways",
+                 data = df_panel)
+
+summary(naive_mod)
+
+muni_subset <- subset(df_panel, minor_type == "MUNI" | agency_name == "TOWN CICERO")
+
+naive_mod_munis <- plm(log_levy ~ log_av,
+                         model = "within",
+                         effect = "twoways",
+                         data = muni_subset)
+
+summary(naive_mod_munis)
+
+hr_subset <- subset(df_panel, home_rule_ind == 1)
+
+nhr_subset <- subset(df_panel, home_rule_ind == 0)
+
+naive_mod_hr <- plm(log_levy ~ log_av,
+                         model = "within",
+                         effect = "twoways",
+                         data = hr_subset)
+
+summary(naive_mod_hr)
+
+school_subset <- subset(df_panel, major_type == "SCHOOL")
+
+naive_mod_school <- plm(log_levy ~ log_av,
+                        model = "within",
+                         effect = "twoways",
+                         data = school_subset)
+
+summary(naive_mod_school)
+
+ele_school_subset <- subset(df_panel, major_type == "SCHOOL" 
+                              & minor_type == "ELEMENTARY")
+
+naive_mod_ele_school <- plm(log_levy ~ log_av,
+                            model = "within",
+                            effect = "twoways",
+                            data = ele_school_subset)
+
+summary(naive_mod_ele_school)
 ```
