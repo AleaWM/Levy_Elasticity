@@ -4,6 +4,7 @@ author: "MVH & AWM"
 date: "June 11, 2024"
 format: 
   html:
+    embed-resources: true
     theme: lumen
     code-fold: true
     code-line-numbers: true
@@ -378,4 +379,4 @@ print(school_table_re)
 
 ```
 
-The fixed effect models' coefficients for log_av were: 2.80, 2.41, 0.44, 0.15 and were all statistically significant or the 0.001 or 0.01 levels.
+The fixed effect models' coefficients for log_av were: 2.80, 2.41, 0.44, 0.15 and were all statistically significant at the 0.001 or 0.01 levels.
