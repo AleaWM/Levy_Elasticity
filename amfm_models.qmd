@@ -1,6 +1,7 @@
 ---
-title: "ABFM Levy Elasticity Models"
-author: "MVH & AW"
+title: "ABFM Naive Levy Elasticity Models"
+author: "MVH & AWM"
+date: "June 11, 2024"
 format: 
   html:
     theme: lumen
@@ -17,12 +18,7 @@ format:
       margin-width: 200px
 ---
 
-Data is from "helper_recode_variables.R" file, which queries and filters data from the PTAXSIM DB. It is the same data we have been using since February except when we were briefly grouping certain agencies.
-
-```{r setup}
-
-#| code-fold: true
-#| output: false
+```{r setup, include = FALSE}
 
 knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 
@@ -34,33 +30,117 @@ library(jtools)
 library(modelsummary)
 library(tidyverse)
 library(kableExtra)
+library(tidyverse)
 
 set_summ_defaults(digits = 2, pvals = FALSE, robust = "HC3")
+
 ```
+
+# Data Description
+
+Our data ("panel_data.csv") is generated on line 187 of the "helper_recode_variables.R" file, which queries, filters, and manipulates variables from the PTAXSIM DB. It is the same data we have been using since February EXCEPT for the models we ran in April, where we used "grouped" taxing agencies.
+
+SSAs are excluded from our sample.
+
+Chicago is included in our sample.
 
 ```{r load_data}
 
-#| code-fold: false
 #| output: false
 
 df <- read.csv("panel_data.csv")
-
-df <- df %>%
-  filter(major_type == "SCHOOL" | minor_type == "MUNI" | agency_name == "TOWN CICERO")
 
 df_panel <- pdata.frame(df, index = c("agency_num", "year"))
 
 ```
 
-# Two-Way Fixed Effects Models
+```{r double_check_data}
 
-## Naive Models
+#| eval: false
 
-### Municipalities
+# Double check that we've removed the munis with no prop tax revenue (Countryside, Deer Park, Homer Glen, Norridge, Oak Brook, Schaumburg, Dixmoor).
+ 
+dropped_munis <- c("030250000", "030270000", "030300000", "030585000", "030840000", "030890000", "031150000", "031230000")
+
+no_ptax <- df_panel %>%
+  filter(agency_num %in% dropped_munis) %>%
+  summarize("Agencies w/o Prop. Tax Rev." = n())
+
+# Double check no agencies that changed HR status
+
+exclude_hr_change <- c("030770000", "030800000","030880000", "031070000", "031190000", "031250000")
+
+change_hr <- df_panel %>%
+  filter(agency_num %in% exclude_hr_change) %>%
+  summarize("Agencies w/ HR Change in Sample Period" = n())
+
+```
+
+# Naive Model
+
+We have panel data and thus even a naive model needs to account for serial correlation of error terms and heteroskedasticity.
+
+I considered three options:
+
+1.  Pooled OLS model
+
+2.  Random effects model
+
+3.  Fixed-effects model (TWFE)
+
+I communed with Wooldridge (2018) and am comfortable we want to use a TWFE model as our "naive" model. Here, a RE model is more efficient than a pooled OLS model because it removes some of the serial correlation in the error term that plagues time series data.
+
+Then, for choosing between a RE and TWFE model, I selected TWFE to avoid the need to incorporate any sort of time-related control variables.
+
+I selected HC5 as my HC-estimator because Chicago generates high-leverage observations.
+
+## All Agencies
+
+::: {.callout-note}
+All models include time and agency fixed effects and use HC5 heteroskedasticity-consistent standard errors.
+:::
+
+```{r twfe_all_naive}
+
+naive_mod_all <- plm(log_levy ~ log_av,
+                         model = "within",
+                         effect = "twoways",
+                         data = df_panel)
+
+hr_all_subset <- subset(df_panel, home_rule_ind == 1)
+
+nhr_all_subset <- subset(df_panel, home_rule_ind == 0)
+
+naive_mod_all_hr <- plm(log_levy ~ log_av,
+                         model = "within",
+                         effect = "twoways",
+                         data = hr_all_subset)
+
+naive_mod_all_nhr <- plm(log_levy ~ log_av,
+                         model = "within",
+                         effect = "twoways",
+                         data = nhr_all_subset)
+
+
+all_summ_table <- 
+  export_summs(naive_mod_all, naive_mod_all_hr, naive_mod_all_nhr,
+               model.names = c("All Taxing Agencies", "HR Taxing Agencies", "NHR Taxing Agencies"),
+                                robust = "HC3",
+                                statistics = c(N = "nobs", R2 = "r.squared", adj.R2 = "adj.r.squared"))
+
+all_summ_table <- set_caption(all_summ_table, "All Agencies, Dependant Variable: ln(levy)")
+
+print(all_summ_table)
+
+```
+
+## Municipalities
+
+::: {.callout-note}
+All models include time and agency fixed effects and use HC5 heteroskedasticity-consistent standard errors.
+:::
 
 ```{r twfe_muni_naive}
-
-#| code-fold: false
 
 muni_subset <- subset(df_panel, minor_type == "MUNI" | agency_name == "TOWN CICERO")
 
@@ -90,12 +170,44 @@ muni_summ_table <-
                                 robust = "HC3",
                                 statistics = c(N = "nobs", R2 = "r.squared", adj.R2 = "adj.r.squared"))
 
-muni_summ_table <- set_caption(muni_summ_table, "Dependant Variable: ln(levy)")
+muni_summ_table <- set_caption(muni_summ_table, "Municipalities, Dependant Variable: ln(levy)")
 
 print(muni_summ_table)
 
 ```
-### Schools
+
+## Schools
+
+::: {.callout-note}
+All models include time and agency fixed effects and use HC5 heteroskedasticity-consistent standard errors.
+:::
+
+There are five types of school taxing agencies: elementary, secondary, community colleges, miscellaneous, and unified. Elementary school districts make up the overwhelming majority of these taxing agencies.
+
+```{r school_distr}
+
+school_summary <- df %>%
+  filter(major_type == "SCHOOL") %>%
+  filter(year == 2021) %>%
+  group_by(minor_type) %>%
+  rename("School Type" = minor_type) %>%
+  summarize(n = n())
+
+bar_colors <- c("#264653", "#2a9d8f", "#e9c46a", "#f4a261", "#e76f51")
+
+ggplot(school_summary, aes(x = `School Type`, y = n, fill = `School Type`)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = bar_colors) +
+  ylim(0, 125) +
+  theme_minimal() +
+  labs(title = "School Agencies by Type (2021)",
+       x = "Type of School",
+       y = "n") +
+  theme(legend.position = "none") +
+  geom_text(aes(label = n), vjust = -0.5, size = 3)
+
+```
+The community college, miscellaneous, and unified observations are omitted from the "Elementary & Secondary Schools" regression model.
 
 ```{r twfe_school_naive}
 
@@ -121,13 +233,149 @@ naive_mod_second_school <- plm(log_levy ~ log_av,
                                effect = "twoways",
                                data = second_school_subset)
 
-school_table <- export_summs(naive_mod_school, naive_mod_ele_school, naive_mod_second_school,
-             model.names = c("All Schools", "Elementary Schools", "Secondary Schools"),
+no_other_school_subset <- subset(df_panel, major_type == "SCHOOL" 
+                       & minor_type != c("COMM COLL", "MISC", "UNIFIED"))
+
+naive_mod_no_misc_school <- plm(log_levy ~ log_av,
+                               model = "within",
+                               effect = "twoways",
+                               data = no_other_school_subset)
+
+school_table <- export_summs(naive_mod_school, naive_mod_no_misc_school, naive_mod_ele_school, naive_mod_second_school,
+             model.names = c("All Schools", "Elementary & Secondary", "Elementary", "Secondary"),
              robust = "HC3",
              statistics = c(N = "nobs", R2 = "r.squared", adj.R2 = "adj.r.squared"))
 
-school_table <- set_caption(school_table, "Dependant Variable: ln(levy)")
+school_table <- set_caption(school_table, "Schools by Type, Dependant Variable: ln(levy)")
 
 print(school_table)
 
 ```
+
+The "Elementary & Secondary Schools" model excludes "misc", community colleges, and unified school districts.
+
+Alea and I are trying to figure out why the magnitude of log_av's coefficient plummets when secondary and elementary schools are broken out from each other. That outcome is consistent with the coefficients seen in the random effects models below used as a robustness check.
+
+## Municipalities & Schools
+
+Since our focus is on municipalities and schools, I reran the model while only retaining those agency types.
+
+::: {.callout-note}
+All models include time and agency fixed effects and use HC5 heteroskedasticity-consistent standard errors.
+:::
+
+```{r twfe_schools_munis_naive}
+
+muni_school_subset <- subset(df_panel, major_type == "SCHOOL" | minor_type == "MUNI" | agency_name == "TOWN CICERO")
+
+muni_school_hr <- subset(muni_school_subset, home_rule_ind == 1)
+
+muni_school_nhr <- subset(muni_school_subset, home_rule_ind == 0)
+
+naive_muni_school <- plm(log_levy ~ log_av,
+                               model = "within",
+                               effect = "twoways",
+                               data = muni_school_subset)
+
+naive_muni_school_hr <- plm(log_levy ~ log_av,
+                               model = "within",
+                               effect = "twoways",
+                               data = muni_school_hr)
+
+naive_muni_school_nhr <- plm(log_levy ~ log_av,
+                               model = "within",
+                               effect = "twoways",
+                               data = muni_school_nhr)
+
+muni_school_table <- export_summs(naive_muni_school, naive_muni_school_hr, naive_muni_school_nhr,
+             model.names = c("Municipalities & Schools", "Municipalities & Schools (HR)", "Municipalities & Schools (NHR)"),
+             robust = "HC3",
+             statistics = c(N = "nobs", R2 = "r.squared", adj.R2 = "adj.r.squared"))
+
+muni_school_table <- set_caption(muni_school_table, "Schools & Municipalities, Dependant Variable: ln(levy)")
+
+print(muni_school_table)
+
+```
+
+# Random Effect Model Robustness Check
+
+To validate our choice of a TWFE model, I also ran a FE model on just schools and municipalities. As a reminder, random effect models have intercepts.
+
+## Municipalities (Random Effects)
+
+::: {.callout-warning}
+## MVH's first time with RE models!
+
+I'm not 100% sure I'm properly interpreting random effect model diagnostics!
+:::
+
+```{r muni_re_check}
+
+naive_mod_munis_re <- plm(log_levy ~ log_av,
+                         model = "random",
+                         data = muni_subset)
+
+naive_mod_muni_hr_re <- plm(log_levy ~ log_av,
+                         model = "random",
+                         data = hr_subset)
+
+naive_mod_muni_nhr_re <- plm(log_levy ~ log_av,
+                         model = "random",
+                         data = nhr_subset)
+
+
+muni_summ_table_re <- 
+  export_summs(naive_mod_munis_re, naive_mod_muni_hr_re, naive_mod_muni_nhr_re,
+               model.names = c("All Municipalities", "HR Municipalities", "NHR Municipalities"),
+                                robust = "HC3",
+                                statistics = c(N = "nobs", R2 = "r.squared", adj.R2 = "adj.r.squared"))
+
+muni_summ_table_re <- set_caption(muni_summ_table_re, "Municipalities Random Effects Model, Dependant Variable: ln(levy)")
+
+print(muni_summ_table_re)
+
+```
+
+As a reminder, the TWFE model's coefficients for log_av were -0.00 (all munis), 0.03 (HR munis), and 0.30 (NHR munis). Thus, only the model for non-homerule municipalities is materially different when using random effects.
+
+## Schools (Random Effects)
+
+::: {.callout-warning}
+## MVH's first time with RE models!
+
+I'm not 100% sure I'm properly interpreting random effect model diagnostics!
+:::
+
+```{r school_re_check}
+
+#| error: false
+
+naive_mod_school_re <- plm(log_levy ~ log_av,
+                        model = "random",
+                        data = school_subset)
+
+naive_mod_ele_school_re <- plm(log_levy ~ log_av,
+                            model = "random",
+                            data = ele_school_subset)
+
+naive_mod_second_school_re <- plm(log_levy ~ log_av,
+                               model = "random",
+                               data = second_school_subset)
+
+naive_mod_no_misc_school_re <- plm(log_levy ~ log_av,
+                               model = "random",
+                               data = no_other_school_subset)
+
+school_table_re <- export_summs(naive_mod_school_re, naive_mod_no_misc_school_re, naive_mod_ele_school_re, naive_mod_second_school_re,
+             model.names = c("All Schools", "Elementary & Secondary Schools", "Elementary Schools", "Secondary Schools"),
+             robust = "HC3",
+             statistics = c(N = "nobs", R2 = "r.squared", adj.R2 = "adj.r.squared"))
+
+school_table_re <- set_caption(school_table_re, "Schools Random Effects Model, Dependant Variable: ln(levy)")
+
+print(school_table_re)
+
+```
+
+The fixed effect models' coefficients for log_av were: 2.80, 2.41, 0.44, 0.15 and were all statistically significant or the 0.001 or 0.01 levels.
