@@ -4,6 +4,7 @@ author: "MVH & AWM"
 date: "June 11, 2024"
 format: 
   html:
+    embed-resources: true
     theme: lumen
     code-fold: true
     code-line-numbers: true
