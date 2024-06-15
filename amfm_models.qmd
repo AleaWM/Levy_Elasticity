@@ -33,7 +33,7 @@ library(tidyverse)
 library(kableExtra)
 library(tidyverse)
 
-set_summ_defaults(digits = 2, pvals = FALSE, robust = "HC3")
+set_summ_defaults(digits = 2, pvals = FALSE, robust = "HC5")
 
 ```
 
@@ -74,6 +74,16 @@ exclude_hr_change <- c("030770000", "030800000","030880000", "031070000", "03119
 change_hr <- df_panel %>%
   filter(agency_num %in% exclude_hr_change) %>%
   summarize("Agencies w/ HR Change in Sample Period" = n())
+
+```
+
+## Data Exploration
+
+### log_av and log_levy
+
+```{r}
+
+
 
 ```
 
