@@ -19,7 +19,8 @@ format:
       margin-width: 200px
 ---
 
-```{r setup, include = FALSE}
+```{r setup}
+#| output: FALSE
 
 knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 
@@ -31,7 +32,16 @@ library(jtools)
 library(modelsummary)
 library(tidyverse)
 library(kableExtra)
-library(tidyverse)
+library(DT)
+library(flextable)
+
+set_flextable_defaults(theme_fun = theme_vanilla, 
+                       padding = 2,
+                       line_spacing = 1,
+                       big.mark = ",",
+                       )
+
+options(DT.options = list())
 
 set_summ_defaults(digits = 2, pvals = FALSE, robust = "HC5")
 
@@ -79,11 +89,97 @@ change_hr <- df_panel %>%
 
 ## Data Exploration
 
-### log_av and log_levy
+### AV & Levy
 
-```{r}
+```{r av_desc}
+#| label: ele_secondary_descriptives
+#| tbl-cap: "Distribution of AV and Total Final Levy"
+#| tbl-subcap: "Elementary & Secondary Schools"
 
+df_schools_table <- df_panel |>
+  filter(major_type == "SCHOOL") |>
+  filter(minor_type %in% c("ELEMENTARY", "SECONDARY")) |>
+  group_by(minor_type, year) |>
+  summarize(n = n(), 
+            av_min = min(av), 
+            av_max = max(av), 
+            av_mean = mean(av), 
+            av_med = median(av), 
+            av_sd = sd(av),
+            levy_min = min(total_final_levy), 
+            levy_max = max(total_final_levy), 
+            levy_mean = mean(total_final_levy), 
+            levy_med = median(total_final_levy), 
+            levy_sd = sd(total_final_levy)
+            )
+  
 
+df_schools_table_av <- df_schools |>
+  filter(minor_type %in% c("ELEMENTARY", "SECONDARY")) |>
+  group_by(minor_type, year) |>
+  summarize(n = n(), 
+            av_min = min(av), 
+            av_max = max(av), 
+            av_mean = mean(av), 
+            av_med = median(av), 
+            av_sd = sd(av))
+
+flextable(df_schools_table_av) |>
+  set_header_labels(n = "N", 
+                    av_min = "Min. AV", 
+                    av_max = "Max. AV",
+                    av_mean = "Mean AV",
+                    av_med = "Median AV",
+                    av_sd = "Std. Dev."
+                   ) |>
+  set_table_properties(layout = "autofit", width = .75)
+
+```
+
+```{r levy_desc}
+#| tbl-cap: "Levy Distribution"
+
+df_schools_table_levy <- df_schools |>
+  filter(minor_type %in% c("ELEMENTARY", "SECONDARY")) |>
+  group_by(minor_type, year) |>
+  summarize(n = n(), 
+            levy_min = min(total_final_levy), 
+            levy_max = max(total_final_levy), 
+            levy_mean = mean(total_final_levy), 
+            levy_med = median(total_final_levy), 
+            levy_sd = sd(total_final_levy))
+
+flextable(df_schools_table_levy) |>
+  set_header_labels(n = "N", 
+                    levy_min = "Min. Levy", 
+                    levy_max = "Max. Levy",
+                    levy_mean = "Mean Levy",
+                    levy_med = "Median Levy",
+                    levy_sd = "Std. Dev."
+                   ) |>
+  set_table_properties(layout = "autofit", width = .75)
+```
+
+```{r levy_av_visualizations}
+#| fig-cap: "Mean Levy Distribution (2006-2021)"
+
+df_schools_table_levy |>
+  group_by(year) %>%
+  ggplot(aes(x = year, y = levy_mean)) +
+  geom_boxplot() +
+  theme_classic()
+  
+df_schools_table_av |>
+  group_by(year) %>%
+  ggplot(aes(x = year, y = av_mean)) +
+  geom_boxplot() +
+  theme_classic()
+
+df_schools_table |>
+  ggplot(aes(x = av_mean, y = levy_mean)) +
+  geom_point() +
+  
+  theme_classic()
 
 ```
 
