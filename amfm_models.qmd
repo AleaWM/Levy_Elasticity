@@ -24,7 +24,7 @@ format:
 1.  Balanced the panel, dropping:
     a.  579 obs. from the "panel_data.csv" file
     b.  104 obs. from schools (not accounting
-2.  Changes to schools models: schools now only include primary and secondary.
+2.  Only evaluate primary and secondary schools (~1-4 obs for other types)
 3.  Models have been run w/o Chicago
 
 ```{r setup}
@@ -69,8 +69,7 @@ Chicago is included in our sample.
 
 # import 8178 observations
 
-df <- read_csv("panel_data.csv",
-               show_col_types = FALSE) |>
+df <- read_csv("panel_data.csv") |>
   # First column of csv is empty?
   select(-1) |>
   # Convert to data frame
@@ -84,38 +83,32 @@ df_panel <- pdata.frame(df, index = c("agency_num", "year"))
 
 df_panel <- make.pbalanced(df_panel, balance.type = "shared.individuals")
 
-# Subset: schools and munis - 3689 obs.
-# NOTE: BALANCING THE PANEL DROPS 194 OF THESE OBS, THE DIFFERENCE FROM THE MODELS
+# Subset: schools and munis - 3655 obs.
+# NOTE: BALANCING THE PANEL & LIMITING SCHOOL SAMPLE DROPS 194 OF THESE OBS, THE DIFFERENCE FROM THE MODELS
 #       WE SENT MERRIMAN ON 6/11 IS IN THIS NUMBER
 
-df_panel_school_muni <- subset(df_panel, (major_type == "SCHOOL" & (minor_type == "ELE") | 
-                                 minor_type == "MUNI" |
-                                 agency_name == "TOWN CICERO")
+school_muni <- subset(df_panel, minor_type == "ELEMENTARY" | minor_type == "SECONDARY" | minor_type == "MUNI" | agency_name == "TOWN CICERO")
 
-# All schools: 1972 obs. (Balancing the panel dropped )
+# All schools: 1938 obs.
 
-df_panel_schools <- subset(df_panel, minor_type == ("ELEMENTARY" | "SECONDARY"))
+schools <- subset(df_panel, minor_type == "ELEMENTARY" | minor_type == "SECONDARY")
+
+# Elementary schools: 1751 obs.
+
+ele <- subset(df_panel, minor_type == "ELEMENTARY")
+
+# Secondary Schools: 187 obs.
+
+sec <- subset(df_panel, minor_type == "SECONDARY")
+
+# HR Munis: 1751 obs.
+
+muni_hr <- subset(df_panel, minor_type == "MUNI" & home_rule_ind == 1)
+
+# NHR munis: 505 obs.
+
+muni_nhr <- subset(df_panel, minor_type == "MUNI" & home_rule_ind == 0)
   
-```
-
-```{r double_check_data}
-
-# Double check that we've removed the munis with no prop tax revenue (Countryside, Deer Park, Homer Glen, Norridge, Oak Brook, Schaumburg, Dixmoor).
- 
-dropped_munis <- c("030250000", "030270000", "030300000", "030585000", "030840000", "030890000", "031150000", "031230000")
-
-no_ptax <- df_panel |>
-  filter(agency_num %in% dropped_munis) |>
-  summarize("Agencies w/o Prop. Tax Rev." = n())
-
-# Double check no agencies that changed HR status
-
-exclude_hr_change <- c("030770000", "030800000","030880000", "031070000", "031190000", "031250000")
-
-change_hr <- df_panel |>
-  filter(agency_num %in% exclude_hr_change) |>
-  summarize("Agencies w/ HR Change in Sample Period" = n())
-
 ```
 
 ## Data Exploration
