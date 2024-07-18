@@ -607,6 +607,8 @@ colors <- c("#264653", "#2a9d8f", "#e9c46a", "#f4a261", "#e76f51")
 
 
 > HR and NHR panels were NOT balanced.
+
+
 We have panel data and thus even a naive model needs to account for serial correlation of error terms and heteroskedasticity.
 
 I considered three options:
@@ -635,7 +637,6 @@ all_agencies_naive <- plm(log_levy ~ log_av,
                          model = "within",
                          effect = "twoways",
                          data = df_panel)
-is.pbalanced(all_agencies_naive)
 #summary(school_muni_naive)
 
 # hr_all_subset <- subset(df_panel, home_rule_ind == 1)
@@ -661,7 +662,7 @@ all_agencies_summ_table <-
 
 #school_muni_summ_table <- set_caption(school_muni_summ_table, "All Agencies, Dependant Variable: ln(levy)")
 
-print(all_agencies_summ_table)
+all_agencies_summ_table
 
 ```
 
@@ -805,13 +806,24 @@ Since our focus is on municipalities and schools, I reran the model while only r
 All models include time and agency fixed effects and use HC5 heteroskedasticity-consistent standard errors.
 :::
 
+
+> muni_school_hr and muni_school_nhr were NOT balanced.
+
+
 ```{r twfe_schools_munis_naive}
 
 muni_school_subset <- subset(df_panel, major_type == "SCHOOL" | minor_type == "MUNI" | agency_name == "TOWN CICERO")
+is.pbalanced(muni_school_subset)
 
-muni_school_hr <- subset(muni_school_subset, home_rule_ind == 1)
+muni_school_hr <- subset(muni_school_subset, home_rule_ind == 1)   # 1219
+is.pbalanced(muni_school_hr)
+muni_school_hr <- make.pbalanced(muni_school_hr, "shared.individuals")     ## 1156
+is.pbalanced(muni_school_hr)
 
-muni_school_nhr <- subset(muni_school_subset, home_rule_ind == 0)
+muni_school_nhr <- subset(muni_school_subset, home_rule_ind == 0)  # 3269
+is.pbalanced(muni_school_nhr)    
+muni_school_nhr <- make.pbalanced(muni_school_nhr, "shared.individuals")   # 3213 
+is.pbalanced(muni_school_nhr)    
 
 naive_muni_school <- plm(log_levy ~ log_av,
                                model = "within",
@@ -835,7 +847,7 @@ muni_school_table <- export_summs(naive_muni_school, naive_muni_school_hr, naive
 
 #muni_school_table <- set_caption(muni_school_table, "Schools & Municipalities, Dependant Variable: ln(levy)")
 
-print(muni_school_table)
+muni_school_table
 
 ```
 
