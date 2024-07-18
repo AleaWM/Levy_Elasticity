@@ -395,13 +395,13 @@ naive_mod_munis <- plm(log(levy) ~ log(muni_fmv_taxed),
 hr_subset <- subset(df_panel, home_rule_ind == 1 & (minor_type == "MUNI" | agency_name == "TOWN CICERO")) 
 
 is.pbalanced(hr_subset)
-hr_subset <- make.pbalanced(hr_subset)
+hr_subset <- make.pbalanced(hr_subset, balance.type = "shared.individuals")
 is.pbalanced(hr_subset)
 
 
 nhr_subset <- subset(df_panel, home_rule_ind == 0 & (minor_type == "MUNI" | agency_name == "TOWN CICERO"))
 is.pbalanced(nhr_subset)
-nhr_subset <- make.pbalanced(nhr_subset)
+nhr_subset <- make.pbalanced(nhr_subset, balance.type = "shared.individuals")
 is.pbalanced(nhr_subset)
   
 naive_mod_muni_hr <- plm(log(levy) ~ log(muni_fmv_taxed),
@@ -421,7 +421,7 @@ muni_summ_table <-
                                 robust = "HC3",
                                 statistics = c(N = "nobs", R2 = "r.squared", adj.R2 = "adj.r.squared"))
 
-#muni_summ_table <- set_caption(muni_summ_table, "Municipalities, Dependant Variable: ln(levy)")
+#muni_summ_table <- set_caption(muni_summ_table, "Municipalities, Dependent Variable: ln(levy)")
 
 muni_summ_table
 
@@ -796,7 +796,7 @@ print(school_summ_table)
 
 The "Elementary & Secondary Schools" model excludes "misc", community colleges, and unified school districts.
 
-Alea and I are trying to figure out why the magnitude of log_av's coefficient plummets when secondary and elementary schools are broken out from each other. That outcome is consistent with the coefficients seen in the random effects models below used as a robustness check.
+
 
 ## Municipalities & Schools
 
