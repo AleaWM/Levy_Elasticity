@@ -166,34 +166,34 @@ is.pbalanced(df_panel)
 
 
 
-# Subset: schools and munis - 3655 obs.
+# Subset: schools and munis - 4250 obs.
 # NOTE: BALANCING THE PANEL & LIMITING SCHOOL SAMPLE DROPS 194 OF THESE OBS, 
 # THE DIFFERENCE FROM THE MODELS
 # WE SENT MERRIMAN ON 6/11 IS IN THIS NUMBER
 
 school_muni <- subset(df_panel, minor_type == "ELEMENTARY" | minor_type == "SECONDARY" | minor_type == "MUNI" | agency_name == "TOWN CICERO")
 
-# All schools: 1938 obs.
+# All schools: 2380 obs.
 
 schools <- subset(df_panel, minor_type == "ELEMENTARY" | minor_type == "SECONDARY")
 
-# Elementary schools: 1751 obs.
+# Elementary schools: 1938 obs.
 
 ele <- subset(df_panel, minor_type == "ELEMENTARY")
 
-# Secondary Schools: 187 obs.
+# Secondary Schools: 442 obs.
 
 sec <- subset(df_panel, minor_type == "SECONDARY")
 
-# All munis: 1700 obs.
+# All munis: 1870 obs.
 
 munis <- subset(df_panel, minor_type == "MUNI"| agency_name == "TOWN CICERO")
 
-# HR Munis: 1051 obs.
+# HR Munis: 1202 obs.
 
 muni_hr <- subset(df_panel,(minor_type == "MUNI" | agency_name == "TOWN CICERO")& home_rule_ind == 1)
 
-# NHR munis: 685 obs.
+# NHR munis: 668 obs.
 
 muni_nhr <- subset(df_panel, (minor_type == "MUNI" | agency_name == "TOWN CICERO")& home_rule_ind == 0)
 
