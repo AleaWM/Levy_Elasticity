@@ -66,8 +66,10 @@ SSAs are excluded from our sample.
 
 Chicago is included in our sample.
 
-```{r load_data}
+```{r}
+#| label: load_paneldata
 #| output: false
+#| eval: false
 
 # import 8178 observations
 
@@ -87,7 +89,9 @@ df_panel <- pdata.frame(df, index = c("agency_num", "year"))
 
 # Balance the panel -> now 7599 obs (lost 579)
 
-df_panel <- make.pbalanced(df_panel, balance.type = "shared.individuals")
+is.pbalanced(df_panel)
+
+# df_panel <- make.pbalanced(df_panel, balance.type = "shared.individuals")
 
 # Subset: schools and munis - 3655 obs.
 # NOTE: BALANCING THE PANEL & LIMITING SCHOOL SAMPLE DROPS 194 OF THESE OBS, 
@@ -123,6 +127,75 @@ muni_nhr <- subset(df_panel, minor_type == "MUNI" & home_rule_ind == 0)
 colors <- c("#264653", "#2a9d8f", "#e9c46a", "#f4a261", "#e76f51")
   
 ```
+
+```{r}
+#| label: tryFMVdata
+#| 
+
+
+df <- read_csv("panel_data.csv")
+
+muni_fmv <- read_csv("Necessary_Files/ptaxsim_muni_level_2006-2022.csv") 
+
+df <- left_join(df, muni_fmv) |>
+  # Rename select variables
+  rename(levy = total_final_levy) |>
+  # Filter out zero levies
+  filter(levy > 0) |>
+  # Convert to data frame
+  as.data.frame()
+
+# Convert to panel data (10,181 obs)
+# df_panel <- pdata.frame(df, index = c("agency_num", "year"))
+df_panel <- pdata.frame(df, index = c("clean_name", "year"))
+df_panel <- make.pbalanced(df_panel, balance.type = "fill")
+
+
+
+# Convert to panel data (10,181 obs)
+df_panel <- pdata.frame(df, index = c("clean_name", "year"))
+df_panel <- make.pbalanced(df_panel, balance.type = "shared.individuals")
+
+
+# Balance the panel -> now 7599 obs (lost 579)
+
+is.pbalanced(df_panel)
+
+
+
+# Subset: schools and munis - 3655 obs.
+# NOTE: BALANCING THE PANEL & LIMITING SCHOOL SAMPLE DROPS 194 OF THESE OBS, 
+# THE DIFFERENCE FROM THE MODELS
+# WE SENT MERRIMAN ON 6/11 IS IN THIS NUMBER
+
+school_muni <- subset(df_panel, minor_type == "ELEMENTARY" | minor_type == "SECONDARY" | minor_type == "MUNI" | agency_name == "TOWN CICERO")
+
+# All schools: 1938 obs.
+
+schools <- subset(df_panel, minor_type == "ELEMENTARY" | minor_type == "SECONDARY")
+
+# Elementary schools: 1751 obs.
+
+ele <- subset(df_panel, minor_type == "ELEMENTARY")
+
+# Secondary Schools: 187 obs.
+
+sec <- subset(df_panel, minor_type == "SECONDARY")
+
+# All munis: 1700 obs.
+
+munis <- subset(df_panel, minor_type == "MUNI")
+
+# HR Munis: 1051 obs.
+
+muni_hr <- subset(df_panel, minor_type == "MUNI" & home_rule_ind == 1)
+
+# NHR munis: 685 obs.
+
+muni_nhr <- subset(df_panel, minor_type == "MUNI" & home_rule_ind == 0)
+
+```
+
 
 # Data Exploration
 
@@ -225,6 +298,84 @@ muni_av_table_final <- bind_cols(muni_av_table, nhr_av_table, hr_av_table)
 
 print(muni_av_table_final)
 ```
+
+```{r muni_fmv_descrips}
+
+muni_fmv_table <- munis |>
+  group_by(year) |>
+  summarize(n = n(), 
+            av_min = min(muni_fmv_taxed), 
+            av_max = max(muni_fmv_taxed), 
+            av_mean = mean(muni_fmv_taxed), 
+            av_med = median(muni_fmv_taxed), 
+            av_sd = sd(muni_fmv_taxed))
+muni_fmv_table
+
+nhr_fmv_table <- muni_nhr |>
+  group_by(year) |>
+  summarize(n = n(), 
+            av_min = min(muni_fmv_taxed), 
+            av_max = max(muni_fmv_taxed), 
+            av_mean = mean(muni_fmv_taxed), 
+            av_med = median(muni_fmv_taxed), 
+            av_sd = sd(muni_fmv_taxed))
+nhr_fmv_table
+
+hr_fmv_table <- muni_hr |>
+  group_by(year) |>
+  summarize(n = n(), 
+            av_min = min(muni_fmv_taxed), 
+            av_max = max(muni_fmv_taxed), 
+            av_mean = mean(muni_fmv_taxed), 
+            av_med = median(muni_fmv_taxed), 
+            av_sd = sd(muni_fmv_taxed))
+hr_fmv_table
+
+```
+
+```{r}
+munis %>% filter(clean_name !="Chicago") %>% ggplot() + geom_line(aes(x=year, y = muni_fmv_taxed, group = clean_name, color = Triad, alpha = .5)) + facet_wrap(~Triad)
+```
+
+#### Alea's FMV Naive models
+
+```{r twfe_muni_fmv_naive}
+
+muni_subset <- subset(df_panel, minor_type == "MUNI" | agency_name == "TOWN CICERO")
+
+naive_mod_munis <- plm(log(levy) ~ log(muni_fmv_taxed),
+                         model = "within",
+                         effect = "twoways",
+                         data = muni_subset)
+# summary(naive_mod_munis)
+
+hr_subset <- subset(df_panel, home_rule_ind == 1 & (minor_type == "MUNI" | agency_name == "TOWN CICERO"))
+
+nhr_subset <- subset(df_panel, home_rule_ind == 0 & (minor_type == "MUNI" | agency_name == "TOWN CICERO"))
+
+naive_mod_muni_hr <- plm(log(levy) ~ log(muni_fmv_taxed),
+                         model = "within",
+                         effect = "twoways",
+                         data = hr_subset)
+
+naive_mod_muni_nhr <- plm(log(levy) ~ log(muni_fmv_taxed),
+                         model = "within",
+                         effect = "twoways",
+                         data = nhr_subset)
+
+
+muni_summ_table <- 
+  export_summs(naive_mod_munis, naive_mod_muni_hr, naive_mod_muni_nhr,
+               model.names = c("All Municipalities", "HR Municipalities", "NHR Municipalities"),
+                                robust = "HC3",
+                                statistics = c(N = "nobs", R2 = "r.squared", adj.R2 = "adj.r.squared"))
+
+#muni_summ_table <- set_caption(muni_summ_table, "Municipalities, Dependant Variable: ln(levy)")
+
+muni_summ_table
+
+```
+
 
 ### Visualizations
 
@@ -373,6 +524,65 @@ schools |>
 
 # Naive Model
 
+```{r}
+#| label: load_paneldata_duplicate
+#| output: false
+
+# import _____ observations
+
+df <- read_csv("panel_data.csv") |>
+  # Rename select variables
+  rename(levy = total_final_levy) |>
+  # Filter out zero levies
+  filter(levy > 0) |>
+  # Convert to data frame
+  as.data.frame()
+
+# Convert to panel data (8178 obs)
+
+df_panel <- pdata.frame(df, index = c("agency_num", "year"))
+
+# Balance the panel -> now 7599 obs (lost 579)
+
+is.pbalanced(df_panel)
+
+# df_panel <- make.pbalanced(df_panel, balance.type = "shared.individuals")
+
+# Subset: schools and munis - 3655 obs.
+# NOTE: BALANCING THE PANEL & LIMITING SCHOOL SAMPLE DROPS 194 OF THESE OBS, 
+# THE DIFFERENCE FROM THE MODELS
+# WE SENT MERRIMAN ON 6/11 IS IN THIS NUMBER
+
+school_muni <- subset(df_panel, minor_type == "ELEMENTARY" | minor_type == "SECONDARY" | minor_type == "MUNI" | agency_name == "TOWN CICERO")
+
+# All schools: 1938 obs.
+
+schools <- subset(df_panel, minor_type == "ELEMENTARY" | minor_type == "SECONDARY")
+
+# Elementary schools: 1751 obs.
+
+ele <- subset(df_panel, minor_type == "ELEMENTARY")
+
+# Secondary Schools: 187 obs.
+
+sec <- subset(df_panel, minor_type == "SECONDARY")
+
+# All munis: 1700 obs.
+
+munis <- subset(df_panel, minor_type == "MUNI")
+
+# HR Munis: 1051 obs.
+
+muni_hr <- subset(df_panel, minor_type == "MUNI" & home_rule_ind == 1)
+
+# NHR munis: 685 obs.
+
+muni_nhr <- subset(df_panel, minor_type == "MUNI" & home_rule_ind == 0)
+
+colors <- c("#264653", "#2a9d8f", "#e9c46a", "#f4a261", "#e76f51")
+  
+```
+
 We have panel data and thus even a naive model needs to account for serial correlation of error terms and heteroskedasticity.
 
 I considered three options:
@@ -397,10 +607,10 @@ All models include time and agency fixed effects and use HC5 heteroskedasticity-
 
 ```{r twfe_all_naive}
 
-school_muni_naive <- plm(log_levy ~ log_av,
+all_agencies_naive <- plm(log_levy ~ log_av,
                          model = "within",
                          effect = "twoways",
-                         data = school_muni)
+                         data = df_panel)
 
 #summary(school_muni_naive)
 
@@ -419,15 +629,15 @@ school_muni_naive <- plm(log_levy ~ log_av,
 #                          data = nhr_all_subset)
 
 
-school_muni_summ_table <- 
-  export_summs(school_muni_naive,
-               model.names = c("Municipalities and Elementary and Secondary Schools"),
+all_agencies_summ_table <- 
+  export_summs(all_agencies_naive,
+               model.names = c("All Agencies"),
                                 robust = "HC5",
                                 statistics = c(N = "nobs", R2 = "r.squared", adj.R2 = "adj.r.squared"))
 
 #school_muni_summ_table <- set_caption(school_muni_summ_table, "All Agencies, Dependant Variable: ln(levy)")
 
-print(school_muni_summ_table)
+print(all_agencies_summ_table)
 
 ```
 
