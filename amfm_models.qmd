@@ -67,7 +67,6 @@ SSAs are excluded from our sample.
 Chicago is included in our sample.
 
 ```{r load_data}
-
 #| output: false
 
 # import 8178 observations
@@ -91,8 +90,9 @@ df_panel <- pdata.frame(df, index = c("agency_num", "year"))
 df_panel <- make.pbalanced(df_panel, balance.type = "shared.individuals")
 
 # Subset: schools and munis - 3655 obs.
-# NOTE: BALANCING THE PANEL & LIMITING SCHOOL SAMPLE DROPS 194 OF THESE OBS, THE DIFFERENCE FROM THE MODELS
-#       WE SENT MERRIMAN ON 6/11 IS IN THIS NUMBER
+# NOTE: BALANCING THE PANEL & LIMITING SCHOOL SAMPLE DROPS 194 OF THESE OBS, 
+# THE DIFFERENCE FROM THE MODELS
+# WE SENT MERRIMAN ON 6/11 IS IN THIS NUMBER
 
 school_muni <- subset(df_panel, minor_type == "ELEMENTARY" | minor_type == "SECONDARY" | minor_type == "MUNI" | agency_name == "TOWN CICERO")
 
@@ -240,23 +240,23 @@ colors_custom <- c("#003f5c", "#444e86", "#955196", "#dd5182", "#ff6e54", "#ffa6
 
 colors_2 <- c("#003f5c", "#ffa600")
 
-schools |>
-  mutate(year = as.numeric(year)) |>
-  ggplot() +
-  geom_line(aes(x = year, y = ))
+# schools |>
+#   mutate(year = as.numeric(year)) |>
+#   ggplot() +
+#   geom_line(aes(x = year, y = ))
+# 
+# ggplot(schools, aes(x = year, y = av, ))
 
-ggplot(schools, aes(x = year, y = av, ))
-
-ggplot(schools, aes(x = year, y = av,  fill = `School Type`)) +
-  geom_bar(stat = "identity") +
-  scale_fill_manual(values = bar_colors) +
-  ylim(0, 125) +
-  theme_minimal() +
-  labs(title = "School Agencies by Type (2021)",
-       x = "Type of School",
-       y = "n") +
-  theme(legend.position = "none") +
-  geom_text(aes(label = n), vjust = -0.5, size = 3)
+# ggplot(schools, aes(x = year, y = av,  fill = `School Type`)) +
+#   geom_bar(stat = "identity") +
+#   scale_fill_manual(values = bar_colors) +
+#   ylim(0, 125) +
+#   theme_minimal() +
+#   labs(title = "School Agencies by Type (2021)",
+#        x = "Type of School",
+#        y = "n") +
+#   theme(legend.position = "none") +
+#   geom_text(aes(label = n), vjust = -0.5, size = 3)
 
 ```
 
@@ -425,7 +425,7 @@ school_muni_summ_table <-
                                 robust = "HC5",
                                 statistics = c(N = "nobs", R2 = "r.squared", adj.R2 = "adj.r.squared"))
 
-school_muni_summ_table <- set_caption(school_muni_summ_table, "All Agencies, Dependant Variable: ln(levy)")
+#school_muni_summ_table <- set_caption(school_muni_summ_table, "All Agencies, Dependant Variable: ln(levy)")
 
 print(school_muni_summ_table)
 
@@ -467,7 +467,7 @@ muni_summ_table <-
                                 robust = "HC3",
                                 statistics = c(N = "nobs", R2 = "r.squared", adj.R2 = "adj.r.squared"))
 
-muni_summ_table <- set_caption(muni_summ_table, "Municipalities, Dependant Variable: ln(levy)")
+#muni_summ_table <- set_caption(muni_summ_table, "Municipalities, Dependant Variable: ln(levy)")
 
 print(muni_summ_table)
 
@@ -544,7 +544,7 @@ school_summ_table <- export_summs(school_naive, ele_naive, sec_naive,
              robust = "HC5",
              statistics = c(N = "nobs", R2 = "r.squared", adj.R2 = "adj.r.squared"))
 
-school_table <- set_caption(school_summ_table, "Schools by Type, Dependant Variable: ln(levy)")
+#school_table <- set_caption(school_summ_table, "Schools by Type, Dependant Variable: ln(levy)")
 
 print(school_summ_table)
 
@@ -590,7 +590,7 @@ muni_school_table <- export_summs(naive_muni_school, naive_muni_school_hr, naive
              robust = "HC3",
              statistics = c(N = "nobs", R2 = "r.squared", adj.R2 = "adj.r.squared"))
 
-muni_school_table <- set_caption(muni_school_table, "Schools & Municipalities, Dependant Variable: ln(levy)")
+#muni_school_table <- set_caption(muni_school_table, "Schools & Municipalities, Dependant Variable: ln(levy)")
 
 print(muni_school_table)
 
@@ -629,7 +629,7 @@ muni_summ_table_re <-
                                 robust = "HC3",
                                 statistics = c(N = "nobs", R2 = "r.squared", adj.R2 = "adj.r.squared"))
 
-muni_summ_table_re <- set_caption(muni_summ_table_re, "Municipalities Random Effects Model, Dependant Variable: ln(levy)")
+#muni_summ_table_re <- set_caption(muni_summ_table_re, "Municipalities Random Effects Model, Dependant Variable: ln(levy)")
 
 print(muni_summ_table_re)
 
@@ -646,20 +646,19 @@ I'm not 100% sure I'm properly interpreting random effect model diagnostics!
 :::
 
 ```{r school_re_check}
-
-#| error: false
+#| error: true
 
 naive_mod_school_re <- plm(log_levy ~ log_av,
                         model = "random",
-                        data = school_subset)
+                        data = schools)
 
 naive_mod_ele_school_re <- plm(log_levy ~ log_av,
                             model = "random",
-                            data = ele_school_subset)
+                            data = ele)
 
 naive_mod_second_school_re <- plm(log_levy ~ log_av,
                                model = "random",
-                               data = second_school_subset)
+                               data = sec)
 
 naive_mod_no_misc_school_re <- plm(log_levy ~ log_av,
                                model = "random",
@@ -670,7 +669,7 @@ school_table_re <- export_summs(naive_mod_school_re, naive_mod_no_misc_school_re
              robust = "HC3",
              statistics = c(N = "nobs", R2 = "r.squared", adj.R2 = "adj.r.squared"))
 
-school_table_re <- set_caption(school_table_re, "Schools Random Effects Model, Dependant Variable: ln(levy)")
+#school_table_re <- set_caption(school_table_re, "Schools Random Effects Model, Dependant Variable: ln(levy)")
 
 print(school_table_re)
 
