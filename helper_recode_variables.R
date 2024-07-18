@@ -184,4 +184,4 @@ governments_panel <- as.data.frame(governments_panel)
 schools_panel <- as.data.frame(schools_panel)
 all_agencies <- as.data.frame(panel_data)
 
-#write.csv(all_agencies, "panel_data.csv")
+write_csv(all_agencies, "panel_data.csv")
