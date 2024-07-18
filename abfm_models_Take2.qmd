@@ -339,7 +339,9 @@ colors_2 <- c("#003f5c", "#ffa600")
 
 ## FMV Naive models - for Alea's curiosity
 
-```{r muni_fmv_descrips}
+```{r }
+#| label: tbl-muni_fmv_descrips
+#| tbl-cap: "Made from **unbalanced** subsets of the panel data. "
 
 muni_fmv_table <- munis |>
   group_by(year) |>
@@ -380,8 +382,8 @@ munis %>% filter(clean_name !="Chicago") %>% ggplot() + geom_line(aes(x=year, y 
 
 ```{r twfe_muni_fmv_naive}
 
-muni_subset <- subset(df_panel, minor_type == "MUNI" | agency_name == "TOWN CICERO")
-
+muni_subset <- subset(df_panel, minor_type == "MUNI" | agency_name == "TOWN CICERO") %>% make.pbalanced()
+is.pbalanced(muni_subset)
 
 
 naive_mod_munis <- plm(log(levy) ~ log(muni_fmv_taxed),
@@ -390,23 +392,18 @@ naive_mod_munis <- plm(log(levy) ~ log(muni_fmv_taxed),
                          data = muni_subset)
 # summary(naive_mod_munis)
 
-hr_subset <- subset(df_panel, home_rule_ind == 1 & (minor_type == "MUNI" | agency_name == "TOWN CICERO"))
+hr_subset <- subset(df_panel, home_rule_ind == 1 & (minor_type == "MUNI" | agency_name == "TOWN CICERO")) 
 
 is.pbalanced(hr_subset)
 hr_subset <- make.pbalanced(hr_subset)
-hr_subset |>
-  group_by(year) |>
-  summarize(n = n(), 
-            av_min = min(muni_fmv_taxed), 
-            av_max = max(muni_fmv_taxed), 
-            av_mean = mean(muni_fmv_taxed), 
-            av_med = median(muni_fmv_taxed), 
-            av_sd = sd(muni_fmv_taxed))
+is.pbalanced(hr_subset)
+
 
 nhr_subset <- subset(df_panel, home_rule_ind == 0 & (minor_type == "MUNI" | agency_name == "TOWN CICERO"))
 is.pbalanced(nhr_subset)
 nhr_subset <- make.pbalanced(nhr_subset)
-           
+is.pbalanced(nhr_subset)
+  
 naive_mod_muni_hr <- plm(log(levy) ~ log(muni_fmv_taxed),
                          model = "within",
                          effect = "twoways",
@@ -548,7 +545,7 @@ schools |>
 #| label: load_paneldata_duplicate
 #| output: false
 
-# import _____ observations
+# import 10,181 observations
 
 df <- read_csv("panel_data.csv") |>
   # Rename select variables
@@ -558,15 +555,16 @@ df <- read_csv("panel_data.csv") |>
   # Convert to data frame
   as.data.frame()
 
-# Convert to panel data (8178 obs)
+# Convert to panel data (10,181 obs)
 
 df_panel <- pdata.frame(df, index = c("agency_num", "year"))
 
-# Balance the panel -> now 7599 obs (lost 579)
+# Balance the panel -> now 9758 obs
 
 is.pbalanced(df_panel)
 
-# df_panel <- make.pbalanced(df_panel, balance.type = "shared.individuals")
+df_panel <- make.pbalanced(df_panel, balance.type = "shared.individuals")
+is.pbalanced(df_panel)
 
 # Subset: schools and munis - 3655 obs.
 # NOTE: BALANCING THE PANEL & LIMITING SCHOOL SAMPLE DROPS 194 OF THESE OBS, 
@@ -574,10 +572,12 @@ is.pbalanced(df_panel)
 # WE SENT MERRIMAN ON 6/11 IS IN THIS NUMBER
 
 school_muni <- subset(df_panel, minor_type == "ELEMENTARY" | minor_type == "SECONDARY" | minor_type == "MUNI" | agency_name == "TOWN CICERO")
+is.pbalanced(school_muni)
 
 # All schools: 1938 obs.
 
 schools <- subset(df_panel, minor_type == "ELEMENTARY" | minor_type == "SECONDARY")
+is.pbalanced(schools)
 
 # Elementary schools: 1751 obs.
 
@@ -590,19 +590,23 @@ sec <- subset(df_panel, minor_type == "SECONDARY")
 # All munis: 1700 obs.
 
 munis <- subset(df_panel, minor_type == "MUNI")
+is.pbalanced(munis)
 
 # HR Munis: 1051 obs.
 
-muni_hr <- subset(df_panel, minor_type == "MUNI" & home_rule_ind == 1)
+muni_hr <- subset(df_panel, (minor_type == "MUNI" | clean_name == "Cicero")  & home_rule_ind == 1)
+is.pbalanced(muni_hr)
 
 # NHR munis: 685 obs.
 
-muni_nhr <- subset(df_panel, minor_type == "MUNI" & home_rule_ind == 0)
+muni_nhr <- subset(df_panel, (minor_type == "MUNI" | clean_name == "Cicero")& home_rule_ind == 0)
 
 colors <- c("#264653", "#2a9d8f", "#e9c46a", "#f4a261", "#e76f51")
   
 ```
 
+
+> HR and NHR panels were NOT balanced.
 We have panel data and thus even a naive model needs to account for serial correlation of error terms and heteroskedasticity.
 
 I considered three options:
@@ -631,7 +635,7 @@ all_agencies_naive <- plm(log_levy ~ log_av,
                          model = "within",
                          effect = "twoways",
                          data = df_panel)
-
+is.pbalanced(all_agencies_naive)
 #summary(school_muni_naive)
 
 # hr_all_subset <- subset(df_panel, home_rule_ind == 1)
@@ -667,9 +671,14 @@ print(all_agencies_summ_table)
 All models include time and agency fixed effects and use HC5 heteroskedasticity-consistent standard errors.
 :::
 
+> The HR and NHR subsets were NOT balanced! 
+
 ```{r twfe_muni_naive}
 
 muni_subset <- subset(df_panel, minor_type == "MUNI" | agency_name == "TOWN CICERO")
+muni_subset<- make.pbalanced(muni_subset)
+
+is.pbalanced(muni_subset)
 
 naive_mod_munis <- plm(log_levy ~ log_av,
                          model = "within",
@@ -677,8 +686,12 @@ naive_mod_munis <- plm(log_levy ~ log_av,
                          data = muni_subset)
 
 hr_subset <- subset(df_panel, home_rule_ind == 1 & (minor_type == "MUNI" | agency_name == "TOWN CICERO"))
+hr_subset<- make.pbalanced(hr_subset)
+is.pbalanced(hr_subset)
 
 nhr_subset <- subset(df_panel, home_rule_ind == 0 & (minor_type == "MUNI" | agency_name == "TOWN CICERO"))
+nhr_subset<- make.pbalanced(nhr_subset)
+is.pbalanced(nhr_subset)
 
 naive_mod_muni_hr <- plm(log_levy ~ log_av,
                          model = "within",
