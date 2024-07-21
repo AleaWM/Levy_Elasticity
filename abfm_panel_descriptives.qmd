@@ -1,0 +1,95 @@
+---
+title: "Descriptive Stats for Levy Project Data"
+format: html
+---
+```{r}
+library(modelsummary)
+library(tidyverse)
+library(janitor)
+```
+
+> I do not trust the calculations for muni_pct_eav_taxed.  Check loop file for how it was calculated. Might just be incorrect denominator?  Other calculations seem fine. 
+
+
+```{r}
+#| label: tryFMVdata
+
+df <- read_csv("panel_data.csv")   ## 10,374
+df <- df |> 
+  mutate(tfl_pct_change = if_else(is.na(tfl_pct_change) | is.infinite(tfl_pct_change), 0, tfl_pct_change) )
+
+df <- df |> select(-c(muni_name, muni_num, agency_w_hr, first6_w_hr, log_eav:reassess_lag2, lag_eav_pct_change1:lag_av_pct_change2))
+
+datasummary_skim(df)
+datasummary_skim(df, type  = "categorical")
+```
+
+
+```{r}
+muni_fmv <- read_csv("Necessary_Files/ptaxsim_muni_level_2006-2022.csv")
+
+muni_fmv <- muni_fmv |> select(-muni_pct_eav_taxed)
+
+#muni_fmv_2006 <- muni_fmv |> filter(year == 2006)
+
+muni_fmv_2022 <- muni_fmv |> 
+  filter(year == 2022)  
+
+
+datasummary_skim(muni_fmv_2022)
+```
+
+
+```{r}
+library(plm)
+df <- left_join(df, muni_fmv) 
+
+
+# Convert to panel data (10,181 obs)
+# df_panel <- pdata.frame(df, index = c("clean_name", "year"))
+df_panel <- df %>% 
+  filter( minor_type == "MUNI" | agency_name == "TOWN CICERO") %>% 
+  pdata.frame(index = c("clean_name", "year") ) %>% 
+  make.pbalanced(balance.type = "shared.individuals")
+
+
+# Balance the panel -> now 9945 obs 
+
+is.pbalanced(df_panel)
+
+pdim(df_panel)
+
+```
+### Test if Fixed Effects should be used
+
+"pooling" is equivalent to classic linear model  
+"within" is like classic linear model with n-1 group dummies. (Dummies for each group and one is the comparison group.)  
+
+```{r eval=FALSE}
+
+# imagine that it makes "one line"for all observations instead of a line for each individual over time
+g <- plm(log_levy ~ log(muni_fmv_taxed),
+                         model = "pooling",
+                         data = muni_subset)
+plmtest(g, effect = "twoways", type = "ghm")
+
+gw <- plm(log_levy ~ log(muni_fmv_taxed),
+                         model = "within",
+                         effect = "twoways",
+                         data = muni_subset)
+
+gp <- plm(log_levy ~ log(muni_fmv_taxed),
+                         model = "pooling",
+                         data = muni_subset)
+
+
+summary(gp)
+summary(gw)
+
+plmtest(g)
+plmtest(gw)
+
+plmtest(naive_mod_munis, effect = "twoways", type = "ghm")
+pFtest(gw, gp)
+```
+
