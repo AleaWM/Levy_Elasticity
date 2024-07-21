@@ -130,6 +130,8 @@ colors <- c("#264653", "#2a9d8f", "#e9c46a", "#f4a261", "#e76f51")
 All models include time and agency fixed effects and use HC5 heteroskedasticity-consistent standard errors.
 :::
 
+Merriman, July 20 - "It might be interesting to run a regression with all non-home-rule agencies that are not municipalities or schools." -- **See Model Below!**
+
 > "Other Agencies" include taxing agencies that are NOT Schools or Municipalities.
 
 
