@@ -401,7 +401,7 @@ print(poly_table_nochi)
 
 # Robustness Checks
 
-2## Plot Model Residuals
+## Plot Model Residuals
 
 The best model appears to use 1 lag of ln(av) and the binomial lag(ln(av)\^2).
 
@@ -456,7 +456,7 @@ pred_best_nochi %>%
 ### Reassessment Lag Dummy Interacted w/ ln(av)
 
 ```{r tbl-reassess_lag_table}
-
+detach("package:dplyr", unload=TRUE)
 relag1 <- plm(log_levy ~ log_av + lag(reassess_year) + log_av*lag(reassess_year),
               model = "within",
               effect = "twoways",
@@ -485,9 +485,7 @@ ht <- export_summs(mods,
                             "F-stat" = "statistic",
                             "p-value" = "p.value"))
 
-reassess_lag_table <- set_caption(ht, "Dependent Variable: ln(levy)")
-
-print(reassess_lag_table)
+ht
 ```
 
 ```{r tbl-reassess_lag_table_nochi}
@@ -520,9 +518,7 @@ ht <- export_summs(mods,
                             "F-stat" = "statistic",
                             "p-value" = "p.value"))
 
-reassess_lag_table_nochi <- set_caption(ht, "Dependent Variable: ln(levy) (Excludes Chicago)")
-
-print(reassess_lag_table_nochi)
+ht
 ```
 
 ### Reassment Dummy Interacted w/ ln(AV)
@@ -557,9 +553,7 @@ ht <- export_summs(mods,
                             "F-stat" = "statistic",
                             "p-value" = "p.value"))
 
-reassess_table_1 <- set_caption(ht, "Dependent Variable: ln(levy)")
-
-print(reassess_table_1)
+ht
 
 ```
 
@@ -594,9 +588,7 @@ ht <- export_summs(mods,
                             "F-stat" = "statistic",
                             "p-value" = "p.value"))
 
-reassess_table_1_nochi <- set_caption(ht, "Dependent Variable: ln(levy) (Excludes Chicago)")
-
-print(reassess_table_1_nochi)
+ht
 ```
 
 ### Interact reassessment w/ each AV lag.
@@ -635,10 +627,7 @@ ht <- export_summs(mods,
                             adj.R2 = "adj.r.squared",
                             "F-stat" = "statistic",
                             "p-value" = "p.value"))
-
-reassess_table_LSAT <- set_caption(ht, "Dependent Variable: ln(levy)")
-
-print(reassess_table_LSAT)
+ht
 
 ```
 
@@ -677,7 +666,5 @@ ht <- export_summs(mods,
                             "F-stat" = "statistic",
                             "p-value" = "p.value"))
 
-reassess_table_LSAT_nochi <- set_caption(ht, "Dependent Variable: ln(levy) (Excludes Chicago)")
-
-print(reassess_table_LSAT_nochi)
+ht
 ```
