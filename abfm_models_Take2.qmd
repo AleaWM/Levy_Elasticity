@@ -56,138 +56,6 @@ SSAs are excluded from our sample.
 
 Chicago is included in our sample.
 
-```{r}
-#| label: load_paneldata
-#| output: false
-#| eval: false
-
-# import 8178 observations
-
-df <- read_csv("panel_data.csv") |>
-  # First column of csv is empty?
-  select(-1) |>
-  # Rename select variables
-  rename(levy = total_final_levy) |>
-  # Filter out zero levies
-  filter(levy > 0) |>
-  # Convert to data frame
-  as.data.frame()
-
-# Convert to panel data (8178 obs)
-
-df_panel <- pdata.frame(df, index = c("agency_num", "year"))
-
-# Balance the panel -> now 7599 obs (lost 579)
-
-is.pbalanced(df_panel)
-
-# df_panel <- make.pbalanced(df_panel, balance.type = "shared.individuals")
-
-# Subset: schools and munis - 3655 obs.
-# NOTE: BALANCING THE PANEL & LIMITING SCHOOL SAMPLE DROPS 194 OF THESE OBS, 
-# THE DIFFERENCE FROM THE MODELS
-# WE SENT MERRIMAN ON 6/11 IS IN THIS NUMBER
-
-school_muni <- subset(df_panel, minor_type == "ELEMENTARY" | minor_type == "SECONDARY" | minor_type == "MUNI" | agency_name == "TOWN CICERO")
-
-# All schools: 1938 obs.
-
-schools <- subset(df_panel, minor_type == "ELEMENTARY" | minor_type == "SECONDARY")
-
-# Elementary schools: 1751 obs.
-
-ele <- subset(df_panel, minor_type == "ELEMENTARY")
-
-# Secondary Schools: 187 obs.
-
-sec <- subset(df_panel, minor_type == "SECONDARY")
-
-# All munis: 1700 obs.
-
-munis <- subset(df_panel, minor_type == "MUNI")
-
-# HR Munis: 1051 obs.
-
-muni_hr <- subset(df_panel, minor_type == "MUNI" & home_rule_ind == 1)
-
-# NHR munis: 685 obs.
-
-muni_nhr <- subset(df_panel, minor_type == "MUNI" & home_rule_ind == 0)
-
-colors <- c("#264653", "#2a9d8f", "#e9c46a", "#f4a261", "#e76f51")
-  
-```
-
-```{r}
-#| label: tryFMVdata
-#| output: false
-
-
-df <- read_csv("panel_data.csv")
-
-muni_fmv <- read_csv("Necessary_Files/ptaxsim_muni_level_2006-2022.csv") 
-
-df <- left_join(df, muni_fmv) |>
-  # Rename select variables
-  rename(levy = total_final_levy) |>
-  # Filter out zero levies
-  filter(levy > 0) |>
-  # Convert to data frame
-  as.data.frame()
-
-# Convert to panel data (10,181 obs)
-# df_panel <- pdata.frame(df, index = c("agency_num", "year"))
-# df_panel <- pdata.frame(df, index = c("clean_name", "year"))
-# df_panel <- make.pbalanced(df_panel, balance.type = "fill")
-
-
-# Convert to panel data (10,181 obs)
-# df_panel <- pdata.frame(df, index = c("clean_name", "year"))
-# df_panel <- make.pbalanced(df_panel, balance.type = "shared.individuals")
-
-df_panel <- pdata.frame(df, index = c("agency_num", "year"))
-df_panel <- make.pbalanced(df_panel, balance.type = "shared.individuals")
-
-
-
-# Balance the panel -> now 9758 obs 
-
-#is.pbalanced(df_panel)
-
-
-
-# Subset: schools and munis - 4250 obs.
-# NOTE: BALANCING THE PANEL & LIMITING SCHOOL SAMPLE DROPS 194 OF THESE OBS, 
-# THE DIFFERENCE FROM THE MODELS
-# WE SENT MERRIMAN ON 6/11 IS IN THIS NUMBER
-
-school_muni <- subset(df_panel, minor_type == "ELEMENTARY" | minor_type == "SECONDARY" | minor_type == "MUNI" | agency_name == "TOWN CICERO")
-
-# All schools: 2380 obs.
-
-schools <- subset(df_panel, minor_type == "ELEMENTARY" | minor_type == "SECONDARY")
-
-# Elementary schools: 1938 obs.
-
-ele <- subset(df_panel, minor_type == "ELEMENTARY")
-
-# Secondary Schools: 442 obs.
-
-sec <- subset(df_panel, minor_type == "SECONDARY")
-
-# All munis: 1870 obs.
-
-munis <- subset(df_panel, minor_type == "MUNI"| agency_name == "TOWN CICERO")
-
-# HR Munis: 1202 obs.
-
-muni_hr <- subset(df_panel,(minor_type == "MUNI" | agency_name == "TOWN CICERO")& home_rule_ind == 1)
-
-# NHR munis: 668 obs.
-
-muni_nhr <- subset(df_panel, (minor_type == "MUNI" | agency_name == "TOWN CICERO")& home_rule_ind == 0)
-
-```
 
 # Naive Model
 
@@ -195,61 +63,61 @@ muni_nhr <- subset(df_panel, (minor_type == "MUNI" | agency_name == "TOWN CICERO
 #| label: load_paneldata_duplicate
 #| output: false
 
-# import 10,181 observations
 
-df <- read_csv("panel_data.csv") |>
+df <- read_csv("panel_data.csv") |>  # 10,374 observations before filtering
   # Rename select variables
   rename(levy = total_final_levy) |>
   # Filter out zero levies
   filter(levy > 0) |>
   # Convert to data frame
   as.data.frame()
-
-# Convert to panel data (10,181 obs)
+# 10,181 obs
 
 df_panel <- pdata.frame(df, index = c("agency_num", "year"))
+# is.pbalanced(df_panel)
 
 # Balance the panel -> now 9758 obs
+df_panel <- make.pbalanced(df_panel)
+# is.pbalanced(df_panel)       # 9,758 obs after balancing
 
-#is.pbalanced(df_panel)
 
-df_panel <- make.pbalanced(df_panel, balance.type = "shared.individuals")
-#is.pbalanced(df_panel)
+# Subset: schools and munis - 4,250
+school_muni <- subset(df_panel, minor_type == "ELEMENTARY" | minor_type == "SECONDARY" | minor_type == "MUNI" | agency_name == "TOWN CICERO") %>%
+ make.pbalanced("shared.individuals")
+# is.pbalanced(school_muni)
 
-# Subset: schools and munis - 3655 obs.
-# NOTE: BALANCING THE PANEL & LIMITING SCHOOL SAMPLE DROPS 194 OF THESE OBS, 
-# THE DIFFERENCE FROM THE MODELS
-# WE SENT MERRIMAN ON 6/11 IS IN THIS NUMBER
 
-school_muni <- subset(df_panel, minor_type == "ELEMENTARY" | minor_type == "SECONDARY" | minor_type == "MUNI" | agency_name == "TOWN CICERO")
-#is.pbalanced(school_muni)
-
-# All schools: 1938 obs.
-
-schools <- subset(df_panel, minor_type == "ELEMENTARY" | minor_type == "SECONDARY")
+# All schools: 2,380 obs.
+schools <- subset(df_panel, minor_type == "ELEMENTARY" | minor_type == "SECONDARY") %>% 
+  make.pbalanced(balance.type = "shared.individuals" )
 #is.pbalanced(schools)
 
-# Elementary schools: 1751 obs.
+# Elementary schools: 1,938 obs.
+ele <- subset(df_panel, minor_type == "ELEMENTARY") %>% 
+  make.pbalanced(balance.type = "shared.individuals" )
 
-ele <- subset(df_panel, minor_type == "ELEMENTARY")
 
-# Secondary Schools: 187 obs.
+# Secondary Schools: 442 obs.
+sec <- subset(df_panel, minor_type == "SECONDARY") %>% 
+  make.pbalanced(balance.type = "shared.individuals" )
 
-sec <- subset(df_panel, minor_type == "SECONDARY")
 
-# All munis: 1700 obs.
 
-munis <- subset(df_panel, minor_type == "MUNI")
-#is.pbalanced(munis)
+# All munis: 1853 obs.
+muni_subset  <- subset(df_panel, minor_type == "MUNI") %>% 
+  make.pbalanced(balance.type = "shared.individuals" )
+# is.pbalanced(munis)
 
-# HR Munis: 1051 obs.
 
-muni_hr <- subset(df_panel, (minor_type == "MUNI" | clean_name == "Cicero")  & home_rule_ind == 1)
-#is.pbalanced(muni_hr)
+# HR Munis: 1,253 obs. --> 1,190 after balancing
+muni_hr <- subset(df_panel, (minor_type == "MUNI" | clean_name == "Cicero")  & home_rule_ind == 1) %>% 
+  make.pbalanced(balance.type = "shared.individuals" )
+# is.pbalanced(muni_hr)
 
-# NHR munis: 685 obs.
 
-muni_nhr <- subset(df_panel, (minor_type == "MUNI" | clean_name == "Cicero")& home_rule_ind == 0)
+# NHR munis: 685 obs. --> 612 after balancing
+muni_nhr <- subset(df_panel, (minor_type == "MUNI" | clean_name == "Cicero")& home_rule_ind == 0) %>% 
+  make.pbalanced(balance.type = "shared.individuals")
 
 colors <- c("#264653", "#2a9d8f", "#e9c46a", "#f4a261", "#e76f51")
   
@@ -262,36 +130,39 @@ colors <- c("#264653", "#2a9d8f", "#e9c46a", "#f4a261", "#e76f51")
 All models include time and agency fixed effects and use HC5 heteroskedasticity-consistent standard errors.
 :::
 
+> "Other Agencies" include taxing agencies that are NOT Schools or Municipalities.
+
+
 ```{r twfe_all_naive}
 
 all_agencies_naive <- plm(log_levy ~ log_av,
                          model = "within",
                          effect = "twoways",
                          data = df_panel)
-#summary(school_muni_naive)
 
-# hr_all_subset <- subset(df_panel, home_rule_ind == 1)
-# 
-# nhr_all_subset <- subset(df_panel, home_rule_ind == 0)
-# 
-# naive_mod_all_hr <- plm(log_levy ~ log_av,
-#                          model = "within",
-#                          effect = "twoways",
-#                          data = hr_all_subset)
-# 
-# naive_mod_all_nhr <- plm(log_levy ~ log_av,
-#                          model = "within",
-#                          effect = "twoways",
-#                          data = nhr_all_subset)
+hr_others <- subset(df_panel, home_rule_ind == 1 & (minor_type != "MUNI" & major_type != "SCHOOL")) %>% make.pbalanced("shared.individuals")
+
+
+nhr_others <- subset(df_panel, home_rule_ind == 0 & (minor_type != "MUNI" & major_type != "SCHOOL")) %>%  make.pbalanced("shared.individuals")
+
+naive_hr_others <- plm(log_levy ~ log_av,
+                         model = "within",
+                         effect = "twoways",
+                         data = hr_others)
+
+naive_nhr_others <- plm(log_levy ~ log_av,
+                         model = "within",
+                         effect = "twoways",
+                         data = nhr_others)
 
 
 all_agencies_summ_table <- 
-  export_summs(all_agencies_naive,
-               model.names = c("All Agencies"),
+  export_summs(all_agencies_naive, naive_hr_others, naive_nhr_others,
+               model.names = c("All Agencies", "Other HR Agencies", "Other NHR Agencies"),
                                 robust = "HC5",
                                 statistics = c(N = "nobs", R2 = "r.squared", adj.R2 = "adj.r.squared"))
 
-#school_muni_summ_table <- set_caption(school_muni_summ_table, "All Agencies, Dependant Variable: ln(levy)")
+
 
 all_agencies_summ_table
 
@@ -305,33 +176,22 @@ All models include time and agency fixed effects and use HC5 heteroskedasticity-
 
 ```{r twfe_muni_naive}
 
-muni_subset <- subset(df_panel, minor_type == "MUNI" | agency_name == "TOWN CICERO")
-muni_subset<- make.pbalanced(muni_subset)
-
-#is.pbalanced(muni_subset)
 
 naive_mod_munis <- plm(log_levy ~ log_av,
                          model = "within",
                          effect = "twoways",
                          data = muni_subset)
 
-hr_subset <- subset(df_panel, home_rule_ind == 1 & (minor_type == "MUNI" | agency_name == "TOWN CICERO"))
-hr_subset<- make.pbalanced(hr_subset)
-#is.pbalanced(hr_subset)
-
-nhr_subset <- subset(df_panel, home_rule_ind == 0 & (minor_type == "MUNI" | agency_name == "TOWN CICERO"))
-nhr_subset<- make.pbalanced(nhr_subset)
-#is.pbalanced(nhr_subset)
 
 naive_mod_muni_hr <- plm(log_levy ~ log_av,
                          model = "within",
                          effect = "twoways",
-                         data = hr_subset)
+                         data = muni_hr)
 
 naive_mod_muni_nhr <- plm(log_levy ~ log_av,
                          model = "within",
                          effect = "twoways",
-                         data = nhr_subset)
+                         data = muni_nhr)
 
 
 muni_summ_table <- 
@@ -381,23 +241,18 @@ ggplot(school_summary, aes(x = `School Type`, y = n, fill = `School Type`)) +
 The community college, miscellaneous, and unified observations are omitted from the "Elementary & Secondary Schools" regression model.
 
 ```{r twfe_school_naive}
+#| tbl-cap: "Schools by Type, Dependent Variable: ln(levy)"
 
-#school_subset <- subset(df_panel, major_type == "SCHOOL")
 
 school_naive <- plm(log_levy ~ log_av,
                         model = "within",
                          effect = "twoways",
                          data = schools)
 
-# ele_school_subset <- subset(df_panel, major_type == "SCHOOL" 
-#                               & minor_type == "ELEMENTARY")
-
 ele_naive <- plm(log_levy ~ log_av,
                             model = "within",
                             effect = "twoways",
                             data = ele)
-
-#second_school_subset <- subset(df_panel, minor_type == "SECONDARY")
 
 sec_naive <- plm(log_levy ~ log_av,
                                model = "within",
@@ -417,7 +272,7 @@ school_summ_table <- export_summs(school_naive, ele_naive, sec_naive,
              robust = "HC5",
              statistics = c(N = "nobs", R2 = "r.squared", adj.R2 = "adj.r.squared"))
 
-#school_table <- set_caption(school_summ_table, "Schools by Type, Dependant Variable: ln(levy)")
+#school_table <- set_caption(school_summ_table, "Schools by Type, Dependent Variable: ln(levy)")
 
 school_summ_table
 
@@ -438,18 +293,21 @@ All models include time and agency fixed effects and use HC5 heteroskedasticity-
 
 ```{r twfe_schools_munis_naive}
 
-muni_school_subset <- subset(df_panel, major_type == "SCHOOL" | minor_type == "MUNI" | agency_name == "TOWN CICERO")
+# 4488 obs, balanced
+muni_school_subset <- subset(df_panel, major_type == "SCHOOL" | minor_type == "MUNI" | agency_name == "TOWN CICERO") %>%
+ make.pbalanced("shared.individuals")
 #is.pbalanced(muni_school_subset)
 
-muni_school_hr <- subset(muni_school_subset, home_rule_ind == 1)   # 1219
-#is.pbalanced(muni_school_hr)
-muni_school_hr <- make.pbalanced(muni_school_hr, "shared.individuals")     ## 1156
+# 1219 --> 1156 after balancing
+muni_school_hr <- subset(muni_school_subset, home_rule_ind == 1) %>%
+ make.pbalanced("shared.individuals")
 #is.pbalanced(muni_school_hr)
 
-muni_school_nhr <- subset(muni_school_subset, home_rule_ind == 0)  # 3269
+# 3269 --> 3213 after balancing
+muni_school_nhr <- subset(muni_school_subset, home_rule_ind == 0)  %>%
+make.pbalanced("shared.individuals")
 #is.pbalanced(muni_school_nhr)    
-muni_school_nhr <- make.pbalanced(muni_school_nhr, "shared.individuals")   # 3213 
-#is.pbalanced(muni_school_nhr)    
+   
 
 naive_muni_school <- plm(log_levy ~ log_av,
                                model = "within",
