@@ -7,7 +7,7 @@ editor: visual
 
 ## Bring in the data
 
-```{r}
+```{r warning = FALSE, message=FALSE}
 library(tidyverse)
 library(dplyr)
 library(plm)
@@ -16,7 +16,7 @@ library(gghighlight)
 
 #16,354 obs
 raw_data_joined <- read_csv("agency_raw_joined.csv")
-
+panel_data <- read_csv("panel_data.csv")
 # Tables from PTAXSIM
 cpi <- read_csv("./Necessary_Files/cpi.csv") # has two year variables!!
 eq_factor <- read_csv("./Necessary_Files/eq_factor.csv") %>% 
@@ -25,7 +25,12 @@ eq_factor <- read_csv("./Necessary_Files/eq_factor.csv") %>%
 
 There were 16,354 observations in the original 'agency' data table from PTAXSIM.
 
+After removing SSAs, municipalities that change home rule status, taxing agencies that are not fully in Cook County, there are 10,374 agencies.
+
+*Check filter steps to get to that number for the panel data.*
+
 ```{r}
+#| output: false
 
 theme_awm <- function(){ 
 
@@ -80,15 +85,36 @@ raw_data_joined %>%
   theme_classic() +  
   geom_text(aes(label = ..count..), stat = "count", vjust=-.1) + 
  # coord_flip() +
-  labs(y="Number of taxing agencies", x= "'major_type' Categories")+ scale_y_continuous(label = scales::comma)
+  labs(y="Number of taxing agencies", x= "'major_type' Categories") + 
+  scale_y_continuous(label = scales::comma)
 
 raw_data_joined %>% 
   ggplot (aes(x= minor_type)) + 
   geom_bar() + 
   theme_awm( ) + 
   geom_text(aes(label = ..count..), stat = "count", hjust=-.1, size = 2) + 
- coord_flip() +
-  labs(title = "Taxing Agency Count: Before Dropping any Observations", y="Number of taxing agencies", x= "'minor_type' Categories")+ scale_y_continuous(label = scales::comma)
+  coord_flip() +
+  labs(title = "Taxing Agency Count: Before Dropping any Observations", y="Number of taxing agencies", x= "'minor_type' Categories") + 
+  scale_y_continuous(label = scales::comma)
+
+
+panel_data %>% 
+  ggplot (aes(x= major_type)) + 
+  geom_bar() + 
+  theme_classic() +  
+  geom_text(aes(label = ..count..), stat = "count", vjust=-.1) + 
+ # coord_flip() +
+  labs(y="Number of taxing agencies", x= "'major_type' Categories") + 
+  scale_y_continuous(label = scales::comma)
+
+panel_data %>% 
+  ggplot (aes(x= minor_type)) + 
+  geom_bar() + 
+  theme_awm( ) + 
+  geom_text(aes(label = ..count..), stat = "count", hjust=-.1, size = 2) + 
+  coord_flip() +
+  labs(title = "Taxing Agency Count: After Dropping Observations", y="Number of taxing agencies", x= "'minor_type' Categories") + 
+  scale_y_continuous(label = scales::comma)
 ```
 
 ## Recoding Variables
@@ -169,7 +195,8 @@ recoded_data %>%
   theme_awm( ) + 
   geom_text(aes(label = ..count..), stat = "count", hjust=-.1, size = 2) + 
  coord_flip() +
-  labs(title = "Taxing Agency Count: Before Dropping any Observations", y="Number of taxing agencies", x= "'minor_type' Categories")+ scale_y_continuous(label = scales::comma)
+  labs(title = "Taxing Agency Count: Before Dropping any Observations", y="Number of taxing agencies", x= "'minor_type' Categories")+
+  scale_y_continuous(label = scales::comma)
 ```
 
 ```{r}
