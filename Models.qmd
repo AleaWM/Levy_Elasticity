@@ -55,7 +55,7 @@ format:
 
 # 2WFE Models with Chicago
 
-We're using the "grouped_munis.csv" data set that Alea cleaned in "CookCounty_PanelData_TFL.rmd". This has also been recreatd in the new chunk named "AWM-setup" that is set to eval=FALSE for non-Alea coders.
+We're using the "grouped_munis.csv" data set that Alea cleaned in "CookCounty_PanelData_TFL.rmd". This has also been recreated in the new chunk named "AWM-setup" that is set to eval=FALSE for non-Alea coders.
 
 TL;DNR: THE BEST MODEL SEEMS TO BE ln(av) with one lag and lag(ln(av)^2)
 
@@ -145,10 +145,12 @@ grouped_manual_has16 <- grouped_manual %>%  # 124 nonHR and 69 HR
 
 gm <- grouped_manual_has16
 
-write.csv(gm, "gm_for_pivots.csv")
+# write.csv(gm, "gm_for_pivots.csv")
 
 
-grouped_manual_has16 %>% filter(grouped_label != "Chicago") %>%  write_csv("gm_nochi_for_pivots.csv")
+# grouped_manual_has16 %>% 
+# filter(grouped_label != "Chicago") %>%    # Remove chicago
+# write_csv("gm_nochi_for_pivots.csv")    # export CSV
 
 ```
 
@@ -160,7 +162,7 @@ We're going to look at some pivot tables... And we're back!
 detach("package:dplyr", unload = TRUE)
 
 
-gm_pd <- pdata.frame(gm, index = c("uniqueid", "year")) 
+gm_pd <- pdata.frame(gm, index = c("uniqueid", "year")) %>% make.pbalanced("shared.individuals")
 
 simple1 <- plm(log_levy ~ log_av,
               model = "within",
@@ -219,10 +221,10 @@ Therefore there is autocorrelation in our panel data. Use HC5 type erroro
 The estimate for correcting the autocorrelation is 0.851...
 
 ```{r}
-#detach("package:dplyr", unload = TRUE)
 
-
-gm_pd <- pdata.frame(gm, index = c("uniqueid", "year")) 
+library(dplyr)
+gm_pd <- pdata.frame(gm, index = c("uniqueid", "year"))  %>% make.pbalanced("shared.individuals")
+detach("package:dplyr", unload = TRUE)
 
 simple1 <- plm(total_final_levy ~ av,
               model = "within",
@@ -364,7 +366,7 @@ export_summs(model_list,
 ```
 
 ```{r}
-
+library(dplyr)
 poly4_resids <- prediction(poly.4)
 
 poly4_resids %>%
@@ -377,6 +379,8 @@ simple3_resids %>%
   ggplot(aes(fitted)) +
   geom_density()
 
+detach("package:dplyr", unload = TRUE)
+
 ```
 
 ::: aside
@@ -387,19 +391,19 @@ Why are the residuals changing so hard once we remove Chicago???
 
 # 2WFE Models Without Chicago
 
-```{r eval = FALSE}
-
+```{r}
+library(dplyr)
 gm <- gm %>% filter(grouped_label!="Chicago")
+gm_pd <- pdata.frame(gm, index = c("uniqueid", "year")) %>% 
+make.pbalanced("shared.individuals")
+detach("package:dplyr", unload = TRUE)
+
 
 ```
 
 ## AV lags, 2WFE
 
 ```{r}
-detach("package:dplyr", unload = TRUE)
-
-
-gm_pd <- pdata.frame(gm, index = c("uniqueid", "year")) 
 
 simple1 <- plm(log_levy ~ log_av,
               model = "within",
@@ -423,10 +427,6 @@ export_summs(simple1, simple2,  simple3, robust = "HC3",
 ```{r}
 
 
-detach("package:dplyr", unload = TRUE)
-
-
-gm_pd <- pdata.frame(gm, index = c("uniqueid", "year")) 
 
 simple1 <- plm(total_final_levy ~ av,
               model = "within",
@@ -475,22 +475,22 @@ export_summs(med1, med2,  med3,
 
 ```{r}
 
-med1.1 <- plm(log_levy ~ log_av + reassess_year + log_av*reassess_year,
+med11 <- plm(log_levy ~ log_av + reassess_year + log_av*reassess_year,
               model = "within",
               effect = "twoways",
               data = gm_pd)
 
-med2.1 <- plm(log_levy ~ log_av + lag(log_av) + reassess_year + log_av*reassess_year,
+med21 <- plm(log_levy ~ log_av + lag(log_av) + reassess_year + log_av*reassess_year,
               model = "within",
               effect = "twoways",
               data = gm_pd)
 
-med3.1 <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av, 2) + reassess_year + log_av*reassess_year,
+med31 <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av, 2) + reassess_year + log_av*reassess_year,
               model = "within",
               effect = "twoways",
               data = gm_pd)
 
-export_summs(med1.1, med2.1,  med3.1, , 
+export_summs(med11, med21,  med31, 
           statistics = c(N = "nobs", R2 = "r.squared", adj.R2 = "adj.r.squared")
           )
 
@@ -500,40 +500,42 @@ export_summs(med1.1, med2.1,  med3.1, ,
 
 ```{r}
 
-poly.1 <- plm(log_levy ~ log_av,
+poly1 <- plm(log_levy ~ log_av,
               model = "within",
               effect = "twoways",
               data = gm_pd)
 
-poly.2 <- plm(log_levy ~ log_av + lag(log_av),
+poly2 <- plm(log_levy ~ log_av + lag(log_av),
               model = "within",
               effect = "twoways",
               data = gm_pd)
 
-poly.3 <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av, 2) + reassess_year + log_av*reassess_year,
+poly3 <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av, 2) + reassess_year + log_av*reassess_year,
               model = "within",
               effect = "twoways",
               data = gm_pd)
 
-poly.3 <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av, 2) + lag(log_av^2),
+poly3 <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av, 2) + lag(log_av^2),
               model = "within",
               effect = "twoways",
               data = gm_pd)
 
-poly.4 <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av^2),
+poly4 <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av^2),
               model = "within",
               effect = "twoways",
               data = gm_pd)
 
-export_summs(poly.1, poly.2, poly.3, poly.4, robust = "HC3", 
+export_summs(poly1, poly2, poly3, poly4, robust = "HC3", 
              statistics = c(N = "nobs", R2 = "r.squared", adj.R2 = "adj.r.squared"))
 ```
 
 ```{r}
+detach("package:dplyr", unload = TRUE)
 
 library(prediction)
+poly4_resids <- prediction(poly4)
 
-poly4_resids <- prediction(poly.4)
+library(dplyr)
 
 poly4_resids %>%
   ggplot(aes(fitted)) +
@@ -545,19 +547,21 @@ simple3_resids %>%
   ggplot(aes(fitted)) +
   geom_density()
 
+
 ```
+
 
 ::: aside
 Why are the residuals changing so hard once we remove Chicago???
 :::
+
 
 # Random Effects
 
 ## AV lags
 
 ```{r}
-
-gm_pd <- pdata.frame(gm, index = c("uniqueid", "year")) 
+detach("package:dplyr", unload = TRUE)
 
 pool1 <- plm(log_levy ~ log_av,
               model = "random",
@@ -580,6 +584,8 @@ export_summs(models,
              statistics = c(N = "nobs", R2 = "r.squared", adj.R2 = "adj.r.squared"))
 
 ```
+
+
 ## Reassessment Year Dummy
 
 ```{r}
