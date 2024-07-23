@@ -19,11 +19,19 @@ df <- df |>
   mutate(tfl_pct_change = if_else(is.na(tfl_pct_change) | is.infinite(tfl_pct_change), 0, tfl_pct_change) )
 
 df <- df |> select(-c(muni_name, muni_num, agency_w_hr, first6_w_hr, log_eav:reassess_lag2, lag_eav_pct_change1:lag_av_pct_change2))
+```
 
+
+```{r}
 datasummary_skim(df)
 datasummary_skim(df, type  = "categorical")
 ```
 
+```{r}
+datasummary_crosstab(major_type ~home_rule_ind, statistic = 1~1+N, data = df%>% filter(year==2022), title = "Taxing Agency Types by Home Rule Indicator", output = "flextable")
+
+datasummary_crosstab(minor_type~home_rule_ind, data = df%>%filter(year==2022),  statistic = 1~1+N, title = "Taxing Agency Types by Home Rule Indicator", output = "flextable")
+```
 
 ```{r}
 muni_fmv <- read_csv("Necessary_Files/ptaxsim_muni_level_2006-2022.csv")
@@ -60,6 +68,8 @@ is.pbalanced(df_panel)
 pdim(df_panel)
 
 ```
+
+
 ### Test if Fixed Effects should be used
 
 "pooling" is equivalent to classic linear model  
@@ -92,4 +102,17 @@ plmtest(gw)
 plmtest(naive_mod_munis, effect = "twoways", type = "ghm")
 pFtest(gw, gp)
 ```
+
+
+## Table 1
+
+```{r}
+datasummary_crosstab(major_type~home_rule_ind, data = df_panel, title = "Taxing Agency Types by Home Rule Indicator", output = "flextable")
+
+datasummary_crosstab(minor_type~home_rule_ind, data = df_panel, title = "Taxing Agency Types by Home Rule Indicator", output = "flextable")
+```
+
+
+## Table 2
+
 
