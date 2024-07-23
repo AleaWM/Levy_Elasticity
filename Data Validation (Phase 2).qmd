@@ -141,8 +141,9 @@ grouped_manual <- recoded_data %>%
   select(year, uniqueid, everything())
 
 
+# 94 non-HR and 76 HR in 2021, 93 non-HR and 77 HR in 2022
 
- grouped_manual %>%  # 94 and 76 HR
+ grouped_manual %>%  
   ungroup() %>%
   filter(year == 2022) %>%
   group_by(home_rule_ind) %>%
@@ -154,15 +155,15 @@ grouped_manual <- recoded_data %>%
 ```{r}
 
 # 1552 obs
-# 2278 - 3/31/2024
-grouped_manual_has17 <- grouped_manual %>%  # 124 nonHR and 69 HR
+# 2278 - 3/31/2024    and 2916 if not filtering for count == 17
+grouped_manual_has17 <- grouped_manual %>% 
   ungroup() %>%
- # filter(year == 2021) %>%
   arrange(home_rule_ind) %>%
   group_by(uniqueid) %>%
-  #distinct() %>%
+  distinct() %>%
   mutate(count = n()) %>%
-  filter(count == 17) %>% ungroup()
+  filter(count == 17) %>% 
+  ungroup()
 
 
 chicago_obs <- grouped_manual_has17 %>% filter(grouped_label == "Chicago")
@@ -368,7 +369,7 @@ grouped_manual_has17 %>%
   facet_wrap(~grouped_label, scales = "free" )
 ```
 
-```{r}
+```{r include = FALSE}
 # grouped_manual_has17 %>% 
 #   filter(grouped_label != "Chicago") %>%
 #   filter(home_rule_ind == 1) %>%
@@ -396,8 +397,12 @@ grouped_manual_has17 %>%
   facet_wrap(~grouped_label, scales = "free" )
 ```
 
-```{r}
+## Models
 
+### HR and Non-HR In Same Model
+
+
+```{r}
 detach("package:dplyr", unload = TRUE)
 
 grouped_munis <- pdata.frame(grouped_manual_has17, index = c("uniqueid", "year")) 
@@ -408,11 +413,14 @@ is.pbalanced(grouped_munis)
 table(grouped_munis$year)
 
 grouped_munis$eav_lag1  <- plm::lag(grouped_munis$log_eav, 1)
-grouped_munis$av_lag  <- plm::lag(grouped_munis$av, 1)
+grouped_munis$av_lag1  <- plm::lag(log(grouped_munis$av), 1)
 
 grouped_munis$eav_lag2  <- plm::lag(grouped_munis$log_eav, 2)
+grouped_munis$av_lag2  <- plm::lag(log(grouped_munis$av), 2)
 
 grouped_munis$cty_eav_lag  <- plm::lag(grouped_munis$cty_total_eav, 1)
+grouped_munis$av_lag_notlogged  <- plm::lag(grouped_munis$av, 1)
+
 
 # 
 # grouped_munis$reassess_lag1 <- plm::lag(grouped_munis$reassess_year, 1)
@@ -421,15 +429,19 @@ grouped_munis$cty_eav_lag  <- plm::lag(grouped_munis$cty_total_eav, 1)
 # 
 # grouped_munis$reassess_lead1 <- plm::lead(grouped_munis$reassess_year, 1)
 # grouped_munis$reassess_lead2 <- plm::lead(grouped_munis$reassess_year, 2)
-        
+```
+
+#### EAV Models
+
+```{r}
 library(dplyr)
 grouped_munis <- grouped_munis %>% 
   mutate(yearly_change = log_eav-eav_lag1,
          yearly_chang_perc =(log_eav-eav_lag1)/eav_lag1,
          eav_change = cty_total_eav - cty_eav_lag,
          eav_change_pct = ((cty_total_eav - cty_eav_lag)/cty_eav_lag),
-         av_change = av - av_lag,
-         av_pct_change = (av-av_lag)/av_lag
+         av_change = av - av_lag_notlogged,
+         av_pct_change = (av-av_lag_notlogged)/av_lag_notlogged
        ) %>%
   mutate(up_down  = ifelse(eav_change > 0, "increased", "decreased"))
 
@@ -496,7 +508,89 @@ export_summs(grouped_model, grouped_cleannames_lag,  grouped_cleannames_withHRin
 
 When using the grouped_labels csv to identify agencies that should be grouped, then there are 124 nonHR and 69 HR grouped taxing districts.
 
-## Seperating hr and nonhr
+
+#### AV Models
+
+```{r}
+library(dplyr)
+grouped_munis <- grouped_munis %>% 
+  mutate(yearly_change = log_eav-eav_lag1,
+         yearly_chang_perc =(log_eav-eav_lag1)/eav_lag1,
+         
+         eav_change = cty_total_eav - cty_eav_lag,
+         eav_change_pct = ((cty_total_eav - cty_eav_lag)/cty_eav_lag),
+         
+         av_change = av - av_lag_notlogged,
+         av_pct_change = (av-av_lag1)/av_lag1
+       ) %>%
+  mutate(up_down  = ifelse(eav_change > 0, "increased", "decreased"))
+
+
+detach("package:dplyr", unload = TRUE)
+
+# All Agencies-Agency & Year FE"
+grouped_model<- plm(log(total_final_levy) ~ log(av), 
+                   # index = c("grouped_w_hr_ind", "year"), 
+                    model = "within", 
+                    effect= "twoways",                    
+                    data = grouped_munis)
+
+
+
+
+
+
+grouped_cleannames_withHRind <- plm(log(total_final_levy) ~ log(av)+ log(av):home_rule_ind, 
+                        #  index = c("grouped_w_hr_ind", "year"), 
+                          model = "within", 
+                          effect= "twoways",                    
+                          data = grouped_munis)
+
+#summary(grouped_cleannames_withHRind)
+
+grouped_cleannames_withHRind_lagged <- plm(log(total_final_levy) ~ log(av)+ log(av):home_rule_ind + lag(log(av),1) + lag(log(av),2), 
+                          #index = c("grouped_w_hr_ind", "year"), 
+                          model = "within", 
+                          effect= "twoways",                    
+                          data = grouped_munis)
+
+#summary(grouped_cleannames_withHRind_lagged)
+
+grouped_cleannames_lag <- plm(log(total_final_levy) ~ log(av) + lag(log(av),1) + lag(log(av),2),
+                          #index = c("grouped_w_hr_ind", "year"), 
+                              model = "within", 
+                              effect= "twoways",                    
+                              data = grouped_munis)
+
+grouped_cleannames_lag2 <- plm(log(total_final_levy) ~ log(av) + lag(log(av),1) + lag(log(av),2)+log(av):home_rule_ind + lag(log(av),1):home_rule_ind  + lag(log(av),2):home_rule_ind ,
+#                          index = c("uniqueid", "year"), 
+                              model = "within", 
+                              effect= "twoways",                    
+                              data = grouped_munis)
+#summary(grouped_cleannames_lag2)
+
+
+model_names <- c(grouped_model = "Grouped manually, Summed Levies", 
+                 grouped_cleannames_lag = "with Lags",
+                 grouped_cleannames_withHRind = "with HR Indicator",
+                 grouped_cleannames_withHRind_lagged = "HR indacator with Lags",
+                grouped_cleannames_lag2 = "HR interact with both Lags") # has Chicago
+
+
+# plot(grouped_model)
+
+
+export_summs(grouped_model, grouped_cleannames_lag,  grouped_cleannames_withHRind, grouped_cleannames_withHRind_lagged, grouped_cleannames_lag2, robust = "HC3",  model.names = model_names, statistics = c(N = "nobs", R2 = "r.squared", adj.R2 = "adj.r.squared"))
+
+
+
+```
+
+
+### Seperating hr and nonhr
+
+#### EAV Models
+
 
 ```{r}
  
@@ -513,14 +607,20 @@ detach("package:dplyr", unload = TRUE)
 
 homerule_minortype_munis$eav_lag1  <- plm::lag(homerule_minortype_munis$log_eav, 1)
 homerule_minortype_munis$eav_lag2  <- plm::lag(homerule_minortype_munis$log_eav, 2)
+homerule_minortype_munis$av_lag1  <- plm::lag(log(homerule_minortype_munis$av), 1)
+
+
 homerule_minortype_munis$cty_eav_lag  <- plm::lag(homerule_minortype_munis$cty_total_eav, 1)
-#homerule_minortype_munis$av_lag  <- plm::lag(homerule_minortype_munis$av, 1)
+homerule_minortype_munis$av_lag_notlogged  <- plm::lag(homerule_minortype_munis$av, 1)
 
         
 library(dplyr)
 homerule_minortype_munis <- homerule_minortype_munis %>% 
   mutate(yearly_change = log_eav-eav_lag1,
          yearly_chang_perc =(log_eav-eav_lag1)/eav_lag1,
+        
+         av_change = av - av_lag_notlogged,
+         av_pct_change = (av-av_lag1)/av_lag1,
          
          eav_change = cty_total_eav - cty_eav_lag,
          eav_change_pct = ((cty_total_eav - cty_eav_lag)/cty_eav_lag)
@@ -631,6 +731,158 @@ export_summs(nonhr_muni_minor_simple, # nonhr_muni_minor_simple0,
              robust = "HC3",  model.names = model_names, 
              statistics = c(N = "nobs", R2 = "r.squared", adj.R2 = "adj.r.squared"))
 ```
+
+#### AV Models
+
+
+```{r}
+ 
+library(dplyr)
+
+homerule_minortype_munis <- grouped_manual %>% 
+  filter(home_rule_ind == 1)
+
+homerule_minortype_munis <- pdata.frame(homerule_minortype_munis, index = c("agency_name", "year"))
+
+homerule_minortype_munis <- make.pconsecutive(homerule_minortype_munis)
+
+detach("package:dplyr", unload = TRUE)
+
+homerule_minortype_munis$eav_lag1  <- plm::lag(homerule_minortype_munis$log_eav, 1)
+homerule_minortype_munis$eav_lag2  <- plm::lag(homerule_minortype_munis$log_eav, 2)
+homerule_minortype_munis$av_lag1  <- plm::lag(log(homerule_minortype_munis$av), 1)
+
+
+homerule_minortype_munis$cty_eav_lag  <- plm::lag(homerule_minortype_munis$cty_total_eav, 1)
+homerule_minortype_munis$av_lag_notlogged  <- plm::lag(homerule_minortype_munis$av, 1)
+
+        
+library(dplyr)
+homerule_minortype_munis <- homerule_minortype_munis %>% 
+  mutate(yearly_change = log_eav-eav_lag1,
+         yearly_chang_perc =(log_eav-eav_lag1)/eav_lag1,
+        
+         av_change = av - av_lag_notlogged,
+         av_pct_change = (av-av_lag1)/av_lag1,
+         
+         eav_change = cty_total_eav - cty_eav_lag,
+         eav_change_pct = ((cty_total_eav - cty_eav_lag)/cty_eav_lag)
+       ) %>%
+  mutate(up_down  = ifelse(eav_change > 0, "increased", "decreased"))
+
+
+detach("package:dplyr", unload = TRUE)
+
+hr_muni_minor_simple0 <- plm(log(total_final_levy)  ~ log(av), 
+                          #  index = c("label_hr", "year"), 
+                            model = "within", effect= "twoways",                    
+                            data = homerule_minortype_munis)
+
+
+hr_muni_minor_simple <- plm(log(total_final_levy)  ~ log(av), 
+            # index = c("label_hr", "year"), 
+             model = "within", effect= "twoways",                    
+             data = homerule_minortype_munis)
+
+## These two should be the same! Shows how subsetting works in plm command.
+# summary(hr_muni_minor_simple0)
+# summary(hr_muni_minor_simple)
+
+hr_muni_minor_lags <- plm(log(total_final_levy)  ~ log(av)  + lag(log(av),1) + lag(log(av),2),
+            # index = c("label_hr", "year"), 
+             model = "within", effect= "twoways",                    
+             data = homerule_minortype_munis)
+
+hr_muni_minor <- plm(log(total_final_levy)  ~ log(av) + lag(log(av),1) + lag(log(av),2) + up_down*log(av),
+            # index = c("label_hr", "year"), 
+             model = "within", effect= "twoways",                    
+             data = homerule_minortype_munis)
+
+# summary(hr_muni_minor)
+model_names = c("Homerule Government Taxing Agencies")
+
+export_summs(hr_muni_minor_simple, #hr_muni_minor_simple0,  
+             hr_muni_minor_lags,             hr_muni_minor, 
+
+             robust = "HC3",  model.names = model_names, 
+             statistics = c(N = "nobs", R2 = "r.squared", adj.R2 = "adj.r.squared"))
+```
+
+```{r}
+ 
+library(dplyr)
+
+nonhr_munis <- grouped_manual %>% 
+  filter(home_rule_ind == 0) %>% select(uniqueid, year, everything())
+
+nonhr_munis <- pdata.frame(nonhr_munis, index = c("agency_name", "year"))
+
+nonhr_munis <- make.pconsecutive(nonhr_munis)
+
+detach("package:dplyr", unload = TRUE)
+
+nonhr_munis$eav_lag1  <- plm::lag(nonhr_munis$log_eav, 1)
+nonhr_munis$eav_lag2  <- plm::lag(nonhr_munis$log_eav, 2)
+
+
+nonhr_munis$av_lag1  <- plm::lag(log(nonhr_munis$av), 1)
+
+nonhr_munis$cty_eav_lag <- plm::lag(nonhr_munis$cty_total_eav, 1)
+nonhr_munis$av_lag_notlogged  <- plm::lag(nonhr_munis$av, 1)
+
+library(dplyr)
+nonhr_munis <- nonhr_munis %>% 
+  mutate(yearly_change = log_eav-eav_lag1,
+         yearly_chang_perc =(log_eav-eav_lag1)/eav_lag1,
+         
+         av_change = av - av_lag_notlogged,
+         av_pct_change = (av-av_lag1)/av_lag1,
+         
+         eav_change = cty_total_eav - cty_eav_lag,
+         eav_change_pct = ((cty_total_eav - cty_eav_lag)/cty_eav_lag)
+       ) %>%
+  mutate(up_down  = ifelse(eav_change > 0, "increased", "decreased"))
+
+
+detach("package:dplyr", unload = TRUE)
+
+nonhr_muni_minor_simple0 <- plm(log(total_final_levy)  ~ log(av), 
+                           # index = c("label_hr", "year"), 
+                            model = "within", effect= "twoways",                    
+                            data = nonhr_munis)
+
+
+nonhr_muni_minor_simple <- plm(log(total_final_levy)  ~ log(av), 
+           #  index = c("label_hr", "year"), 
+             model = "within", effect= "twoways",                    
+             data = nonhr_munis)
+
+## These two should be the same! Shows how subsetting works in plm command.
+# summary(hr_muni_minor_simple0)
+# summary(hr_muni_minor_simple)
+
+nonhr_muni_minor_lags <- plm(log(total_final_levy)  ~ log(av)  + lag(log(av),1) + lag(log(av),2),
+            # index = c("label_hr", "year"), 
+             model = "within", effect= "twoways",                    
+             data = nonhr_munis)
+
+nonhr_muni_minor <- plm(log(total_final_levy)  ~ log(av) + lag(log(av),1) + lag(log(av),2) + up_down*log(av),
+            # index = c("label_hr", "year"), 
+             model = "within", effect= "twoways",                    
+             data = nonhr_munis)
+
+# summary(hr_muni_minor)
+# summary(hr_muni_minor)
+model_names = c("Non-HR Government Taxing Agencies")
+
+export_summs(nonhr_muni_minor_simple, # nonhr_muni_minor_simple0, 
+             nonhr_muni_minor_lags, 
+                      nonhr_muni_minor, 
+
+             robust = "HC3",  model.names = model_names, 
+             statistics = c(N = "nobs", R2 = "r.squared", adj.R2 = "adj.r.squared"))
+```
+
 
 # Percent change
 
