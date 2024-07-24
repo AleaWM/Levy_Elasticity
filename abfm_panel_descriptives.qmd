@@ -1,7 +1,11 @@
 ---
 title: "Descriptive Stats for Levy Project Data"
-format: html
+format: 
+  html:
+    df-print: paged
 ---
+
+
 ```{r warning=FALSE, message=FALSE, output = FALSE}
 library(modelsummary)
 library(tidyverse)
@@ -27,6 +31,7 @@ df <- df |>
   mutate_at(c("home_rule_ind"), as.character)
 ```
 
+# Descriptive Stats
 
 ```{r}
 datasummary_skim(df)
@@ -143,10 +148,6 @@ datasummary_crosstab(minor_type~home_rule_ind, data = df_panel, title = "Taxing 
 
 ## Table 2: Levy and Levy Growth
 
-```{r}
-datasummary_crosstab(major_type~minor_type, data = df_panel, title = "Taxing Agency Types by Home Rule Indicator", output = "flextable")
-```
-
 
 ```{r}
 pop <- readxl::read_xlsx("Necessary_Files/community_cohort_inputs.xlsx") %>% 
@@ -171,38 +172,61 @@ df <- df %>% filter(!is.na(clean_name) ) %>%
 df %>% filter(!is.na(clean_name) & is.na(POP) )    %>% 
   select(clean_name, POP, everything())
 
-df<- df %>% mutate(ext_percap = muni_levy/POP,
-                   taxbase_percap = cty_cook_eav/POP,
-                   tax_rate = muni_levy / cty_cook_eav)
-
-
-
+df<- df %>% mutate(ext_percap = round(muni_levy/POP),
+                   taxbase_percap = round(cty_cook_eav/POP),
+                   tax_rate = round(muni_levy / cty_cook_eav, digits=4))
 ```
+
 ```{r}
 
 df %>% filter(year == 2006 | year == 2022 & (minor_type == "MUNI" | agency_name == "TOWN CICERO") & major_type == "MUNICIPALITY/TOWNSHIP") %>% 
   select(year, agency_name, ext_percap) %>% 
-  pivot_wider(id_cols = "agency_name", names_from = "year", values_from = "ext_percap") %>% arrange(desc(`2022`))
+  pivot_wider(id_cols = "agency_name", names_from = "year", values_from = "ext_percap") %>% arrange(desc(`2022`)) %>% 
+  DT::datatable(rownames = FALSE)
 ```
 
 
 ## Table 3: Tax Base and Tax Base Growth
 
 ```{r}
-df %>% filter(year == 2006 | year == 2022 & (minor_type == "MUNI" | agency_name == "TOWN CICERO") & major_type == "MUNICIPALITY/TOWNSHIP") %>% 
+df %>% 
+  filter(year == 2006 | year == 2022 & 
+           (minor_type == "MUNI" | agency_name == "TOWN CICERO") & 
+           major_type == "MUNICIPALITY/TOWNSHIP") %>% 
   select(year, agency_name, taxbase_percap) %>% 
-  pivot_wider(id_cols = "agency_name", names_from = "year", values_from = "taxbase_percap") %>% arrange(desc(`2022`))
+  pivot_wider(id_cols = "agency_name", names_from = "year", 
+              values_from = "taxbase_percap") %>% 
+  arrange(desc(`2022`)) %>% 
+  DT::datatable(rownames = FALSE)
 ```
 
 
 ## Table 4: Tax Rate and Tax Rate Growth
 
 ```{r}
+#| label: tbl-compositelevy-taxrates
+#| tbl-cap: "Tax rates calculated from composite municipality levy / municipality's tax base"
 
-df %>% filter(year == 2006 | year == 2022 & (minor_type == "MUNI" | agency_name == "TOWN CICERO") & major_type == "MUNICIPALITY/TOWNSHIP") %>% 
+df %>% 
+  filter(year == 2006 | year == 2022 & 
+           (minor_type == "MUNI" | agency_name == "TOWN CICERO") & 
+           major_type == "MUNICIPALITY/TOWNSHIP") %>% 
   select(year, agency_name, tax_rate) %>% 
-  pivot_wider(id_cols = "agency_name", names_from = "year", values_from = "tax_rate") %>% arrange(desc(`2022`))
+  pivot_wider(id_cols = "agency_name", names_from = "year", 
+              values_from = "tax_rate") %>% 
+  arrange(desc(`2022`)) %>% 
+  DT::datatable(rownames = FALSE)
 ```
 
+```{r}
+#| label: tbl-agencylevy-taxrates
+#| tbl-cap: "Tax rates shown come from the `total_final_rate` variable within PTAXSIM's internal `agency` data table. It comes from the total_final_levy / cty_cook_eav."
+
+df %>% 
+  filter(year == 2006 | year == 2022) %>% 
+  select(year, agency_name, total_final_rate) %>% 
+  pivot_wider(id_cols = "agency_name", names_from = "year", values_from = "total_final_rate") %>% arrange(desc(`2022`)) %>% 
+  DT::datatable(rownames = FALSE)
+```
 
 
