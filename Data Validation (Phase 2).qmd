@@ -2,7 +2,6 @@
 title: "Data Exploration--Revised RD"
 author: "MVH & AWM"
 format: html
-editor: visual
 ---
 
 # Municipalities
@@ -153,7 +152,6 @@ grouped_manual <- recoded_data %>%
 72 nonHR and 65 HR if only majortype munis is included.
 
 ```{r}
-
 # 1552 obs
 # 2278 - 3/31/2024    and 2916 if not filtering for count == 17
 grouped_manual_has17 <- grouped_manual %>% 
@@ -164,8 +162,15 @@ grouped_manual_has17 <- grouped_manual %>%
   mutate(count = n()) %>%
   filter(count == 17) %>% 
   ungroup()
+```
 
+```{r eval=FALSE}
+datasummary_crosstab(~home_rule_ind, data = grouped_manual, title = "Taxing Agency Types by Home Rule Indicator", output = "flextable")
 
+datasummary_crosstab(minor_type~home_rule_ind, data = grouped_manual_has17, title = "Taxing Agency Types by Home Rule Indicator", output = "flextable")
+```
+
+```{r}
 chicago_obs <- grouped_manual_has17 %>% filter(grouped_label == "Chicago")
 
 
@@ -401,7 +406,6 @@ grouped_manual_has17 %>%
 
 ### HR and Non-HR In Same Model
 
-
 ```{r}
 detach("package:dplyr", unload = TRUE)
 
@@ -508,7 +512,6 @@ export_summs(grouped_model, grouped_cleannames_lag,  grouped_cleannames_withHRin
 
 When using the grouped_labels csv to identify agencies that should be grouped, then there are 124 nonHR and 69 HR grouped taxing districts.
 
-
 #### AV Models
 
 ```{r}
@@ -586,11 +589,9 @@ export_summs(grouped_model, grouped_cleannames_lag,  grouped_cleannames_withHRin
 
 ```
 
-
 ### Seperating hr and nonhr
 
 #### EAV Models
-
 
 ```{r}
  
@@ -733,7 +734,6 @@ export_summs(nonhr_muni_minor_simple, # nonhr_muni_minor_simple0,
 ```
 
 #### AV Models
-
 
 ```{r}
  
@@ -882,7 +882,6 @@ export_summs(nonhr_muni_minor_simple, # nonhr_muni_minor_simple0,
              robust = "HC3",  model.names = model_names, 
              statistics = c(N = "nobs", R2 = "r.squared", adj.R2 = "adj.r.squared"))
 ```
-
 
 # Percent change
 
@@ -1038,6 +1037,76 @@ school_mod_elementary_simple <- plm(log(total_final_levy) ~ log(cty_total_eav),
 #              school_mod_elementary_simple, school_mod_elementary,
 #              #school_mod_comcol, school_mod_unified,
 #              model.names = model_names, robust=TRUE, statistics = c(N = "nobs", adjR2 = "adj.r.squared"))
+
+model_names = c("All Schools", "All Schools", "Secondary", "Secondary", "Elementary", "Elementary")
+
+export_summs(school_mod_major_simple, school_mod_major,
+             school_mod_secondary_simple,
+             school_mod_secondary,
+             school_mod_elementary_simple, school_mod_elementary,
+
+             model.names = model_names, robust=TRUE, statistics = c(N = "nobs", adjR2 = "adj.r.squared"))
+```
+
+#### AV Models
+
+
+```{r}
+library(dplyr)
+
+schools <- recoded_data %>%
+  filter(major_type == "SCHOOL") %>% 
+  filter(av>0 & total_final_levy> 0 ) %>%
+  mutate(years_existed = n(), .groups = agency_name)
+
+schools <- pdata.frame(schools, index = c("agency_name", "year"))
+
+
+is.pbalanced(schools)
+schools <- plm::make.pbalanced(schools )
+
+detach("package:dplyr", unload = TRUE)
+
+
+# based on major_type == Schools. Groups all schools together. 
+
+school_mod_major_simple <- plm(log(total_final_levy) ~ log(av),
+                               index = c("agency_name", "year"),
+                  model = "within",  effect= "twoways", data = schools)
+
+school_mod_major <- plm(log(total_final_levy) ~ log(av) + lag(log(av), 1) + lag(log(av),2),
+                        index = c("agency_name", "year"),
+                  model = "within",  effect= "twoways", data = schools)
+
+
+school_mod_secondary_simple <- plm(log(total_final_levy) ~ log(av),
+                        subset = minor_type == "SECONDARY",
+                        index = c("agency_name", "year"), model = "within",
+                        effect= "twoways", data = schools)
+
+school_mod_secondary <- plm(log(total_final_levy) ~ log(av) + lag(log(av), 1) + lag(log(av),2),
+                        subset = minor_type == "SECONDARY",
+                        index = c("agency_name", "year"), model = "within",
+                        effect= "twoways", data = schools)
+
+# doesn't exist every year
+# school_mod_unified <- plm(log(total_final_levy) ~ log(av)+ lag(log(av), 1) + lag(log(av),2),
+#                         subset = minor_type == "UNIFIED",
+#                         index = c("agency_name", "year"),
+#                         model = "within",
+#                         effect= "twoways", data = schools)
+
+school_mod_elementary <- plm(log(total_final_levy) ~ log(av) + lag(log(av), 1) + lag(log(av),2),
+                             subset = minor_type == "ELEMENTARY",
+                             index = c("agency_name", "year"),
+                             model = "within",
+                             effect= "twoways", data = schools)
+
+school_mod_elementary_simple <- plm(log(total_final_levy) ~ log(av),
+                             subset = minor_type == "ELEMENTARY",
+                             index = c("agency_name", "year"), model = "within",
+                             effect= "twoways", data = schools)
+
 
 model_names = c("All Schools", "All Schools", "Secondary", "Secondary", "Elementary", "Elementary")
 
