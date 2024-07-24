@@ -2,10 +2,11 @@
 title: "Descriptive Stats for Levy Project Data"
 format: html
 ---
-```{r}
+```{r warning=FALSE, message=FALSE, output = FALSE}
 library(modelsummary)
 library(tidyverse)
 library(janitor)
+library(dplyr)
 ```
 
 > I do not trust the calculations for muni_pct_eav_taxed.  Check loop file for how it was calculated. Might just be incorrect denominator?  Other calculations seem fine. 
@@ -16,9 +17,14 @@ library(janitor)
 
 df <- read_csv("panel_data.csv")   ## 10,374
 df <- df |> 
-  mutate(tfl_pct_change = if_else(is.na(tfl_pct_change) | is.infinite(tfl_pct_change), 0, tfl_pct_change) )
+  mutate(tfl_pct_change = if_else(is.na(tfl_pct_change) | 
+                                    is.infinite(tfl_pct_change), 
+                                  0, tfl_pct_change) )
 
-df <- df |> select(-c(muni_name, muni_num, agency_w_hr, first6_w_hr, log_eav:reassess_lag2, lag_eav_pct_change1:lag_av_pct_change2))
+df <- df |> 
+  select(-c(muni_name, muni_num, agency_w_hr, first6_w_hr, log_eav:reassess_lag2, 
+            lag_eav_pct_change1:lag_av_pct_change2)) %>%
+  mutate_at(c("home_rule_ind"), as.character)
 ```
 
 
@@ -28,9 +34,13 @@ datasummary_skim(df, type  = "categorical")
 ```
 
 ```{r}
-datasummary_crosstab(major_type ~home_rule_ind, statistic = 1~1+N, data = df%>% filter(year==2022), title = "Taxing Agency Types by Home Rule Indicator", output = "flextable")
+datasummary_crosstab(major_type ~home_rule_ind, statistic = 1~1+N, 
+                     data = df%>% filter(year==2022), 
+                     title = "Taxing Agency Types by Home Rule Indicator", output = "flextable")
 
-datasummary_crosstab(minor_type~home_rule_ind, data = df%>%filter(year==2022),  statistic = 1~1+N, title = "Taxing Agency Types by Home Rule Indicator", output = "flextable")
+datasummary_crosstab(minor_type~home_rule_ind, data = df%>%filter(year==2022),  
+                     statistic = 1~1+N, 
+                     title = "Taxing Agency Types by Home Rule Indicator", output = "flextable")
 ```
 
 ```{r}
@@ -45,6 +55,9 @@ muni_fmv_2022 <- muni_fmv |>
 
 
 datasummary_skim(muni_fmv_2022)
+
+muni_fmv %>% filter(year==2022) %>% select(muni_fmv, muni_fmv_taxed, muni_eav_taxed, muni_levy, muni_current_rate_avg, muni_PC_total, muni_eav, muni_avg_C2_bill_noexe, muni_avg_C2_bill_withexe) %>% datasummary_skim(fmt = fmt_sprintf("%.0f"))
+muni_fmv %>% filter(year==2006)%>% select(muni_fmv, muni_fmv_taxed, muni_eav_taxed, muni_levy, muni_current_rate_avg, muni_PC_total, muni_eav, muni_avg_C2_bill_noexe, muni_avg_C2_bill_withexe) %>% datasummary_skim(fmt = fmt_sprintf("%.0f"))
 ```
 
 
@@ -56,7 +69,7 @@ df <- left_join(df, muni_fmv)
 # Convert to panel data (10,181 obs)
 # df_panel <- pdata.frame(df, index = c("clean_name", "year"))
 df_panel <- df %>% 
-  filter( minor_type == "MUNI" | agency_name == "TOWN CICERO") %>% 
+  filter( minor_type == "MUNI" | agency_name == "TOWN CICERO" | minor_type == "ELEMENTARY" | minor_type=="SECONDARY") %>% 
   pdata.frame(index = c("clean_name", "year") ) %>% 
   make.pbalanced(balance.type = "shared.individuals")
 
@@ -68,7 +81,22 @@ is.pbalanced(df_panel)
 pdim(df_panel)
 
 ```
+```{r}
+datasummary_crosstab(major_type ~home_rule_ind, statistic = 1~1+N, data = df_panel%>% filter(year==2022), title = "Taxing Agency Types by Home Rule Indicator", output = "flextable")
 
+datasummary_crosstab(minor_type~home_rule_ind, data = df_panel%>%filter(year==2022),  statistic = 1~1+N, title = "Taxing Agency Types by Home Rule Indicator", output = "flextable")
+```
+
+```{r}
+df_panel %>% filter(year==2022) %>% select(muni_fmv, muni_fmv_taxed, muni_eav_taxed, muni_levy, muni_current_rate_avg, muni_PC_total, muni_eav, muni_avg_C2_bill_noexe, muni_avg_C2_bill_withexe) %>% datasummary_skim(fmt = fmt_sprintf("%.0f"))
+
+df_panel %>% filter(year==2006)%>% select(muni_fmv, muni_fmv_taxed, muni_eav_taxed, muni_levy, muni_current_rate_avg, muni_PC_total, muni_eav, muni_avg_C2_bill_noexe, muni_avg_C2_bill_withexe) %>% datasummary_skim(fmt = fmt_sprintf("%.0f"))
+
+#df_panel %>% 
+ # filter(year==2006)%>% 
+  #select(muni_fmv, muni_fmv_taxed, muni_levy, muni_current_rate_avg, muni_PC_total, muni_eav, muni_avg_C2_bill_noexe, muni_avg_C2_bill_withexe) %>% 
+  datasummary(~minor_type, data = df_panel %>% filter(year==2022), fmt = fmt_sprintf("%.0f"))
+```
 
 ### Test if Fixed Effects should be used
 
@@ -104,7 +132,7 @@ pFtest(gw, gp)
 ```
 
 
-## Table 1
+## Table 1: Name and Number of Taxing Agencies
 
 ```{r}
 datasummary_crosstab(major_type~home_rule_ind, data = df_panel, title = "Taxing Agency Types by Home Rule Indicator", output = "flextable")
@@ -113,6 +141,49 @@ datasummary_crosstab(minor_type~home_rule_ind, data = df_panel, title = "Taxing 
 ```
 
 
-## Table 2
+## Table 2: Levy and Levy Growth
 
+```{r}
+datasummary_crosstab(major_type~minor_type, data = df_panel, title = "Taxing Agency Types by Home Rule Indicator", output = "flextable")
+```
+
+## Table 3: Tax Base and Tax Base Growth
+
+```{r}
+pop <- readxl::read_xlsx("Necessary_Files/community_cohort_inputs.xlsx") %>% 
+  select(MUNI, POP) %>% filter(!is.na(MUNI))
+library(dplyr)
+
+pop <- pop %>% 
+  mutate(MUNI = case_when(
+    MUNI == "Forest View" ~ "Forestview",
+    MUNI == "East Hazel Crest" ~ "East Hazelcrest",
+    MUNI == "Hazel Crest" ~ "Hazelcrest",
+    MUNI == "McCook" ~ "Mc Cook",
+    MUNI == "Mount Prospect" ~ "Mt Prospect",
+    MUNI == "Northlake" ~ "North Lake",
+    TRUE~as.character(MUNI)
+  )
+  )
+
+df <- df %>% filter(!is.na(clean_name) ) %>% 
+  left_join(pop, by = c("clean_name" = "MUNI"))
+                
+df %>% filter(!is.na(clean_name) & is.na(POP) )    %>% 
+  select(clean_name, POP, everything())
+
+df<- df %>% mutate(ext_percap = total_final_levy/POP)
+
+df %>% filter(year == 2006 | year == 2022 & (minor_type == "MUNI" | agency_name == "TOWN CICERO") & major_type == "MUNICIPALITY/TOWNSHIP") %>% 
+  select(year, agency_name, ext_percap) %>% 
+  pivot_wider(id_cols = "agency_name", names_from = "year", values_from = "ext_percap") %>% arrange(desc(`2022`))
+```
+
+
+## Table 4: Tax Rate and Tax Rate Growth
+
+
+```{r}
+
+```
 
