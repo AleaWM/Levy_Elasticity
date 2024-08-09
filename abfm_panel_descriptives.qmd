@@ -3,10 +3,14 @@ title: "Descriptive Stats for Levy Project Data"
 format: 
   html:
     df-print: paged
+    code-fold: true
+    tbl-cap-location: margin
+    toc: true
+    toc-location: left
 ---
 
 
-```{r warning=FALSE, message=FALSE, output = FALSE}
+```{r setup, warning=FALSE, message=FALSE, output = FALSE}
 library(modelsummary)
 library(tidyverse)
 library(janitor)
@@ -29,6 +33,7 @@ df <- df |>
   select(-c(muni_name, muni_num, agency_w_hr, first6_w_hr, log_eav:reassess_lag2, 
             lag_eav_pct_change1:lag_av_pct_change2)) %>%
   mutate_at(c("home_rule_ind"), as.character)
+
 ```
 
 # Descriptive Stats
@@ -140,9 +145,23 @@ pFtest(gw, gp)
 ## Table 1: Name and Number of Taxing Agencies
 
 ```{r}
-datasummary_crosstab(major_type~home_rule_ind, data = df_panel, title = "Taxing Agency Types by Home Rule Indicator", output = "flextable")
+#| label: tbl-majortype-byhomerule
+#| tbl-cap: "Major type taxing agencies by home rule indicator"
 
-datasummary_crosstab(minor_type~home_rule_ind, data = df_panel, title = "Taxing Agency Types by Home Rule Indicator", output = "flextable")
+datasummary_crosstab(major_type~home_rule_ind, data = df_panel, 
+                     # title = "Taxing Agency Types by Home Rule Indicator", 
+                     output = "flextable", stars = TRUE)
+```
+
+
+```{r}
+#| label: tbl-minortype-byhomerule
+#| tbl-cap: "Minor type taxing agencies by home rule indicator"
+
+datasummary_crosstab(minor_type~home_rule_ind, data = df_panel, 
+                    # title = "Taxing Agency Types by Home Rule Indicator", 
+                     output = "flextable",
+                    stars = TRUE)
 ```
 
 
@@ -178,17 +197,28 @@ df<- df %>% mutate(ext_percap = round(muni_levy/POP),
 ```
 
 ```{r}
+#| label: tbl-extperperson
+#| tbl-cap: "Growth in the average levy per person from 2006 to 2022. NOTE: Only uses population count in 2022. Need to get populatio count from 2006 for munis."
 
-df %>% filter(year == 2006 | year == 2022 & (minor_type == "MUNI" | agency_name == "TOWN CICERO") & major_type == "MUNICIPALITY/TOWNSHIP") %>% 
+df %>% 
+  filter(year == 2006 | year == 2022 & 
+           (minor_type == "MUNI" | agency_name == "TOWN CICERO") & 
+           major_type == "MUNICIPALITY/TOWNSHIP") %>% 
   select(year, agency_name, ext_percap) %>% 
-  pivot_wider(id_cols = "agency_name", names_from = "year", values_from = "ext_percap") %>% arrange(desc(`2022`)) %>% 
+  pivot_wider(id_cols = "agency_name", names_from = "year", 
+              values_from = "ext_percap") %>% 
+  mutate(pct_growth = (round((`2022`-`2006`)/`2006` * 100, digits = 1) ) ) %>%
+  arrange(desc(`2022`)) %>% 
   DT::datatable(rownames = FALSE)
 ```
 
 
 ## Table 3: Tax Base and Tax Base Growth
 
-```{r}
+```{r} 
+#| label: tbl-taxbasegrowth
+#| tbl-cap: "Growth in the tax base from 2006 to 2022."
+
 df %>% 
   filter(year == 2006 | year == 2022 & 
            (minor_type == "MUNI" | agency_name == "TOWN CICERO") & 
@@ -196,6 +226,8 @@ df %>%
   select(year, agency_name, taxbase_percap) %>% 
   pivot_wider(id_cols = "agency_name", names_from = "year", 
               values_from = "taxbase_percap") %>% 
+  mutate(pct_growth = (round((`2022`-`2006`)/`2006` * 100, digits = 1) ) ) %>%
+
   arrange(desc(`2022`)) %>% 
   DT::datatable(rownames = FALSE)
 ```
@@ -214,6 +246,8 @@ df %>%
   select(year, agency_name, tax_rate) %>% 
   pivot_wider(id_cols = "agency_name", names_from = "year", 
               values_from = "tax_rate") %>% 
+  mutate(pct_growth = (round((`2022`-`2006`)/`2006` * 100, digits = 1) ) ) %>%
+
   arrange(desc(`2022`)) %>% 
   DT::datatable(rownames = FALSE)
 ```
@@ -225,8 +259,27 @@ df %>%
 df %>% 
   filter(year == 2006 | year == 2022) %>% 
   select(year, agency_name, total_final_rate) %>% 
-  pivot_wider(id_cols = "agency_name", names_from = "year", values_from = "total_final_rate") %>% arrange(desc(`2022`)) %>% 
+  pivot_wider(id_cols = "agency_name", names_from = "year", values_from = "total_final_rate") %>%   
+  mutate(pct_growth = (round((`2022`-`2006`)/`2006` * 100, digits = 1) ) ) %>%
+
+  arrange(desc(`2022`)) %>% 
   DT::datatable(rownames = FALSE)
+```
+
+```{r}
+#| label: tbl-descriptivestats-nochicago
+#| tbl-cap: "Descriptive Stats for Taxing Agencies Outside of Chicago"
+
+df %>% filter(year==2006) %>% 
+  filter(clean_name!="Chicago") %>%
+  select(ext_percap, taxbase_percap, muni_fmv_taxed, muni_eav_taxed, muni_levy, total_final_levy, total_final_rate, cty_cook_eav, muni_current_rate_avg, muni_PC_total, muni_avg_C2_bill_noexe, muni_avg_C2_bill_withexe) %>% 
+  datasummary_skim(fmt = fmt_sprintf("%.0f"))
+
+
+df %>% filter(year==2022) %>% 
+  filter(clean_name!="Chicago") %>%
+  select(ext_percap, taxbase_percap, muni_fmv_taxed, muni_eav_taxed, muni_levy, total_final_levy, total_final_rate, cty_cook_eav, muni_current_rate_avg, muni_PC_total, muni_avg_C2_bill_noexe, muni_avg_C2_bill_withexe) %>% 
+  datasummary_skim(fmt = fmt_sprintf("%.0f"))
 ```
 
 
