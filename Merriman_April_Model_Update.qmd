@@ -14,8 +14,8 @@ format:
     fig-cap-location: top
     grid:
       sidebar-width: 200px
-      body-width: 900px
-      margin-width: 200px
+      body-width: 1000px
+      margin-width: 100px
 ---
 
 
@@ -455,7 +455,16 @@ pred_best_nochi %>%
 
 ### Reassessment Lag Dummy Interacted w/ ln(av)
 
-```{r tbl-reassess_lag_table}
+```{r}
+#| label: tbl-reassess_lag_table 
+#| tbl-cap: "Reassessment Lag Dummy Interacted with ln(AV). Includes Chicago on Left, Excludes Chicago on Right"
+#| tbl-subcap: 
+#|   - "Includes Chicago"
+#|   - "Excludes Chicago"
+#| tbl-cap-location: top
+#| layout-ncol: 2
+
+
 detach("package:dplyr", unload=TRUE)
 relag1 <- plm(log_levy ~ log_av + lag(reassess_year) + log_av*lag(reassess_year),
               model = "within",
@@ -486,9 +495,6 @@ ht <- export_summs(mods,
                             "p-value" = "p.value"))
 
 ht
-```
-
-```{r tbl-reassess_lag_table_nochi}
 
 relag1_nochi <- plm(log_levy ~ log_av + lag(reassess_year) + log_av*lag(reassess_year),
               model = "within",
@@ -523,7 +529,15 @@ ht
 
 ### Reassment Dummy Interacted w/ ln(AV)
 
-```{r reassess_table_1}
+```{r}
+#| label: tbl-reassess_table_1
+#| layout-ncol: 2
+#| tbl-cap: "Reassessment Lag Dummy Interacted with ln(AV). Includes Chicago on Left, Excludes Chicago on Right"
+#| tbl-subcap: 
+#|   - "Includes Chicago"
+#|   - "Excludes Chicago"
+#| tbl-cap-location: top
+
 
 reass1_1 <- plm(log_levy ~ log_av + reassess_year + log_av*reassess_year,
               model = "within",
@@ -555,9 +569,6 @@ ht <- export_summs(mods,
 
 ht
 
-```
-
-```{r reassess_table_1_nochi}
 
 reass1_1_nochi <- plm(log_levy ~ log_av + reassess_year + log_av*reassess_year,
               model = "within",
@@ -593,7 +604,14 @@ ht
 
 ### Interact reassessment w/ each AV lag.
 
-```{r reassess_table_LSAT}
+```{r}
+#| label: tbl-reassess_table_LSAT
+#| layout-ncol: 2
+#| tbl-cap: "Reassessment w/ AV Lag Interaction"
+#| tbl-subcap: 
+#|      - "Includes Chicago"
+#|      - "Excludes Chicago"
+#| tbl-cap-location: top
 
 reass2_1 <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av, 2),
               model = "within",
@@ -628,10 +646,6 @@ ht <- export_summs(mods,
                             "F-stat" = "statistic",
                             "p-value" = "p.value"))
 ht
-
-```
-
-```{r reassess_table_LSAT_nochi}
 
 reass2_1_nochi <- plm(log_levy ~ log_av + lag(log_av) + lag(log_av, 2),
               model = "within",
