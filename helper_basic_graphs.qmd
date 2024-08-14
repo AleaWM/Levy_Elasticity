@@ -296,6 +296,7 @@ governments_panel %>%
   theme_awm( ) 
 
 schools_panel %>% 
+  filter(year == 2022) %>%
   ggplot (aes(x= minor_type)) + 
   geom_bar(fill = "red")+ 
   geom_text(aes(label = ..count..), stat = "count", hjust=-.1, size = 3) + 
