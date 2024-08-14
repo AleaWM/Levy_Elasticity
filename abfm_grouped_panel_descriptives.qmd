@@ -1,0 +1,448 @@
+---
+title: "Descriptive Stats for Levy Project Data"
+format: 
+  html:
+    df-print: paged
+    code-fold: true
+    tbl-cap-location: margin
+    toc: true
+    toc-location: left
+---
+
+
+```{r setup, warning=FALSE, message=FALSE, output = FALSE}
+library(modelsummary)
+library(tidyverse)
+library(janitor)
+library(dplyr)
+```
+
+> I do not trust the calculations for muni_pct_eav_taxed.  Check loop file for how it was calculated. Might just be incorrect denominator?  Other calculations seem fine. 
+
+
+```{r}
+#| label: tryFMVdata
+
+df <- read_csv("panel_data.csv")   ## 10,374
+df <- df |> filter(year > 2009)    ## 7923 obs
+  # 
+  # mutate(tfl_pct_change = if_else(is.na(tfl_pct_change) | 
+  #                                   is.infinite(tfl_pct_change), 
+  #                                 0, tfl_pct_change) )
+
+df <- df |> 
+  select(-c(muni_name, muni_num, agency_w_hr, first6_w_hr, log_eav:reassess_lag2, 
+            lag_eav_pct_change1:lag_av_pct_change2)) %>%
+  mutate_at(c("home_rule_ind"), as.character)
+
+gm_nochi <- read.csv("gm_nochi_for_pivots.csv")
+library(plm)
+nochi_pd <- pdata.frame(gm_nochi, 
+                        index = c("uniqueid", "year"))
+
+
+```
+
+```{r}
+raw_data_joined <- read_csv("agency_raw_joined.csv")    # 17,2294 obs
+
+## Fill in missing data for taxable EAV variables
+## uses logic that EAV = levy / tax rate = EAV
+raw_data_joined <- raw_data_joined %>%
+  
+  # drops 5332 taxing agencies (agency-year combos)
+  filter(minor_type != "SSA") %>% 
+  
+  # fills in missing cty_cook_eav variables. 
+  mutate(cty_cook_eav = ifelse(is.na(cty_cook_eav) & total_final_levy > 0, 
+                               total_final_levy / (total_final_rate/100), cty_cook_eav),
+         cty_total_eav = ifelse(is.na(cty_total_eav) & total_final_levy > 0 , 
+                                total_final_levy / (total_final_rate/100), cty_total_eav)) %>% 
+  
+  # then keeps only taxing agencies that have a taxable EAV > 0
+  filter(cty_total_eav > 0 )
+
+## 11,533 obs - AWM 3/31/2024
+
+
+
+# pulls in additional tables that exist in PTAXSIM database
+# for calculating taxable AV: Taxable EAV / 
+cpi <- read_csv("./Necessary_Files/cpi.csv") 
+
+eq_factor <- read_csv("./Necessary_Files/eq_factor.csv") %>% 
+  select(-eq_factor_tentative)
+
+# Remove taxing agencies that had a levy of $0 for any year. 
+# drop all occurrences of the taxing agency
+# Countryside, Deer Park, Homer Glen, Norridge, Oak Brook, Schaumburg, Dixmoor (2011 only) are dropped using `dropped_munis 
+dropped_munis <- c("030250000", "030270000", "030300000", "030585000", "030840000", "030890000", "031150000", "031230000")
+
+
+exclude_hr_change <- c("030770000", "030800000","030880000", "031070000", "031190000", "031250000" )
+
+
+recoded_data <- raw_data_joined %>% 
+  left_join(cpi, by = c("year" = "levy_year")) %>%
+  left_join(eq_factor) %>%
+  
+  mutate(
+    agency_num = as.character(agency_num),            # change variable type
+    agency_num = str_pad(agency_num, 9, "left", "0"), # add missing leading zeros
+    first6 = str_pad(first6, 6, "left", "0"),
+    home_rule_ind = as.character(home_rule_ind),      # change reference category
+    minor_type = as.factor(minor_type),
+    reassess_year = as.character(reassess_year)       # change variable type
+    ) %>%
+  
+  mutate(cty_total_eav = as.numeric(cty_total_eav),    # taxable eav in cook and neighboring counties
+         cty_cook_eav = as.numeric(cty_cook_eav),      # taxable EAV in cook county only
+         pct_in_Cook = cty_cook_eav / cty_total_eav,   # to identify taxing agencies that cross county lines
+         total_final_levy = as.numeric(total_final_levy), 
+         av = cty_cook_eav / eq_factor_final,          # backed out taxable Assessed Value of properties
+         first6_w_hr = str_c(first6, "_", home_rule_ind),
+         agency_w_hr = str_c(agency_num, "_", home_rule_ind)
+         )
+
+
+
+recoded_data <- recoded_data %>% 
+  
+  #keep only agencies greater than 90% in Cook
+  filter(pct_in_Cook > 0.9) %>% 
+  
+  mutate(
+    # Add 1 to total_final_levy to allow ln transformation.
+    # we do not want to drop agencies if they have zero because we still need to group them in a later step.
+    total_final_levy_4log = total_final_levy + 1,
+  
+    log_eav = log(cty_total_eav),       # Taxable EAV within Cook AND neighboring counties.
+    log_levy = log(total_final_levy_4log),  
+    log_av = log(av),
+    year = as.factor(year),             # change to factor type for plm()
+    agency_num = as.factor(agency_num)  # factor for plm()
+    
+  )
+
+groupies <- read_csv("grouped_labels.csv") 
+head(groupies)
+
+groupies <- groupies %>%          
+  mutate(agency_num = str_pad(agency_num, 9, "left", "0"),
+         agency_num = as.factor(agency_num), 
+         first6 = as.character(first6), # make character
+        # home_rule_ind = as.character(home_rule_ind),
+         first6 = str_pad(first6, 6, "left", "0"), # add leading zeros
+         first6_w_hr_ind = str_c(first6, "_", hr_ind))
+
+after2009 <- recoded_data %>% 
+  ungroup() %>% 
+  mutate(year_num = as.numeric(as.character(year)) ) %>% 
+  filter(year_num > 2009) %>%
+ # filter(year %in% c("2018", "2019", "2020". "2021") ) %>%   
+  left_join(groupies,
+            by = c("agency_name", "agency_num")
+            ) %>% 
+    filter(major_type == "MUNICIPALITY/TOWNSHIP" # | major_type == "MISCELLANEOUS"
+           & minor_type != "MISC"
+           ) %>%  
+ # filter(home_rule_ind == 1) %>% 
+  group_by(year, grouped_label, home_rule_ind, lim_rate) %>% 
+  summarize(agency_name = first(agency_name),
+            agency_num = first(agency_num),
+            total_final_levy = sum(total_final_levy, na.rm=TRUE)+1,
+            cty_cook_eav = first(cty_cook_eav), 
+            av = first(av), ## was sum(), now first()
+            Triad = first(Triad), 
+            agency_count = n(),
+            reassess_year = first(reassess_year),
+            home_rule_ind = first(home_rule_ind)) %>% 
+   # left_join(muni_agency_names) %>% 
+    #select(-c(Column1, `Most recent reassessed`)) %>% 
+    mutate(
+      log_av = log(av),
+      log_levy = log(total_final_levy),
+      bundled = ifelse(agency_count > 1, 1, 0),
+      uniqueid = str_c(grouped_label, "_", home_rule_ind, "_", bundled),
+      panel_id = str_c(grouped_label, "_", home_rule_ind, "_", bundled, "_", lim_rate),
+    first2_dig = str_sub(agency_num, 1,2),
+    town = ifelse(first2_dig == "02" | agency_name == "TOWN CICERO", "Town", "Muni")) %>% 
+  filter(total_final_levy > 1) %>%
+  select(year, uniqueid, everything())
+
+ after2009 %>%  
+  ungroup() %>%
+  #filter(year == 2021) %>%
+  group_by(home_rule_ind, year) %>%
+  summarize(count = n())
+
+ 
+```
+
+# Descriptive Stats
+
+```{r}
+df <- after2009
+datasummary_skim(df)
+datasummary_skim(df, type  = "categorical")
+```
+
+```{r}
+# datasummary_crosstab(major_type ~home_rule_ind, statistic = 1~1+N, 
+#                      data = df%>% filter(year==2022), 
+#                      title = "Taxing Agency Types by Home Rule Indicator", output = "flextable")
+# 
+# datasummary_crosstab(minor_type~home_rule_ind, data = df%>%filter(year==2022),  
+#                      statistic = 1~1+N, 
+#                      title = "Taxing Agency Types by Home Rule Indicator", output = "flextable")
+```
+
+```{r eval=FALSE}
+muni_fmv <- read_csv("Necessary_Files/ptaxsim_muni_level_2006-2022.csv")
+
+muni_fmv <- muni_fmv |> select(-muni_pct_eav_taxed)
+
+#muni_fmv_2006 <- muni_fmv |> filter(year == 2006)
+
+muni_fmv_2022 <- muni_fmv |> 
+  filter(year == 2022)  
+
+
+datasummary_skim(muni_fmv_2022)
+
+muni_fmv %>% filter(year==2022) %>% select(muni_fmv, muni_fmv_taxed, muni_eav_taxed, muni_levy, muni_current_rate_avg, muni_PC_total, muni_eav, muni_avg_C2_bill_noexe, muni_avg_C2_bill_withexe) %>% datasummary_skim(fmt = fmt_sprintf("%.0f"))
+muni_fmv %>% filter(year==2010)%>% select(muni_fmv, muni_fmv_taxed, muni_eav_taxed, muni_levy, muni_current_rate_avg, muni_PC_total, muni_eav, muni_avg_C2_bill_noexe, muni_avg_C2_bill_withexe) %>% datasummary_skim(fmt = fmt_sprintf("%.0f"))
+```
+
+
+```{r }
+library(plm)
+df <- after2009 #|> mutate(year = as.numeric(year))# |> left_join(muni_fmv) 
+
+
+# Convert to panel data (10,181 obs)
+# df_panel <- pdata.frame(df, index = c("clean_name", "year"))
+df_panel <- df %>% 
+#  filter( minor_type == "MUNI" | agency_name == "TOWN CICERO" | minor_type == "ELEMENTARY" | minor_type=="SECONDARY") %>% 
+  pdata.frame(index = c("uniqueid", "year") ) %>% 
+  make.pbalanced(balance.type = "shared.individuals")
+
+
+# Balance the panel -> now 9945 obs 
+
+is.pbalanced(df_panel)
+
+pdim(df_panel)
+
+```
+```{r eval=FALSE}
+datasummary_crosstab(major_type ~home_rule_ind, statistic = 1~1+N, data = df_panel%>% filter(year==2022), title = "Taxing Agency Types by Home Rule Indicator", output = "flextable")
+
+datasummary_crosstab(minor_type~home_rule_ind, data = df_panel%>%filter(year==2022),  statistic = 1~1+N, title = "Taxing Agency Types by Home Rule Indicator", output = "flextable")
+```
+
+```{r eval=FALSE}
+df_panel %>% filter(year==2022) %>% select(muni_fmv, muni_fmv_taxed, muni_eav_taxed, muni_levy, muni_current_rate_avg, muni_PC_total, muni_eav, muni_avg_C2_bill_noexe, muni_avg_C2_bill_withexe) %>% datasummary_skim(fmt = fmt_sprintf("%.0f"))
+
+df_panel %>% filter(year==2010)%>% select(muni_fmv, muni_fmv_taxed, muni_eav_taxed, muni_levy, muni_current_rate_avg, muni_PC_total, muni_eav, muni_avg_C2_bill_noexe, muni_avg_C2_bill_withexe) %>% datasummary_skim(fmt = fmt_sprintf("%.0f"))
+
+#df_panel %>% 
+ # filter(year==2006)%>% 
+  #select(muni_fmv, muni_fmv_taxed, muni_levy, muni_current_rate_avg, muni_PC_total, muni_eav, muni_avg_C2_bill_noexe, muni_avg_C2_bill_withexe) %>% 
+  datasummary(~minor_type, data = df_panel %>% filter(year==2022), fmt = fmt_sprintf("%.0f"))
+```
+
+### Test if Fixed Effects should be used
+
+"pooling" is equivalent to classic linear model  
+"within" is like classic linear model with n-1 group dummies. (Dummies for each group and one is the comparison group.)  
+
+```{r eval=FALSE}
+
+# imagine that it makes "one line"for all observations instead of a line for each individual over time
+g <- plm(log_levy ~ log(muni_fmv_taxed),
+                         model = "pooling",
+                         data = muni_subset)
+plmtest(g, effect = "twoways", type = "ghm")
+
+gw <- plm(log_levy ~ log(muni_fmv_taxed),
+                         model = "within",
+                         effect = "twoways",
+                         data = muni_subset)
+
+gp <- plm(log_levy ~ log(muni_fmv_taxed),
+                         model = "pooling",
+                         data = muni_subset)
+
+
+summary(gp)
+summary(gw)
+
+plmtest(g)
+plmtest(gw)
+
+plmtest(naive_mod_munis, effect = "twoways", type = "ghm")
+pFtest(gw, gp)
+```
+
+
+## Table 1: Name and Number of Taxing Agencies
+
+```{r eval=FALSE}
+#| label: tbl-majortype-byhomerule
+#| tbl-cap: "Major type taxing agencies by home rule indicator"
+
+datasummary_crosstab(major_type~home_rule_ind, data = df_panel, 
+                     # title = "Taxing Agency Types by Home Rule Indicator", 
+                     output = "flextable")
+```
+
+
+```{r eval=FALSE}
+#| label: tbl-minortype-byhomerule
+#| tbl-cap: "Minor type taxing agencies by home rule indicator"
+
+datasummary_crosstab(minor_type~home_rule_ind, data = df_panel, 
+                    # title = "Taxing Agency Types by Home Rule Indicator", 
+                     output = "flextable")
+```
+
+
+## Table 2: Levy and Levy Growth
+
+
+```{r}
+# pop <- readxl::read_xlsx("Necessary_Files/community_cohort_inputs.xlsx") %>% 
+#   select(MUNI, POP) %>% filter(!is.na(MUNI))
+
+pop2 <- readxl::read_xlsx("Necessary_Files/populationcounts_cookcountyil.xlsx")
+
+library(dplyr)
+
+# pop <- pop %>% 
+#   mutate(MUNI = case_when(
+#     MUNI == "Forest View" ~ "Forestview",
+#     MUNI == "East Hazel Crest" ~ "East Hazelcrest",
+#     MUNI == "Hazel Crest" ~ "Hazelcrest",
+#     MUNI == "McCook" ~ "Mc Cook",
+#     MUNI == "Mount Prospect" ~ "Mt Prospect",
+#     MUNI == "Northlake" ~ "North Lake",
+#     TRUE~as.character(MUNI)
+#   )
+#   )
+
+pop2 <- pop2 %>% 
+  mutate(Name = case_when(
+    Name == "Forest View" ~ "Forestview",
+    Name == "East Hazel Crest" ~ "East Hazelcrest",
+    Name == "Hazel Crest" ~ "Hazelcrest",
+    Name == "McCook" ~ "Mc Cook",
+    Name == "Mount Prospect" ~ "Mt Prospect",
+    Name == "Northlake" ~ "North Lake",
+    TRUE~as.character(Name)
+  )
+  )
+
+df <- df %>% # filter(!is.na(clean_name) ) %>% 
+  left_join(pop2, by = c("clean_name" = "Name"))
+                
+df %>% filter(!is.na(clean_name) & is.na(pop2010) ) %>% 
+  select(clean_name, pop2010, everything())
+
+df <- df %>% 
+  mutate(ext_percap = case_when(
+    year < 2015 ~ round(muni_levy/pop2010),
+    year >= 2015 ~ round(muni_levy/pop2020)),
+    
+    taxbase_percap = case_when(
+      year < 2015 ~ round(cty_cook_eav/pop2010),
+      year >= 2015 ~ round(cty_cook_eav/pop2020)),
+    
+    tax_rate = round(muni_levy / cty_cook_eav, digits=4))
+
+```
+
+```{r}
+#| label: tbl-extperperson
+#| tbl-cap: "Growth in the average levy per person from 2006 to 2022. Uses 2010 population counts for 2006 and 2020 population counts for 2020."
+
+df %>% 
+  filter(year == 2010 | year == 2022 
+         ) %>% 
+  select(year, agency_name, ext_percap, ext_percap) %>% 
+  pivot_wider( id_cols = "agency_name", names_from = "year", 
+              values_from = "ext_percap") %>% 
+  mutate(pct_growth = (round((`2022`-`2010`)/`2010` * 100, digits = 1) ) ) %>%
+  arrange(desc(`2022`)) %>% 
+  DT::datatable(rownames = FALSE)
+```
+
+
+## Table 3: Tax Base and Tax Base Growth
+
+```{r} 
+#| label: tbl-taxbasegrowth
+#| tbl-cap: "Growth in the tax base per capita from 2006 to 2022. Uses 2010 population counts for 2006 and 2020 population counts for 2020."
+
+df %>% 
+  filter(year == 2010 | year == 2022) %>% 
+  select(year, agency_name, taxbase_percap) %>% 
+  pivot_wider(id_cols = "agency_name", names_from = "year", 
+              values_from = "taxbase_percap") %>% 
+  mutate(pct_growth = (round((`2022`-`2010`)/`2010` * 100, digits = 1) ) ) %>%
+
+  arrange(desc(`2022`)) %>% 
+  DT::datatable(rownames = FALSE)
+```
+
+
+## Table 4: Tax Rate and Tax Rate Growth
+
+```{r}
+#| label: tbl-compositelevy-taxrates
+#| tbl-cap: "Tax rates calculated from composite municipality levy / municipality's tax base"
+
+df %>% 
+  filter(year == 2010 | year == 2022 & 
+           (minor_type == "MUNI" | agency_name == "TOWN CICERO") & 
+           major_type == "MUNICIPALITY/TOWNSHIP") %>% 
+  select(year, agency_name, tax_rate) %>% 
+  pivot_wider(id_cols = "agency_name", names_from = "year", 
+              values_from = "tax_rate") %>% 
+  mutate(pct_growth = (round((`2022`-`2010`)/`2019` * 100, digits = 1) ) ) %>%
+
+  arrange(desc(`2022`)) %>% 
+  DT::datatable(rownames = FALSE)
+```
+
+```{r}
+#| label: tbl-agencylevy-taxrates
+#| tbl-cap: "Tax rates shown come from the `total_final_rate` variable within PTAXSIM's internal `agency` data table. It comes from the total_final_levy / cty_cook_eav."
+
+df %>% 
+  filter(year == 2006 | year == 2022) %>% 
+  select(year, agency_name, total_final_rate) %>% 
+  pivot_wider(id_cols = "agency_name", names_from = "year", values_from = "total_final_rate") %>%   
+  mutate(pct_growth = (round((`2022`-`2010`)/`2010` * 100, digits = 1) ) ) %>%
+
+  arrange(desc(`2022`)) %>% 
+  DT::datatable(rownames = FALSE)
+```
+
+```{r}
+#| label: tbl-descriptivestats-nochicago
+#| tbl-cap: "Descriptive Stats for Taxing Agencies Outside of Chicago"
+
+df %>% filter(year==2010) %>% 
+  filter(clean_name!="Chicago") %>%
+  select(ext_percap, taxbase_percap, muni_fmv_taxed, muni_eav_taxed, muni_levy, total_final_levy, total_final_rate, cty_cook_eav, muni_current_rate_avg, muni_PC_total, muni_avg_C2_bill_noexe, muni_avg_C2_bill_withexe) %>% 
+  datasummary_skim(fmt = fmt_sprintf("%.0f"))
+
+
+df %>% filter(year==2022) %>% 
+  filter(clean_name!="Chicago") %>%
+  select(ext_percap, taxbase_percap, muni_fmv_taxed, muni_eav_taxed, muni_levy, total_final_levy, total_final_rate, cty_cook_eav, muni_current_rate_avg, muni_PC_total, muni_avg_C2_bill_noexe, muni_avg_C2_bill_withexe) %>% 
+  datasummary_skim(fmt = fmt_sprintf("%.0f"))
+```
+
+
