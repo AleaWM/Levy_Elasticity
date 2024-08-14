@@ -14,7 +14,8 @@ format:
 library(modelsummary)
 library(tidyverse)
 library(janitor)
-library(dplyr)
+library(knitr)
+library(DT)
 ```
 
 > I do not trust the calculations for muni_pct_eav_taxed.  Check loop file for how it was calculated. Might just be incorrect denominator?  Other calculations seem fine. 
@@ -167,7 +168,7 @@ datasummary_crosstab(minor_type~home_rule_ind, data = df_panel,
 ## Table 2: Levy and Levy Growth
 
 
-```{r}
+```{r data_load_tbl_2}
 # pop <- readxl::read_xlsx("Necessary_Files/community_cohort_inputs.xlsx") %>% 
 #   select(MUNI, POP) %>% filter(!is.na(MUNI))
 
@@ -217,6 +218,34 @@ df <- df %>%
     tax_rate = round(muni_levy / cty_cook_eav, digits=4))
 
 ```
+
+```{r table_2}
+
+df |>
+  filter(year %in% c("2010", "2022")) |>
+  group_by(year) |>
+  summarize(med_per_cap_levy = median(ext_percap),
+            sd_levy_per_cap = sd(ext_percap),
+            med_levy_per_cap_growth = median((muni_levy/pop2020)/(muni_levy/pop2010)),
+            sd_muni_per_cap_levy_growth = sd((muni_levy/pop2020)/(muni_levy/pop2010))
+  ) |>
+  pivot_longer(-year, names_to = "statistic", values_to = "value") |>
+  pivot_wider(names_from = year, values_from = value) |>
+  datatable(caption = "Summary Statistics (per capita), 2010 and 2022",
+            rownames = FALSE,
+            options = list(
+              dom = 't',
+              scrollX = TRUE, # Enable horizontal scrolling
+              columnDefs = list(
+                list(targets = 1:2, render = JS("function(data, type, row, meta) {
+                  return type === 'display' ? data.toFixed(2) : data;
+              }")),
+                list(targets = 1:2, width = '50px')
+              )
+            ))
+
+```
+
 
 ```{r}
 #| label: tbl-extperperson
