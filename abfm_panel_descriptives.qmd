@@ -156,7 +156,7 @@ datasummary_crosstab(major_type~home_rule_ind, data = df_panel,
 
 
 ```{r}
-#| label: tbl-minortype-byhomerule
+#| label: tbl-minortype-byhomerule2
 #| tbl-cap: "Minor type taxing agencies by home rule indicator"
 
 datasummary_crosstab(minor_type~home_rule_ind, data = df_panel, 
@@ -200,7 +200,7 @@ pop2 <- pop2 %>%
   )
   )
 
-df <- df %>% filter(!is.na(clean_name) ) %>% 
+df <- df %>% # filter(!is.na(clean_name) ) %>% 
   left_join(pop2, by = c("clean_name" = "Name"))
                 
 df %>% filter(!is.na(clean_name) & is.na(pop2010) ) %>% 
@@ -266,9 +266,10 @@ df %>%
 
 ## Table 3: Tax Base and Tax Base Growth
 
-```{r table_2}
+```{r table3}
 
 df |>
+  filter(!is.na(clean_name)) |>
   filter(year %in% c("2010", "2022")) |>
   group_by(year) |>
   summarize("Median Per Capita Tax Base" = median(taxbase_percap),
@@ -298,6 +299,7 @@ df |>
 #| tbl-cap: "Growth in the tax base per capita from 2006 to 2022. Uses 2010 population counts for 2006 and 2020 population counts for 2020."
 
 df %>% 
+  filter(!is.na(clean_name)) %>%
   filter(year == 2006 | year == 2022 & 
            (minor_type == "MUNI" | agency_name == "TOWN CICERO") & 
            major_type == "MUNICIPALITY/TOWNSHIP") %>% 
@@ -318,6 +320,7 @@ df %>%
 #| tbl-cap: "Tax rates calculated from composite municipality levy / municipality's tax base"
 
 df %>% 
+  filter(!is.na(clean_name)) |>
   filter(year == 2006 | year == 2022 & 
            (minor_type == "MUNI" | agency_name == "TOWN CICERO") & 
            major_type == "MUNICIPALITY/TOWNSHIP") %>% 
@@ -364,6 +367,22 @@ df %>% filter(year==2022) %>%
 
 df |>
   filter(year %in% c("2010", "2022")) |>
+  filter(
+      minor_type == "MUNI" | 
+      agency_name == "TOWN CICERO" |
+      major_type == "SCHOOL" |
+      minor_type == "LIBRARY" |
+      minor_type == "PARK"
+    )|>
+  group_by(year) |>
+  
+   # county wide median and stand. dev. for each year
+  mutate(year_rate = median(total_final_rate),
+         sd_year_rate = sd(total_final_rate),
+         ) |>
+  ungroup() |>
+  
+  # could just recode cicero minortype to MUNI instead of TOWNSHIP
   mutate(tab_4_grp = ifelse((minor_type == "MUNI" | agency_name == "TOWN CICERO") & 
            (major_type == "MUNICIPALITY/TOWNSHIP"), "muni",
          ifelse(major_type == "SCHOOL", "school",
@@ -371,9 +390,16 @@ df |>
                        ifelse(minor_type == "PARK", "park",
                               NA
                               ))))) |>
-  filter(!is.na(tab_4_grp)) |>
-  group_by(year) |>
-  mutate(year_rate = sum(total_final_rate),
-         sd_year_rate = sd(total_final_rate))
+  ungroup() |>
+  group_by(year, tab_4_grp) |>
+  summarize(
+    median(total_final_rate), 
+    sd(total_final_rate), 
+    mean(year_rate), 
+    mean(sd_year_rate))
 
+df |>
+  filter(year %in% c("2010", "2022")) |>
+  group_by(year, major_type) |>
+  summarize(n = n())
 ```
