@@ -266,6 +266,33 @@ df %>%
 
 ## Table 3: Tax Base and Tax Base Growth
 
+```{r table_2}
+
+df |>
+  filter(year %in% c("2010", "2022")) |>
+  group_by(year) |>
+  summarize("Median Per Capita Tax Base" = median(taxbase_percap),
+            "Standard Deviation (tax base per capita" = sd(taxbase_percap),
+            "Median Per Capita Levy Growth" = median((muni_levy/pop2020)/(muni_levy/pop2010)),
+            "Standard Deviation (median per capital levy growth" = sd((muni_levy/pop2020)/(muni_levy/pop2010))
+  ) |>
+  pivot_longer(-year, names_to = "statistic", values_to = "value") |>
+  pivot_wider(names_from = year, values_from = value) |>
+  datatable(caption = "Levy Growth Summary Statistics (per capita), 2010 and 2022",
+            rownames = FALSE,
+            options = list(
+              dom = 't',
+              scrollX = TRUE, # Enable horizontal scrolling
+              columnDefs = list(
+                list(targets = 1:2, render = JS("function(data, type, row, meta) {
+                  return type === 'display' ? data.toFixed(2) : data;
+              }")),
+                list(targets = 1:2, width = '50px')
+              )
+            ))
+
+```
+
 ```{r} 
 #| label: tbl-taxbasegrowth
 #| tbl-cap: "Growth in the tax base per capita from 2006 to 2022. Uses 2010 population counts for 2006 and 2020 population counts for 2020."
@@ -333,4 +360,20 @@ df %>% filter(year==2022) %>%
   datasummary_skim(fmt = fmt_sprintf("%.0f"))
 ```
 
+```{r table4}
 
+df |>
+  filter(year %in% c("2010", "2022")) |>
+  mutate(tab_4_grp = ifelse((minor_type == "MUNI" | agency_name == "TOWN CICERO") & 
+           (major_type == "MUNICIPALITY/TOWNSHIP"), "muni",
+         ifelse(major_type == "SCHOOL", "school",
+                ifelse(minor_type == "LIBRARY", "library",
+                       ifelse(minor_type == "PARK", "park",
+                              NA
+                              ))))) |>
+  filter(!is.na(tab_4_grp)) |>
+  group_by(year) |>
+  mutate(year_rate = sum(total_final_rate),
+         sd_year_rate = sd(total_final_rate))
+
+```
