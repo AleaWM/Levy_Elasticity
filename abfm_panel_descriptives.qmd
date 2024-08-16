@@ -109,17 +109,21 @@ df_panel %>% filter(year==2006)%>% select(muni_fmv, muni_fmv_taxed, muni_eav_tax
   datasummary(~minor_type, data = df_panel %>% filter(year==2022), fmt = fmt_sprintf("%.0f"))
 ```
 
+ 
+
+```{r test-fixedeffects-isneeded, eval=FALSE, include = FALSE}
+
 ### Test if Fixed Effects should be used
 
-"pooling" is equivalent to classic linear model  
-"within" is like classic linear model with n-1 group dummies. (Dummies for each group and one is the comparison group.)  
-
-```{r eval=FALSE}
+# "pooling" is equivalent to classic linear model  
+# "within" is like classic linear model with n-1 group dummies. (Dummies for each group and one is the comparison group.) 
+# 
 
 # imagine that it makes "one line"for all observations instead of a line for each individual over time
 g <- plm(log_levy ~ log(muni_fmv_taxed),
                          model = "pooling",
                          data = muni_subset)
+
 plmtest(g, effect = "twoways", type = "ghm")
 
 gw <- plm(log_levy ~ log(muni_fmv_taxed),
@@ -176,17 +180,6 @@ pop2 <- readxl::read_xlsx("Necessary_Files/populationcounts_cookcountyil.xlsx")
 
 library(dplyr)
 
-# pop <- pop %>% 
-#   mutate(MUNI = case_when(
-#     MUNI == "Forest View" ~ "Forestview",
-#     MUNI == "East Hazel Crest" ~ "East Hazelcrest",
-#     MUNI == "Hazel Crest" ~ "Hazelcrest",
-#     MUNI == "McCook" ~ "Mc Cook",
-#     MUNI == "Mount Prospect" ~ "Mt Prospect",
-#     MUNI == "Northlake" ~ "North Lake",
-#     TRUE~as.character(MUNI)
-#   )
-#   )
 
 pop2 <- pop2 %>% 
   mutate(Name = case_when(
@@ -200,13 +193,18 @@ pop2 <- pop2 %>%
   )
   )
 
-df <- df %>% # filter(!is.na(clean_name) ) %>% 
-  left_join(pop2, by = c("clean_name" = "Name"))
-                
-df %>% filter(!is.na(clean_name) & is.na(pop2010) ) %>% 
-  select(clean_name, pop2010, everything())
+df <- df %>% left_join(pop2, by = c("clean_name" = "Name"))
 
-df <- df %>% 
+df_filtered <- df %>%  
+  filter(!is.na(clean_name) )
+                
+# df_filtered %>% 
+#   filter(!is.na(clean_name) & is.na(pop2010) ) %>% 
+#   select(clean_name, pop2010, everything())
+## Homer Glen did not join and get population numbers but it gets dropped anyways 
+# and is mostly outside of Cook County
+
+df_filtered <- df_filtered %>% 
   mutate(ext_percap = case_when(
     year < 2015 ~ round(muni_levy/pop2010),
     year >= 2015 ~ round(muni_levy/pop2020)),
@@ -221,13 +219,13 @@ df <- df %>%
 
 ```{r table_2}
 
-df |>
+df_filtered |>
   filter(year %in% c("2010", "2022")) |>
   group_by(year) |>
   summarize(med_per_cap_levy = median(ext_percap),
             sd_levy_per_cap = sd(ext_percap),
-            med_levy_per_cap_growth = median((muni_levy/pop2020)/(muni_levy/pop2010)),
-            sd_muni_per_cap_levy_growth = sd((muni_levy/pop2020)/(muni_levy/pop2010))
+            med_levy_per_cap_growth = median((muni_levy/pop2020) / (muni_levy/pop2010)),
+            sd_muni_per_cap_levy_growth = sd((muni_levy/pop2020) / (muni_levy/pop2010))
   ) |>
   pivot_longer(-year, names_to = "statistic", values_to = "value") |>
   pivot_wider(names_from = year, values_from = value) |>
@@ -240,7 +238,7 @@ df |>
                 list(targets = 1:2, render = JS("function(data, type, row, meta) {
                   return type === 'display' ? data.toFixed(2) : data;
               }")),
-                list(targets = 1:2, width = '50px')
+              list(targets = 1:2, width = '50px')
               )
             ))
 
@@ -251,7 +249,7 @@ df |>
 #| label: tbl-extperperson
 #| tbl-cap: "Growth in the average levy per person from 2006 to 2022. Uses 2010 population counts for 2006 and 2020 population counts for 2020."
 
-df %>% 
+df_filtered %>% 
   filter(year == 2006 | year == 2022 & 
            (minor_type == "MUNI" | agency_name == "TOWN CICERO") & 
            major_type == "MUNICIPALITY/TOWNSHIP") %>% 
@@ -266,9 +264,11 @@ df %>%
 
 ## Table 3: Tax Base and Tax Base Growth
 
-```{r table3}
+```{r}
+#| label: table3
+#| tbl-cap-location: top
 
-df |>
+df_filtered |>
   filter(!is.na(clean_name)) |>
   filter(year %in% c("2010", "2022")) |>
   group_by(year) |>
@@ -298,7 +298,7 @@ df |>
 #| label: tbl-taxbasegrowth
 #| tbl-cap: "Growth in the tax base per capita from 2006 to 2022. Uses 2010 population counts for 2006 and 2020 population counts for 2020."
 
-df %>% 
+df_filtered %>% 
   filter(!is.na(clean_name)) %>%
   filter(year == 2006 | year == 2022 & 
            (minor_type == "MUNI" | agency_name == "TOWN CICERO") & 
@@ -320,13 +320,12 @@ df %>%
 #| tbl-cap: "Tax rates calculated from composite municipality levy / municipality's tax base"
 
 df %>% 
-  filter(!is.na(clean_name)) |>
   filter(year == 2006 | year == 2022 & 
            (minor_type == "MUNI" | agency_name == "TOWN CICERO") & 
            major_type == "MUNICIPALITY/TOWNSHIP") %>% 
-  select(year, agency_name, tax_rate) %>% 
+  select(year, agency_name, total_final_rate) %>% 
   pivot_wider(id_cols = "agency_name", names_from = "year", 
-              values_from = "tax_rate") %>% 
+              values_from = "total_final_rate") %>% 
   mutate(pct_growth = (round((`2022`-`2006`)/`2006` * 100, digits = 1) ) ) %>%
 
   arrange(desc(`2022`)) %>% 
@@ -351,13 +350,14 @@ df %>%
 #| label: tbl-descriptivestats-nochicago
 #| tbl-cap: "Descriptive Stats for Taxing Agencies Outside of Chicago"
 
-df %>% filter(year==2006) %>% 
+df_filtered %>% 
+  filter(year==2006) %>% 
   filter(clean_name!="Chicago") %>%
   select(ext_percap, taxbase_percap, muni_fmv_taxed, muni_eav_taxed, muni_levy, total_final_levy, total_final_rate, cty_cook_eav, muni_current_rate_avg, muni_PC_total, muni_avg_C2_bill_noexe, muni_avg_C2_bill_withexe) %>% 
   datasummary_skim(fmt = fmt_sprintf("%.0f"))
 
 
-df %>% filter(year==2022) %>% 
+df_filtered %>% filter(year==2022) %>% 
   filter(clean_name!="Chicago") %>%
   select(ext_percap, taxbase_percap, muni_fmv_taxed, muni_eav_taxed, muni_levy, total_final_levy, total_final_rate, cty_cook_eav, muni_current_rate_avg, muni_PC_total, muni_avg_C2_bill_noexe, muni_avg_C2_bill_withexe) %>% 
   datasummary_skim(fmt = fmt_sprintf("%.0f"))
