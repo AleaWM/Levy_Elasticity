@@ -24,6 +24,9 @@ library(DT)
 #| label: tryFMVdata
 
 df <- read_csv("panel_data.csv")   ## 10,374
+
+df <- df |> filter(!minor_type %in% c("BOND", "UNIFIED", "COMM COLL", "COOK") ) # 10,048
+
 df <- df |> 
   mutate(tfl_pct_change = if_else(is.na(tfl_pct_change) | 
                                     is.infinite(tfl_pct_change), 
@@ -35,6 +38,22 @@ df <- df |>
   mutate_at(c("home_rule_ind"), as.character) %>%
  # Code Cicero as a Municipality and not a township.
   mutate(minor_type = ifelse(agency_name == "TOWN CICERO", "MUNI", minor_type))
+
+
+df <- df |> 
+  group_by(agency_name) |>
+  arrange(Township, clean_name) |>
+  mutate(clean_name = first(clean_name),
+         Township = first(Township))
+
+# muni_names <- unique(df$clean_name)
+# library(data.table)
+# 
+# df <- df |> mutate(
+#   muni_name = ifelse(grepl(agency_name, pattern = muni_names, ignore.case=TRUE) == TRUE, muni_names, clean_name)
+#   #clean_name = ifelse(agency_name %like% muni_names, muni_names, clean_name)
+#  # clean_name = str_replace(agency_name, muni_names$clean_name, muni_names$clean_name, clean_name )
+#   )
 
 ```
 
@@ -222,7 +241,7 @@ df <- df %>%
     )
 
 df_filtered <- df %>%  
-  filter(!is.na(clean_name) )
+  filter(!is.na(clean_name) ) ## Gets rid of schools
                 
 # df_filtered %>% 
 #   filter(!is.na(clean_name) & is.na(pop2010) ) %>% 
@@ -270,7 +289,7 @@ df_filtered |>
 ## Group agencies and then do growth rates.
 
 
-df %>% 
+df_filtered %>% 
   filter(year == 2010 | year == 2022# &  minor_type == "MUNI" 
          & major_type == "MUNICIPALITY/TOWNSHIP"
          ) %>% 
@@ -330,6 +349,7 @@ levy_table <- df_filtered %>%
 levy_table 
 
 levy_table %>% 
+  ungroup() %>%
    summarize(
             `2010 Median Levy per Capita` = median(`2010`, na.rm=TRUE),
            # `2006 Levy StdDv` = round(sd(`2006`, na.rm=TRUE)),
@@ -345,6 +365,7 @@ levy_table %>%
   DT::datatable(rownames = FALSE)
 
 levy_table %>% 
+  ungroup() %>%
    summarize(
             `2010 Levy StdDv` = round(sd(`2010`, na.rm=TRUE)),
             `2022 Levy StdDv` = round(sd(`2022`, na.rm=TRUE))) |>
@@ -360,17 +381,21 @@ levy_table %>%
 ```{r}
 #| label: tbl-table3
 #| tbl-cap-location: top
-#| tbl-cap: "Levy Growth Summary Statistics (per capita), 2010 and 2022"
+#| tbl-cap: "Tax Base Summary Statistics (per capita), 2010 and 2022"
 
 df_filtered |>
-  filter(!is.na(clean_name)) |>
+  filter(minor_type == "MUNI") |>
   filter(year %in% c("2010", "2022")) |>
   group_by(year) |>
   summarize("Median Per Capita Tax Base" = round(median(taxbase_percap, na.rm=TRUE)),
-            "Standard Deviation" = round(sd(taxbase_percap, na.rm=TRUE))
+            "Standard Deviation" = round(sd(taxbase_percap, na.rm=TRUE)),
+                                         "Agency Count" = n()
   )|>
+
   pivot_longer(-year, names_to = "statistic", values_to = "value") |>
   pivot_wider(names_from = year, values_from = value) |>
+      mutate(pct_growth = (round((`2022`-`2010`)/`2010` * 100, digits = 1) )) |>
+
   flextable::flextable()
 
 ```
@@ -396,6 +421,25 @@ df_filtered %>%
 
 
 ## Table 4: Tax Rate and Tax Rate Growth
+
+
+```{r}
+df_filtered |>
+  filter(minor_type == "MUNI") |>
+  filter(year %in% c("2010", "2022")) |>
+  group_by(year) |>
+  summarize("Median Tax Rate" = round(median(tax_rate, na.rm=TRUE), digits = 3),
+            "Standard Deviation" = round(sd(tax_rate, na.rm=TRUE), digits = 3),
+                                         "Agency Count" = round(n(), digits = 0)
+  )|>
+
+  pivot_longer(-year, names_to = "statistic", values_to = "value") |>
+  pivot_wider(names_from = year, values_from = value) |>
+      mutate(pct_growth = (round((`2022`-`2010`)/`2010` * 100, digits = 2) )) |>
+
+  flextable::flextable()
+```
+
 
 ```{r}
 #| label: tbl-compositelevy-taxrates
