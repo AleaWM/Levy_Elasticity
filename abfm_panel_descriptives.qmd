@@ -18,7 +18,6 @@ library(knitr)
 library(DT)
 ```
 
-> I do not trust the calculations for muni_pct_eav_taxed.  Check loop file for how it was calculated. Might just be incorrect denominator?  Other calculations seem fine. 
 
 
 ```{r}
@@ -33,7 +32,9 @@ df <- df |>
 df <- df |> 
   select(-c(muni_name, muni_num, agency_w_hr, first6_w_hr, log_eav:reassess_lag2, 
             lag_eav_pct_change1:lag_av_pct_change2)) %>%
-  mutate_at(c("home_rule_ind"), as.character)
+  mutate_at(c("home_rule_ind"), as.character) %>%
+ # Code Cicero as a Municipality and not a township.
+  mutate(minor_type = ifelse(agency_name == "TOWN CICERO", "MUNI", minor_type)) %>%
 
 ```
 
@@ -57,7 +58,9 @@ datasummary_crosstab(minor_type~home_rule_ind, data = df%>%filter(year==2022),
 ```{r}
 muni_fmv <- read_csv("Necessary_Files/ptaxsim_muni_level_2006-2022.csv")
 
-muni_fmv <- muni_fmv |> select(-muni_pct_eav_taxed)
+muni_fmv <- muni_fmv |> select(-muni_pct_eav_taxed) 
+## muni_pct_eav_taxed is actually the muni wide tax rate calculated from the 
+## Levy / Taxed EAV. It was mislabeled in the summary file.
 
 #muni_fmv_2006 <- muni_fmv |> filter(year == 2006)
 
@@ -72,6 +75,9 @@ muni_fmv %>% filter(year==2006)%>% select(muni_fmv, muni_fmv_taxed, muni_eav_tax
 ```
 
 
+> df_panel only includes Municipality Taxing Agecncies (which should be grouped with the miscellaneous and other muni/township taxing agencies but is not in these tables) and Elementary and Secondary School Districts.
+
+
 ```{r}
 library(plm)
 df <- left_join(df, muni_fmv) 
@@ -80,8 +86,8 @@ df <- left_join(df, muni_fmv)
 # Convert to panel data (10,181 obs)
 # df_panel <- pdata.frame(df, index = c("clean_name", "year"))
 df_panel <- df %>% 
-  filter( minor_type == "MUNI" | agency_name == "TOWN CICERO" | minor_type == "ELEMENTARY" | minor_type=="SECONDARY") %>% 
-  pdata.frame(index = c("clean_name", "year") ) %>% 
+  filter( minor_type == "MUNI" | minor_type == "ELEMENTARY" | minor_type=="SECONDARY") %>% 
+  pdata.frame(index = c("agency_name", "year") ) %>% 
   make.pbalanced(balance.type = "shared.individuals")
 
 
