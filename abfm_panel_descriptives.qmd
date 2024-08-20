@@ -241,8 +241,9 @@ df <- df %>%
     )
 
 df_filtered <- df %>%  
-  filter(!is.na(clean_name) ) ## Gets rid of schools
-                
+  filter(!is.na(clean_name) ) %>% ## Gets rid of schools
+  ungroup()
+
 # df_filtered %>% 
 #   filter(!is.na(clean_name) & is.na(pop2010) ) %>% 
 #   select(clean_name, pop2010, everything())
@@ -332,6 +333,24 @@ df_filtered |>
 ```
 
 ### For all Municipality Taxing Agencies
+
+```{r}
+df_filtered |>
+  filter(minor_type == "MUNI") |>
+  filter(year %in% c("2010", "2022")) |>
+  group_by(year) |>
+  summarize("Median Per Capita Levy" = round(median(ext_percap, na.rm=TRUE)),
+            "Standard Deviation" = round(sd(ext_percap, na.rm=TRUE)),
+                                         "Agency Count" = n()
+  )|>
+
+  pivot_longer(-year, names_to = "statistic", values_to = "value") |>
+  pivot_wider(names_from = year, values_from = value) |>
+      mutate(pct_growth = (round((`2022`-`2010`)/`2010` * 100, digits = 1) )) |>
+
+  flextable::flextable()
+```
+
 
 ```{r}
 #| label: tbl-extperperson
@@ -473,39 +492,44 @@ df %>%
 ```
 
 
-```{r table4}
+```{r}
 
-df |>
+rate_table <- df |>
   filter(year %in% c("2010", "2022")) |>
   filter(minor_type %in% c("MUNI", "LIBRARY", "PARK","ELEMENTARY", "SECONDARY")) |>
-      # minor_type == "MUNI" | 
-      # major_type == "SCHOOL" |
-      # minor_type == "LIBRARY" |
-      # minor_type == "PARK"
-  #  )|>
-  group_by(year) |>
-  
-   # county wide median and stand. dev. for each year
-  mutate(year_rate = median(total_final_rate),
-         sd_year_rate = sd(total_final_rate),
-         ) |>
-  ungroup() |>
-  
-  # could just recode cicero minortype to MUNI instead of TOWNSHIP
-  mutate(tab_4_grp =minor_type) |>
-  ungroup() |>
-  group_by(year, tab_4_grp) |>
-  summarize(
-    median(total_final_rate), 
-    sd(total_final_rate), 
-    mean(year_rate), 
-    mean(sd_year_rate))
 
-df |>
-  filter(year %in% c("2010", "2022")) |>
-  group_by(year, major_type) |>
-  summarize(n = n())
+  select(year, minor_type, agency_name, total_final_rate) %>% 
+  pivot_wider( id_cols = c("minor_type", "agency_name"), names_from = "year", 
+              values_from = "total_final_rate") %>% 
+  mutate(pct_growth = (round((`2022`-`2010`)/`2010` * 100, digits = 1) ) ) %>%
+  arrange(desc(pct_growth))  
+rate_table 
+
+rate_table |>
+    ungroup() %>%
+    group_by(minor_type) |>
+
+   summarize(
+            `2010 Median Rate` = median(`2010`, na.rm=TRUE),
+           # `2006 Rate StdDv` = round(sd(`2006`, na.rm=TRUE)),
+
+            `2022 Median Rate` = median(`2022`, na.rm=TRUE),
+            #`2022 Rate StdDv` = round(sd(`2022`, na.rm=TRUE)),
+
+            `Median Rate Growth` = median(pct_growth, na.rm=TRUE),
+            `Growth StdDv` = round(sd(pct_growth, na.rm=TRUE), digits = 2)) |> flextable::flextable()
+  
+
+rate_table |>
+  ungroup() %>%
+      group_by(minor_type) |>
+   summarize(
+            `2010 Rate StdDv` = round(sd(`2010`, na.rm=TRUE), digits = 3),
+            `2022 Rate StdDv` = round(sd(`2022`, na.rm=TRUE), digits =3)) |>
+flextable::flextable()  
+ 
 ```
+
 
 
 # Extra Stuff
