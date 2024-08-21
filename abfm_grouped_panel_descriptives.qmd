@@ -469,42 +469,52 @@ df_panel %>%
 ```{r}
 library(fixest)
 
-feols(log(total_final_levy) ~ log(cty_cook_eav)  | uniqueid + year, data = df_panel)
 
-feols(log(total_final_levy) ~ log(cty_cook_eav)  | uniqueid + year + town, data = df_panel)
+twofe = feols(log(total_final_levy) ~ log(cty_cook_eav)  | uniqueid + year,  data = df_panel)
+
+threefe = feols(log(total_final_levy) ~ log(cty_cook_eav)  | uniqueid + year + town, data = df_panel)
 
 
-feols(log(total_final_levy)~ log(cty_cook_eav) + lag(log(cty_cook_eav), 1) + lag(log(cty_cook_eav), 2 ) | uniqueid + year, data = df_panel) 
-
+twofe_lags = feols(log(total_final_levy)~ log(cty_cook_eav) + l(log(cty_cook_eav), 1) + l(log(cty_cook_eav), 2 ) | uniqueid + year, panel.id = c("uniqueid", "year"), data = df_panel) 
+etable(twofe, threefe, twofe_lags)
 ```
 
 
 ```{r}
-feols(log(total_final_levy) ~ log(av) + lag(log(av)) + lag(log(av)^2)  | uniqueid + year, data = df_panel)
 
-feols(log(total_final_levy) ~ log(av) + lag(log(av)) + lag(log(av), 2) + lag(log(av)^2)  | uniqueid + year + town, data = df_panel)
+est1 = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2)  | uniqueid + year + town, data = df_panel, panel.id = c("uniqueid", "year"))
+
+est1_vcov = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2)  | uniqueid + year + town, data = df_panel, panel.id = c("uniqueid", "year"), vcov = "twoway")
+
+est2 = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2)  | uniqueid[av] + year + town, data = df_panel, panel.id = c("uniqueid", "year"))
+
+etable(est1, est1_vcov, est2)
 ```
 
 **Uses Reassess Year** Only works for Munis, maybe Towns. Schools do not have the reassess year variable.
 
 ```{r}
-feols(log(total_final_levy) ~ log(av) + lag(log(av)) + lag(log(av), 2) + lag(log(av)^2)  + reassess_year + lag(reassess_year, 1) + log(av)*lag(reassess_year) | uniqueid + year + town, data = df_panel)
+est1 = feols(log(total_final_levy) ~ log(av) + l(log(av), 1:2) + l(log(av))  + reassess_year + l(reassess_year, 1:2) + log(av)*l(reassess_year, 1:2) | uniqueid + year + town, data = df_panel, panel.id = c("uniqueid", "year"))
 
-feols(log(total_final_levy) ~ log(av)  + lag(log(av)^2)* reassess_year | uniqueid + year, data = (df_panel %>% filter(town=="Muni")))
+est2 = feols(log(total_final_levy) ~ log(av)  + l(log(av))* reassess_year | uniqueid + year, data = (df_panel %>% filter(town=="Muni")), panel.id = c("uniqueid", "year"))
+
+etable(est1, est2)
 ```
 
 
 **Subset by Muni, Town, and Schools**
 
 ```{r}
-feols(log(total_final_levy) ~ log(cty_cook_eav) + lag(log(cty_cook_eav)) + lag(log(cty_cook_eav), 2) | uniqueid + year, data = df_panel %>% filter(town=="Muni"))
-feols(log(total_final_levy) ~ log(cty_cook_eav) + lag(log(cty_cook_eav)) + lag(log(cty_cook_eav), 2) | uniqueid + year + home_rule_ind, data = df_panel %>% filter(town=="Muni"))
+muni = feols(log(total_final_levy) ~ log(cty_cook_eav) + l(log(cty_cook_eav)) + l(log(cty_cook_eav), 2) | uniqueid + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni"))
+
+muni2 = feols(log(total_final_levy) ~ log(cty_cook_eav) + l(log(cty_cook_eav)) + l(log(cty_cook_eav), 2) | uniqueid + year + home_rule_ind, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni"))
 
 
-feols(log(total_final_levy) ~ log(cty_cook_eav) + lag(log(cty_cook_eav)) + lag(log(cty_cook_eav), 2)   | uniqueid + year, data = df_panel %>% filter(town=="Town"))
+town = feols(log(total_final_levy) ~ log(cty_cook_eav) + l(log(cty_cook_eav),-1:2) + l(log(cty_cook_eav), 2)   | uniqueid + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Town"))
 
-feols(log(total_final_levy) ~ log(cty_cook_eav) + lag(log(cty_cook_eav)) + lag(log(cty_cook_eav), 2)  | uniqueid + year, data = df_panel %>% filter(town=="School"))
+school = feols(log(total_final_levy) ~ log(cty_cook_eav) + l(log(cty_cook_eav)) + l(log(cty_cook_eav), 2)  | uniqueid + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="School"))
 
+ etable(muni, muni2, town, school)
 ```
 
 
