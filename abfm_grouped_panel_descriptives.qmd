@@ -400,6 +400,38 @@ df_panel %>%
 ## Table 4: Tax Rate and Tax Rate Growth
 
 ```{r}
+#| label: tbl-taxrate-table
+#| tbl-cap: "Tax Rate Growth for Municipalities. 2010 to 2022"
+
+
+# agency level growth:
+rate_table <- df_panel %>% 
+  filter((year == 2010 | year == 2022)) %>% 
+  select(year, uniqueid, rate) %>% 
+  pivot_wider( id_cols = c("uniqueid"), names_from = "year", 
+               values_from = "rate") %>% 
+  mutate(pct_growth = (round((`2022`-`2010`)/`2010` * 100, digits = 1) )) %>%
+  mutate(across(where(is.numeric))) %>%
+  arrange(desc(pct_growth)) 
+
+rate_table %>% 
+  ungroup() %>%
+  summarize(
+    `2010 Median Rate` = median(`2010`, na.rm=TRUE),
+    `2010 Rate StdDv` = round(sd(`2010`, na.rm=TRUE), digits = 2),
+    `2022 Median Rate` = median(`2022`, na.rm=TRUE),
+    `2022 Rate StdDv` = round(sd(`2022`, na.rm=TRUE), digits = 2),
+    `Median Rate Growth` = round(median(pct_growth, na.rm=TRUE), digits = 2),
+    `Growth StdDv` = round(sd(pct_growth, na.rm=TRUE), digits = 2)
+    
+  ) |>
+  pivot_longer(cols = c(`2010 Median Rate`:`Growth StdDv`),  
+               names_to = "statistic", values_to = "value") |>
+  flextable::flextable(cwidth = 1.5)
+```
+
+
+```{r}
 #| label: tbl-agencylevy-taxrates
 #| tbl-cap: "Tax rates shown come from the `total_final_rate` variable within PTAXSIM's internal `agency` data table. It comes from the total_final_levy / cty_cook_eav. This is the pretty much the same as the rate that would exist if the TIFs did not exist."
 
