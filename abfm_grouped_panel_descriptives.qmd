@@ -477,3 +477,37 @@ feols(log(total_final_levy) ~ log(cty_cook_eav)  | uniqueid + year + town, data 
 feols(log(total_final_levy)~ log(cty_cook_eav) + lag(log(cty_cook_eav), 1) + lag(log(cty_cook_eav), 2 ) | uniqueid + year, data = df_panel) 
 
 ```
+
+
+```{r}
+feols(log(total_final_levy) ~ log(av) + lag(log(av)) + lag(log(av)^2)  | uniqueid + year, data = df_panel)
+
+feols(log(total_final_levy) ~ log(av) + lag(log(av)) + lag(log(av), 2) + lag(log(av)^2)  | uniqueid + year + town, data = df_panel)
+```
+
+**Uses Reassess Year** Only works for Munis, maybe Towns. Schools do not have the reassess year variable.
+
+```{r}
+feols(log(total_final_levy) ~ log(av) + lag(log(av)) + lag(log(av), 2) + lag(log(av)^2)  + reassess_year + lag(reassess_year, 1) + log(av)*lag(reassess_year) | uniqueid + year + town, data = df_panel)
+
+feols(log(total_final_levy) ~ log(av)  + lag(log(av)^2)* reassess_year | uniqueid + year, data = (df_panel %>% filter(town=="Muni")))
+```
+
+
+**Subset by Muni, Town, and Schools**
+
+```{r}
+feols(log(total_final_levy) ~ log(cty_cook_eav) + lag(log(cty_cook_eav)) + lag(log(cty_cook_eav), 2) | uniqueid + year, data = df_panel %>% filter(town=="Muni"))
+feols(log(total_final_levy) ~ log(cty_cook_eav) + lag(log(cty_cook_eav)) + lag(log(cty_cook_eav), 2) | uniqueid + year + home_rule_ind, data = df_panel %>% filter(town=="Muni"))
+
+
+feols(log(total_final_levy) ~ log(cty_cook_eav) + lag(log(cty_cook_eav)) + lag(log(cty_cook_eav), 2)   | uniqueid + year, data = df_panel %>% filter(town=="Town"))
+
+feols(log(total_final_levy) ~ log(cty_cook_eav) + lag(log(cty_cook_eav)) + lag(log(cty_cook_eav), 2)  | uniqueid + year, data = df_panel %>% filter(town=="School"))
+
+```
+
+
+> Schools are still always different than Towns or Municipalities
+
+

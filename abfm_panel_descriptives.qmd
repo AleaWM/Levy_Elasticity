@@ -566,3 +566,33 @@ feols(log(total_final_levy)~ log(cty_cook_eav) + lag(log(cty_cook_eav), 1) + lag
 
 ```
 
+
+```{r}
+feols(log(total_final_levy) ~ log(av) + lag(log(av)) + lag(log(av)^2)  | agency_name + year, data = df_panel)
+
+```
+
+**Uses Reassess Year** Only works for Munis, Schools do not have the reassess year variable.
+
+```{r}
+feols(log(total_final_levy) ~ log(av) + lag(log(av)) + lag(log(av), 2) + lag(log(av)^2)  + reassess_year + lag(reassess_year, 1) + log(av)*lag(reassess_year) | agency_name + year, data = df_panel)
+```
+
+
+**Subset by Muni, Town, and Schools**
+
+```{r}
+feols(log(total_final_levy) ~ log(cty_cook_eav) + lag(log(cty_cook_eav)) + lag(log(cty_cook_eav), 2) | agency_name + year, data = df_panel %>% filter(minor_type=="MUNI"))
+feols(log(total_final_levy) ~ log(cty_cook_eav) + lag(log(cty_cook_eav)) + lag(log(cty_cook_eav), 2) | agency_name + year + home_rule_ind, data = df_panel %>% filter(minor_type=="MUNI"))
+
+
+feols(log(total_final_levy) ~ log(cty_cook_eav) + lag(log(cty_cook_eav)) + lag(log(cty_cook_eav), 2)   | agency_name + year, data = df_panel %>% filter(minor_type=="TOWNSHIP"))
+
+feols(log(total_final_levy) ~ log(cty_cook_eav) + lag(log(cty_cook_eav)) + lag(log(cty_cook_eav), 2)  | agency_name + year, data = df_panel %>% filter(major_type=="SCHOOL"))
+
+```
+
+
+> Schools are still always different than Towns or Municipalities
+
+
