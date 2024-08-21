@@ -373,3 +373,18 @@ df %>%
   DT::datatable(rownames = FALSE)
 ```
 
+
+
+## Models 
+
+```{r}
+library(fixest)
+
+feols(log(total_final_levy) ~ log(cty_cook_eav)  | uniqueid + year, data = df_panel)
+
+feols(log(total_final_levy) ~ log(cty_cook_eav)  | uniqueid + year + town, data = df_panel)
+
+
+feols(log(total_final_levy)~ log(cty_cook_eav) + lag(log(cty_cook_eav), 1) + lag(log(cty_cook_eav), 2 ) | uniqueid + year, data = df_panel) 
+
+```

@@ -552,23 +552,17 @@ Note: Some municipalities may have experienced growth that appears larger due to
 
 
 
-# Extra Stuff
+## Models 
 
-## Excluding Chicago
+```{r}
+library(fixest)
 
-```{r eval=FALSE}
-#| label: tbl-descriptivestats-nochicago
-#| tbl-cap: "Descriptive Stats for Taxing Agencies Outside of Chicago. Tax year 2010 and 2022"
+feols(log(total_final_levy)~ log(cty_cook_eav)  | agency_name + year, data = df_panel)
 
-df_filtered %>% 
-  filter(year==2010) %>% 
-  filter(clean_name!="Chicago") %>%
-  select(ext_percap, taxbase_percap, muni_fmv_taxed, muni_eav_taxed, muni_levy, total_final_levy, total_final_rate, cty_cook_eav, muni_current_rate_avg, muni_PC_total, muni_avg_C2_bill_noexe, muni_avg_C2_bill_withexe) %>% 
-  datasummary_skim(fmt = fmt_sprintf("%.0f"))
+feols(log(total_final_levy)~ log(cty_cook_eav)  | agency_name + year + minor_type, data = df_panel)
 
 
-df_filtered %>% filter(year==2022) %>% 
-  filter(clean_name!="Chicago") %>%
-  select(ext_percap, taxbase_percap, muni_fmv_taxed, muni_eav_taxed, muni_levy, total_final_levy, total_final_rate, cty_cook_eav, muni_current_rate_avg, muni_PC_total, muni_avg_C2_bill_noexe, muni_avg_C2_bill_withexe) %>% 
-  datasummary_skim(fmt = fmt_sprintf("%.0f"))
+feols(log(total_final_levy)~ log(cty_cook_eav) + lag(log(cty_cook_eav), 1) + lag(log(cty_cook_eav), 2 ) | agency_name + year, data = df_panel) 
+
 ```
+
