@@ -73,23 +73,23 @@ df <- after2009
 groupies2 <- read_csv("grouped_labels.csv") %>%          
   mutate(agency_num = str_pad(agency_num, 9, "left", "0"),
          first6 = as.character(first6), # make character
-        # home_rule_ind = as.character(home_rule_ind),
+         # home_rule_ind = as.character(home_rule_ind),
          first6 = str_pad(first6, 6, "left", "0"), # add leading zeros
          first6_w_hr_ind = str_c(first6, "_", hr_ind))
 
 grouped_manual <- df %>% 
   mutate(agency_num = str_pad(agency_num, 9, "left", "0"),
          first6 = as.character(first6), # make character
-        # home_rule_ind = as.character(home_rule_ind),
+         # home_rule_ind = as.character(home_rule_ind),
          first6 = str_pad(first6, 6, "left", "0"), # add leading zeros
-              lim_rate = ifelse(is.na(lim_rate), "NA", lim_rate)) |>
+         lim_rate = ifelse(is.na(lim_rate), "NA", lim_rate)) |>
   left_join(groupies2,
             by = c("agency_name", "agency_num")
-            ) %>% 
-    filter(major_type == "MUNICIPALITY/TOWNSHIP"  
-           & minor_type != "MISC"
-           ) %>% 
- # filter(minor_type != "TOWNSHIP") %>%
+  ) %>% 
+  filter(major_type == "MUNICIPALITY/TOWNSHIP"  
+         & minor_type != "MISC"
+  ) %>% 
+  # filter(minor_type != "TOWNSHIP") %>%
   group_by(year, grouped_label, home_rule_ind) %>% 
   summarize(agency_name = first(agency_name),
             agency_num = first(agency_num),
@@ -105,15 +105,15 @@ grouped_manual <- df %>%
             connected_count = n(),
             lim_rate = mean(as.numeric(lim_rate), na.rm=TRUE),
             clean_name = first(clean_name)
-           ) %>%
-    mutate(
-      conn_agency = ifelse(connected_count > 1, 1, 0),
-      log_eav = log(cty_total_eav),
-      log_levy = log(total_final_levy),
-      log_av =  log(av),
-      bundled = ifelse(agency_count > 1, 1, 0),
-      uniqueid = str_c(grouped_label, "_", home_rule_ind, "_", bundled),
-      panel_id = str_c(grouped_label, "_", home_rule_ind, "_", bundled, "_", lim_rate),
+  ) %>%
+  mutate(
+    conn_agency = ifelse(connected_count > 1, 1, 0),
+    log_eav = log(cty_total_eav),
+    log_levy = log(total_final_levy),
+    log_av =  log(av),
+    bundled = ifelse(agency_count > 1, 1, 0),
+    uniqueid = str_c(grouped_label, "_", home_rule_ind, "_", bundled),
+    panel_id = str_c(grouped_label, "_", home_rule_ind, "_", bundled, "_", lim_rate),
     first2_dig = str_sub(agency_num, 1,2),
     town = ifelse(first2_dig == "02" | agency_name == "TOWN CICERO", "Town", "Muni")) %>% 
   filter(total_final_levy > 1) %>%
@@ -126,7 +126,7 @@ schools <- df %>%
          home_rule_ind = as.character(home_rule_ind),
          first6 = str_pad(first6, 6, "left", "0"), # add leading zeros
          lim_rate = ifelse(is.na(lim_rate), "NA", lim_rate)) |>
-
+  
   filter(major_type == "SCHOOL") %>%
   mutate(grouped_label = agency_name) %>%
   group_by(year, grouped_label, home_rule_ind) %>% 
@@ -142,18 +142,18 @@ schools <- df %>%
             home_rule_ind = first(home_rule_ind),
             rate = sum(total_final_rate, na.rm=TRUE), 
             connected_count = n(),
-           lim_rate = sum(as.numeric(lim_rate), na.rm=TRUE),
-                       clean_name = first(clean_name)
-
-         ) %>%
-    mutate(
-      conn_agency = ifelse(connected_count > 1, 1, 0),      
-      log_eav = log(cty_total_eav),
-      log_levy = log(total_final_levy),
-      log_av =  log(av),
-      bundled = ifelse(agency_count > 1, 1, 0),
-      uniqueid = str_c(grouped_label, "_", home_rule_ind, "_", bundled),
-      panel_id = str_c(grouped_label, "_", home_rule_ind, "_", bundled, "_", lim_rate),
+            lim_rate = sum(as.numeric(lim_rate), na.rm=TRUE),
+            clean_name = first(clean_name)
+            
+  ) %>%
+  mutate(
+    conn_agency = ifelse(connected_count > 1, 1, 0),      
+    log_eav = log(cty_total_eav),
+    log_levy = log(total_final_levy),
+    log_av =  log(av),
+    bundled = ifelse(agency_count > 1, 1, 0),
+    uniqueid = str_c(grouped_label, "_", home_rule_ind, "_", bundled),
+    panel_id = str_c(grouped_label, "_", home_rule_ind, "_", bundled, "_", lim_rate),
     first2_dig = str_sub(agency_num, 1,2),
     town = "School") %>% 
   filter(total_final_levy > 1) %>%
@@ -210,13 +210,16 @@ grouped_manual <- grouped_manual %>%
       year >= 2015 ~ round(cty_cook_eav/pop2020)),
     
     tax_rate = round(total_final_levy / cty_cook_eav, digits=4) # tax rate that would come from agency_dt instead of manually calculated from PIN level.
-    )
+  )
 
 library(plm)
 df_panel <- grouped_manual %>% ungroup() %>% arrange(uniqueid, year) %>%
   pdata.frame(index = c("uniqueid", "year"))
 
-df_panel %>% group_by(uniqueid, year) %>% summarize(count = n()) %>%  filter(count > 1)
+df_panel %>% 
+  group_by(uniqueid, year) %>% 
+  summarize(count = n()) %>%  
+  filter(count > 1)
 ```
 
 
@@ -229,7 +232,8 @@ df_panel %>% group_by(uniqueid, year) %>% summarize(count = n()) %>%  filter(cou
 #| tbl-cap: "2022 snapshot of agencies that existed. From panel data. Agencies such as park, library, are within the MUNI/TOWNSHIP major_type."
 
 
-datasummary_crosstab(town ~home_rule_ind, statistic = 1~1+N, data = df_panel %>% filter(year==2022), output = "flextable")
+datasummary_crosstab(town ~home_rule_ind, statistic = 1~1+N, 
+                     data = df_panel %>% filter(year==2022), output = "flextable")
 ```
 
 
@@ -242,27 +246,24 @@ datasummary_crosstab(town ~home_rule_ind, statistic = 1~1+N, data = df_panel %>%
 # agency level growth:
 levy_table <- df_panel %>% 
   filter((year == 2010 | year == 2022) & 
-!is.na(ext_percap)         ) %>% 
+           !is.na(ext_percap)         ) %>% 
   select(year, clean_name, ext_percap) %>% 
   pivot_wider( id_cols = c("clean_name"), names_from = "year", 
-              values_from = "ext_percap") %>% 
+               values_from = "ext_percap") %>% 
   mutate(pct_growth = (round((`2022`-`2010`)/`2010` * 100, digits = 1) )) %>%
   arrange(desc(pct_growth))  
 
 levy_table %>% DT::datatable(
   rownames = FALSE,
-            options = list(
-              dom = 't',
-              scrollX = TRUE, # Enable horizontal scrolling
-              columnDefs = list(
-                list(targets = 1:2#, 
-              #  render = JS("function(data, type, row, meta) {
-             #     return type === 'display' ? data.toFixed(2) : data;
-             # }")
-              ),
-              list(targets = 1:2, width = '50px')
-              )
-            ))
+  options = list(
+    dom = 't',
+    scrollX = TRUE, # Enable horizontal scrolling
+    columnDefs = list(
+      list(targets = 1:2
+      ),
+      list(targets = 1:2, width = '50px')
+    )
+  ))
 ```
 
 ```{r}
@@ -272,22 +273,20 @@ levy_table %>% DT::datatable(
 
 levy_table %>% 
   ungroup() %>%
-   summarize(
-            `2010 Median Levy per Capita` = median(`2010`, na.rm=TRUE),
-   `2010 Levy StdDv` = (sd(`2010`, na.rm=TRUE)),
-            `2022 Median Levy per Capita` = median(`2022`, na.rm=TRUE),
-               `2022 Levy StdDv` = round(sd(`2022`, na.rm=TRUE), digits = 2),
-
-            `Median Growth of Levy per Capita` = round(median(pct_growth, na.rm=TRUE), digits = 2),
-            `Growth StdDv` = round(sd(pct_growth, na.rm=TRUE)),
-   `# of Agencies` = n()
-
-           ) |>
-      mutate(across(where(is.numeric), round, digits = 1)) %>%
-
+  summarize(
+    `2010 Median Levy per Capita` = median(`2010`, na.rm=TRUE),
+    `2010 Levy StdDv` = (sd(`2010`, na.rm=TRUE)),
+    `2022 Median Levy per Capita` = median(`2022`, na.rm=TRUE),
+    `2022 Levy StdDv` = round(sd(`2022`, na.rm=TRUE), digits = 2),
+    `Median Growth of Levy per Capita` = round(median(pct_growth, na.rm=TRUE), digits = 2),
+    `Growth StdDv` = round(sd(pct_growth, na.rm=TRUE)),
+    `# of Agencies` = n()
+  ) |>
+  mutate(across(where(is.numeric), round, digits = 1)) %>%
+  
   pivot_longer(cols = c(`2010 Median Levy per Capita`:`# of Agencies`),  
                names_to = "statistic", values_to = "value") |>
-
+  
   DT::datatable(rownames = FALSE)
 
 ```
@@ -298,12 +297,11 @@ levy_table %>%
 #| tbl-cap: "**Growth in the levy per capita** from 2006 to 2022. Uses 2010 population counts for 2006 and 2020 population counts for 2022. Only Municipalities have population counts, so only they are included in the per capita tables."
 
 df_panel %>% 
-  filter(year == 2010 | year == 2022 
-         ) %>% 
+  filter(year == 2010 | year == 2022 ) %>% 
   filter(!is.na(ext_percap)) %>%
   select(year, clean_name, ext_percap) %>% 
   pivot_wider( id_cols = "clean_name", names_from = "year", 
-              values_from = "ext_percap") %>% 
+               values_from = "ext_percap") %>% 
   mutate(pct_growth = (round((`2022`-`2010`)/`2010` * 100, digits = 1) ) ) %>%
   arrange(desc(`2022`)) %>% 
   DT::datatable(rownames = FALSE)
@@ -314,12 +312,11 @@ df_panel %>%
 #| tbl-cap: "**Growth in total levy** from 2010 to 2022. Uses summed `total_final_levy` for grouped munis and townships."
 
 df_panel %>% 
-  filter(year == 2010 | year == 2022 
-         ) %>% 
+  filter(year == 2010 | year == 2022 ) %>% 
   filter(!is.na(total_final_levy)) %>%
   select(year, grouped_label, total_final_levy) %>% 
   pivot_wider( id_cols = "grouped_label", names_from = "year", 
-              values_from = "total_final_levy") %>% 
+               values_from = "total_final_levy") %>% 
   mutate(pct_growth = (round((`2022`-`2010`)/`2010` * 100, digits = 1) ) ) %>%
   arrange(desc(pct_growth)) %>% 
   DT::datatable(rownames = FALSE)
@@ -339,28 +336,28 @@ taxbase_table <- df_panel %>%
          ) %>% 
   select(year, clean_name, taxbase_percap) %>% 
   pivot_wider( id_cols = c("clean_name"), names_from = "year", 
-              values_from = "taxbase_percap") %>% 
+               values_from = "taxbase_percap") %>% 
   mutate(pct_growth = (round((`2022`-`2010`)/`2010` * 100, digits = 1) )) %>%
   arrange(desc(pct_growth)) 
 
 taxbase_table %>% 
   ungroup() %>%
-   summarize(
-            `2010 Median Tax Base per Capita` = median(`2010`, na.rm=TRUE),
-   `2010 Tax Base StdDv` = (sd(`2010`, na.rm=TRUE)),
-            `2022 Median Tax Base per Capita` = median(`2022`, na.rm=TRUE),
-               `2022 Tax Base StdDv` = round(sd(`2022`, na.rm=TRUE)),
-
-            `Median Growth of Levy per Capita` = round(median(pct_growth, na.rm=TRUE), digits = 2),
-            `Growth StdDv` = round(sd(pct_growth, na.rm=TRUE), digits = 2),
-   `# of Agencies` = n()
-
-           ) |>
-      mutate(across(where(is.numeric), round)) %>%
-
+  summarize(
+    `2010 Median Tax Base per Capita` = median(`2010`, na.rm=TRUE),
+    `2010 Tax Base StdDv` = (sd(`2010`, na.rm=TRUE)),
+    `2022 Median Tax Base per Capita` = median(`2022`, na.rm=TRUE),
+    `2022 Tax Base StdDv` = round(sd(`2022`, na.rm=TRUE)),
+    
+    `Median Growth of Levy per Capita` = round(median(pct_growth, na.rm=TRUE), digits = 2),
+    `Growth StdDv` = round(sd(pct_growth, na.rm=TRUE), digits = 2),
+    `# of Agencies` = n()
+    
+  ) |>
+  mutate(across(where(is.numeric), round)) %>%
+  
   pivot_longer(cols = c(`2010 Median Tax Base per Capita`:`# of Agencies`),  
                names_to = "statistic", values_to = "value") |>
-
+  
   DT::datatable(rownames = FALSE)
 
 ```
