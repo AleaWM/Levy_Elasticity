@@ -538,11 +538,9 @@ etable(onefe, onefe_lags, fitstat = c('n', 'f' , 'rmse', 'r2', 'ar2', 'war2'))
 
 est1 = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2)  | uniqueid, data = df_panel, panel.id = c("uniqueid", "year"))
 
-est1_twowayse = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2)  | uniqueid , data = df_panel, panel.id = c("uniqueid", "year"))
-
 est2 = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2)  | uniqueid[av], data = df_panel, panel.id = c("uniqueid", "year"))
 
-etable(est1, est1_twowayse, est2, fitstat = c('n', 'f' , 'rmse', 'r2', 'ar2', 'war2'))
+etable(est1, est2, fitstat = c('n', 'f' , 'rmse', 'r2', 'ar2', 'war2'))
 ```
 
 **Uses Reassess Year** Only works for Munis, maybe Towns. Schools do not have the reassess year variable.
