@@ -464,19 +464,17 @@ df_panel %>%
 
 
 
-## Models 
+## TWFE Models 
 
 ```{r}
 library(fixest)
 
-onefe = feols(log(total_final_levy) ~ log(cty_cook_eav)  | uniqueid,  data = df_panel)
-
-twofe = feols(log(total_final_levy) ~ log(cty_cook_eav)  | uniqueid + year, vcov = "twoway", data = df_panel, panel.id = c("uniqueid", "year"))
+twfe = feols(log(total_final_levy) ~ log(cty_cook_eav)  | uniqueid + year, vcov = "twoway",  data = df_panel)
 
 
-twofe_lags = feols(log(total_final_levy)~ log(cty_cook_eav) + l(log(cty_cook_eav), 1) + l(log(cty_cook_eav), 2 ) | uniqueid + year, vcov = "twoway", panel.id = c("uniqueid", "year"), data = df_panel) 
+onefe_lags = feols(log(total_final_levy)~ log(cty_cook_eav) + l(log(cty_cook_eav), 1) + l(log(cty_cook_eav), 2 ) | uniqueid + year, vcov = "twoway", panel.id = c("uniqueid", "year"), data = df_panel) 
 
-etable(onefe, twofe, twofe_lags, fitstat = c('n','ll', 'aic', 'bic', 'r2', 'ar2', 'war2'))
+etable(twfe, onefe_lags, fitstat = c('n', 'f' , 'rmse', 'r2', 'ar2', 'war2'))
 ```
 
 
@@ -488,7 +486,7 @@ est1_twowayse = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 
 
 est2 = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2)  | uniqueid[av] + year , data = df_panel, panel.id = c("uniqueid", "year"), vcov = "twoway")
 
-etable(est1, est1_twowayse, est2, fitstat = c('n','ll', 'aic', 'bic', 'r2', 'ar2', 'war2'))
+etable(est1, est1_twowayse, est2, fitstat = c('n', 'f' , 'rmse', 'r2', 'ar2', 'war2'))
 ```
 
 **Uses Reassess Year** Only works for Munis, maybe Towns. Schools do not have the reassess year variable.
@@ -498,7 +496,7 @@ est1 = feols(log(total_final_levy) ~ log(av) + l(log(av), 1:2) + l(log(av))  + r
 
 est2 = feols(log(total_final_levy) ~ log(av)  + l(log(av))* reassess_year | uniqueid + year, data = (df_panel %>% filter(town=="Muni")), panel.id = c("uniqueid", "year"),vcov = "twoway")
 
-etable(est1, est2, fitstat = c('n','ll', 'aic', 'bic', 'r2', 'ar2', 'war2'))
+etable(est1, est2, fitstat = c('n', 'f' , 'rmse', 'r2', 'ar2', 'war2'))
 ```
 
 
@@ -514,7 +512,63 @@ town = feols(log(total_final_levy) ~ log(cty_cook_eav) + l(log(cty_cook_eav),-1:
 
 school = feols(log(total_final_levy) ~ log(cty_cook_eav) + l(log(cty_cook_eav)) + l(log(cty_cook_eav), 2)  | uniqueid + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="School"), vcov = "twoway")
 
- etable(muni, muni2, town, school, fitstat = c('n','ll', 'aic', 'bic', 'r2', 'ar2', 'war2'))
+ etable(muni, muni2, town, school, fitstat = c('n', 'f' , 'rmse', 'r2', 'ar2', 'war2'))
+```
+
+
+> Schools are still always different than Towns or Municipalities
+
+
+
+
+## Individual FE Models 
+
+```{r}
+library(fixest)
+
+onefe = feols(log(total_final_levy) ~ log(cty_cook_eav)  | uniqueid,  data = df_panel)
+
+onefe_lags = feols(log(total_final_levy)~ log(cty_cook_eav) + l(log(cty_cook_eav), 1) + l(log(cty_cook_eav), 2 ) | uniqueid,  panel.id = c("uniqueid", "year"), data = df_panel) 
+
+etable(onefe, onefe_lags, fitstat = c('n', 'f' , 'rmse', 'r2', 'ar2', 'war2'))
+```
+
+
+```{r}
+
+est1 = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2)  | uniqueid, data = df_panel, panel.id = c("uniqueid", "year"))
+
+est1_twowayse = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2)  | uniqueid , data = df_panel, panel.id = c("uniqueid", "year"))
+
+est2 = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2)  | uniqueid[av], data = df_panel, panel.id = c("uniqueid", "year"))
+
+etable(est1, est1_twowayse, est2, fitstat = c('n', 'f' , 'rmse', 'r2', 'ar2', 'war2'))
+```
+
+**Uses Reassess Year** Only works for Munis, maybe Towns. Schools do not have the reassess year variable.
+
+```{r}
+est1 = feols(log(total_final_levy) ~ log(av) + l(log(av), 1:2) + l(log(av))  + reassess_year + l(reassess_year, 1:2) + log(av)*l(reassess_year, 1:2) | uniqueid, data = df_panel, panel.id = c("uniqueid", "year"))
+
+est2 = feols(log(total_final_levy) ~ log(av)  + l(log(av))* reassess_year | uniqueid, data = (df_panel %>% filter(town=="Muni")), panel.id = c("uniqueid", "year"))
+
+etable(est1, est2, fitstat = c('n', 'f' , 'rmse', 'r2', 'ar2', 'war2'))
+```
+
+
+**Subset by Muni, Town, and Schools**
+
+```{r}
+muni = feols(log(total_final_levy) ~ log(cty_cook_eav) + l(log(cty_cook_eav)) + l(log(cty_cook_eav), 2) | uniqueid, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni"))
+
+muni2 = feols(log(total_final_levy) ~ log(cty_cook_eav) + l(log(cty_cook_eav)) + l(log(cty_cook_eav), 2) | uniqueid + home_rule_ind, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni"))
+
+
+town = feols(log(total_final_levy) ~ log(cty_cook_eav) + l(log(cty_cook_eav),-1:2) + l(log(cty_cook_eav), 2)   | uniqueid, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Town"))
+
+school = feols(log(total_final_levy) ~ log(cty_cook_eav) + l(log(cty_cook_eav)) + l(log(cty_cook_eav), 2)  | uniqueid, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="School"))
+
+ etable(muni, muni2, town, school, fitstat = c('n', 'f' , 'rmse', 'r2', 'ar2', 'war2'))
 ```
 
 
