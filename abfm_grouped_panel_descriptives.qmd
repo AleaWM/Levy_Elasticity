@@ -528,7 +528,7 @@ library(fixest)
 
 onefe = feols(log(total_final_levy) ~ log(cty_cook_eav)  | uniqueid,  data = df_panel)
 
-onefe_lags = feols(log(total_final_levy)~ log(cty_cook_eav) + l(log(cty_cook_eav), 1) + l(log(cty_cook_eav), 2 ) | uniqueid,  panel.id = c("uniqueid", "year"), data = df_panel) 
+onefe_lags = feols(log(total_final_levy)~ log(cty_cook_eav) + l(log(cty_cook_eav), 1) + l(log(cty_cook_eav), 2 ) + year | uniqueid,  panel.id = c("uniqueid", "year"), data = df_panel) 
 
 etable(onefe, onefe_lags, fitstat = c('n', 'f' , 'rmse', 'r2', 'ar2', 'war2'))
 ```
