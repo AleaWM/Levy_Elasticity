@@ -42,6 +42,19 @@ df <- df |>
 
 
 ```{r}
+#| label: tbl-agencies-eachyear
+#| tbl-cap: Count of each agency type that  existed during each tax year. 
+
+df %>% ungroup () |> 
+  group_by(year, minor_type) %>% 
+  filter((major_type == "MUNICIPALITY/TOWNSHIP" & minor_type != "MISC") | major_type == "SCHOOL" | major_type == "MISCELLANEOUS") %>% 
+  summarize(count = n()) %>%
+  pivot_wider(names_from = year, values_from = count) %>% 
+  flextable::flextable()
+```
+
+
+```{r}
 #| label: tbl-majortypeagencies-in2022-notpaneldata
 #| tbl-cap: "2022 snapshot of agencies that existed. Not from balanced panel data. Agencies such as park, library, are within the MUNI/TOWNSHIP major_type."
 
@@ -86,12 +99,13 @@ grouped_manual <- df %>%
   left_join(groupies2,
             by = c("agency_name", "agency_num")
   ) %>% 
-  filter(major_type == "MUNICIPALITY/TOWNSHIP"  
-         & minor_type != "MISC"
+  filter((major_type == "MUNICIPALITY/TOWNSHIP"  
+         & minor_type != "MISC") |  major_type == "MISCELLANEOUS"
   ) %>% 
-  # filter(minor_type != "TOWNSHIP") %>%
   group_by(year, grouped_label, home_rule_ind) %>% 
   summarize(agency_name = first(agency_name),
+            types = paste(list(unique(minor_type)), sep = ", "),
+
             agency_num = first(agency_num),
             total_final_levy = sum(total_final_levy, na.rm=TRUE),
             cty_cook_eav = first(cty_cook_eav),
@@ -131,6 +145,8 @@ schools <- df %>%
   mutate(grouped_label = agency_name) %>%
   group_by(year, grouped_label, home_rule_ind) %>% 
   summarize(agency_name = first(agency_name),
+            types = paste(list(unique(minor_type)), sep = ", "),
+
             agency_num = first(agency_num),
             total_final_levy = sum(total_final_levy, na.rm=TRUE),
             cty_total_eav = first(cty_total_eav), 
@@ -178,7 +194,8 @@ schools %>%
 ```
 
 ```{r}
-grouped_manual <- rbind(grouped_manual, schools) %>% arrange(uniqueid, year)
+grouped_manual <- rbind(grouped_manual, schools) %>% 
+  arrange(uniqueid, year)
 
 table(grouped_manual$town)
 
@@ -213,7 +230,10 @@ grouped_manual <- grouped_manual %>%
   )
 
 library(plm)
-df_panel <- grouped_manual %>% ungroup() %>% arrange(uniqueid, year) %>%
+
+df_panel <- grouped_manual %>% 
+  ungroup() %>% 
+  arrange(uniqueid, year) %>%
   pdata.frame(index = c("uniqueid", "year"))
 
 df_panel %>% 
@@ -222,6 +242,13 @@ df_panel %>%
   filter(count > 1)
 ```
 
+```{r}
+#| label: tbl-agencies-eachyear_paneldata
+#| tbl-cap: Count of each agency type that  existed during each tax year. 
+
+df_panel %>% ungroup() %>% group_by(year,town) %>% summarize(count = n()) %>%
+  pivot_wider(names_from = year, values_from = count) %>% flextable::flextable()
+```
 
 ## Table 1: Name and Number of Taxing Agencies
 
@@ -239,9 +266,11 @@ datasummary_crosstab(town ~home_rule_ind, statistic = 1~1+N,
 
 ## Table 2: Levy and Levy Growth
 
+### Per Capita
+
 ```{r}
 #| label: tbl-levyperperson
-#| tbl-cap: "Growth in the levy per person from 2010 to 2022. Uses 2010 population counts for 2010 and 2020 population counts for 2022."
+#| tbl-cap: "Growth in the levy per person from 2010 to 2022. Uses 2010 population counts for 2010 and 2020 population counts for 2022. Only Municipalities have population counts, so only they are included in the per capita tables."
 
 # agency level growth:
 levy_table <- df_panel %>% 
@@ -267,16 +296,34 @@ levy_table %>% DT::datatable(
 ```
 
 ```{r}
+levy_table %>% 
+  ggplot() + 
+  geom_histogram(aes(x=pct_growth)) + 
+  geom_vline(aes(xintercept = mean(pct_growth, na.rm=TRUE), color = "Mean"))+ 
+  geom_vline(aes(xintercept = median(pct_growth, na.rm=TRUE), color = "Median")) + 
+  theme_classic() + 
+  labs(x = "Growth %", y = "Agency Count", 
+       title = "Distribution of Growth Rates", subtitle = "Levy per Capita from 2010 to 2022", 
+       caption = "Median value/capita in 2022 = $645. 
+       Mean value/capita = $1139.")
+```
+
+
+```{r}
 #| label: tbl-levyperpersonmedian
-#| tbl-cap: "Median levy per person from 2010 to 2022. Uses 2010 population counts for 2010 and 2020 population counts for 2020."
+#| tbl-cap: "Median levy per person from 2010 to 2022. Uses 2010 population counts for 2010 and 2020 population counts for 2022."
 
 
 levy_table %>% 
   ungroup() %>%
   summarize(
     `2010 Median Levy per Capita` = median(`2010`, na.rm=TRUE),
+    `2010 Mean Levy per Capita` = mean(`2010`, na.rm=TRUE),
+
     `2010 Levy StdDv` = (sd(`2010`, na.rm=TRUE)),
     `2022 Median Levy per Capita` = median(`2022`, na.rm=TRUE),
+    `2022 Mean Levy per Capita` = mean(`2022`, na.rm=TRUE),
+
     `2022 Levy StdDv` = round(sd(`2022`, na.rm=TRUE), digits = 2),
     `Median Growth of Levy per Capita` = round(median(pct_growth, na.rm=TRUE), digits = 2),
     `Growth StdDv` = round(sd(pct_growth, na.rm=TRUE)),
@@ -292,20 +339,9 @@ levy_table %>%
 ```
 
 
-```{r}
-#| label: tbl-extperperson
-#| tbl-cap: "**Growth in the levy per capita** from 2006 to 2022. Uses 2010 population counts for 2006 and 2020 population counts for 2022. Only Municipalities have population counts, so only they are included in the per capita tables."
+### Total Levy
 
-df_panel %>% 
-  filter(year == 2010 | year == 2022 ) %>% 
-  filter(!is.na(ext_percap)) %>%
-  select(year, clean_name, ext_percap) %>% 
-  pivot_wider( id_cols = "clean_name", names_from = "year", 
-               values_from = "ext_percap") %>% 
-  mutate(pct_growth = (round((`2022`-`2010`)/`2010` * 100, digits = 1) ) ) %>%
-  arrange(desc(`2022`)) %>% 
-  DT::datatable(rownames = FALSE)
-```
+
 
 ```{r}
 #| label: tbl-extgrowth
@@ -314,20 +350,72 @@ df_panel %>%
 df_panel %>% 
   filter(year == 2010 | year == 2022 ) %>% 
   filter(!is.na(total_final_levy)) %>%
-  select(year, grouped_label, total_final_levy) %>% 
-  pivot_wider( id_cols = "grouped_label", names_from = "year", 
+  select(year, uniqueid, total_final_levy) %>% 
+  pivot_wider( id_cols = "uniqueid", names_from = "year", 
                values_from = "total_final_levy") %>% 
   mutate(pct_growth = (round((`2022`-`2010`)/`2010` * 100, digits = 1) ) ) %>%
   arrange(desc(pct_growth)) %>% 
   DT::datatable(rownames = FALSE)
 ```
 
+
+```{r}
+df_panel %>% 
+  filter((year == 2010 | year == 2022) ) %>% 
+  select(year, uniqueid, total_final_levy) %>% 
+  pivot_wider( id_cols = c("uniqueid"), names_from = "year", 
+               values_from = "total_final_levy") %>% 
+  mutate(pct_growth = (round((`2022`-`2010`)/`2010` * 100, digits = 1) )) %>%
+  ggplot() + 
+  geom_histogram(aes(x=pct_growth)) + 
+  theme_classic() + 
+  labs(x = "Growth %", y = "Agency Count", 
+       title = "Distribution of Growth Rates",
+       subtitle = "Summed Levy per Grouped Agency, 2010 to 2022")
+
+```
+
+
+```{r}
+#| label: tbl-levygrowth_summed_median
+#| tbl-cap: "Median levy from 2010 to 2022."
+
+
+
+df_panel %>% 
+  filter((year == 2010 | year == 2022) ) %>% 
+  select(year, uniqueid, total_final_levy) %>% 
+  pivot_wider( id_cols = c("uniqueid"), names_from = "year", 
+               values_from = "total_final_levy") %>% 
+  mutate(pct_growth = (round((`2022`-`2010`)/`2010` * 100, digits = 1) )) %>%
+  ungroup() %>%
+  summarize(
+    `2010 Median Levy` = median(`2010`, na.rm=TRUE),
+    `2010 Levy StdDv` = (sd(`2010`, na.rm=TRUE)),
+    `2022 Median Levy` = median(`2022`, na.rm=TRUE),
+    `2022 Levy StdDv` = round(sd(`2022`, na.rm=TRUE), digits = 2),
+    `Median Growth of Levy` = round(median(pct_growth, na.rm=TRUE), digits = 2),
+    `Growth StdDv` = round(sd(pct_growth, na.rm=TRUE)),
+    `# of Agencies` = n()
+  ) |>
+  mutate(across(where(is.numeric), round, digits = 1)) %>%
+  
+  pivot_longer(cols = c(`2010 Median Levy`:`# of Agencies`),  
+               names_to = "statistic", values_to = "value") |>
+  
+  DT::datatable(rownames = FALSE)
+
+```
+
+
+
 ## Table 3: Tax Base and Tax Base Growth
 
+### Per Capita
 ```{r}
 #| label: tbl-table3
 #| tbl-cap-location: top
-#| tbl-cap: "Tax Base Summary Statistics (per capita), 2010 and 2022. Median change  calculated from agency level change and then locating the median value of growth."
+#| tbl-cap: "Tax Base Summary Statistics (per capita), 2010 and 2022. Median change  calculated from agency level change and then locating the median value of growth. For muni taxing agencies that share taxing jurisdiction (have the same tax base EAV) with municipality taxing agencies, then the "
 
 # agency level growth:
 taxbase_table <- df_panel %>% 
@@ -348,7 +436,7 @@ taxbase_table %>%
     `2022 Median Tax Base per Capita` = median(`2022`, na.rm=TRUE),
     `2022 Tax Base StdDv` = round(sd(`2022`, na.rm=TRUE)),
     
-    `Median Growth of Levy per Capita` = round(median(pct_growth, na.rm=TRUE), digits = 2),
+    `Median Growth of Tax Base per Capita` = round(median(pct_growth, na.rm=TRUE), digits = 2),
     `Growth StdDv` = round(sd(pct_growth, na.rm=TRUE), digits = 2),
     `# of Agencies` = n()
     
@@ -362,6 +450,10 @@ taxbase_table %>%
 
 ```
 
+```{r}
+taxbase_table %>% 
+  ggplot() + geom_histogram(aes(x=pct_growth)) + theme_classic() + labs(x = "Growth %", y = "Agency Count", title = "Tax Base per Capita (in EAV) Growth, 2010 to 2022")
+```
 
 ```{r} 
 #| label: tbl-taxbasegrowth-percap
@@ -380,14 +472,17 @@ df_panel %>%
 ```
 
 
+
+### Tax Base (in EAV) Growth
+
 ```{r}
 #| label: tbl-taxbasegrowth
 #| tbl-cap: "**Growth in the tax base** from 2010 to 2022. Uses 2010 population counts for 2010 and 2020 population counts for 2020."
 
 df_panel %>% 
   filter(year == 2010 | year == 2022) %>% 
-  select(year, grouped_label, cty_cook_eav) %>% 
-  pivot_wider(id_cols = "grouped_label", names_from = "year", 
+  select(year, uniqueid, cty_cook_eav) %>% 
+  pivot_wider(id_cols = "uniqueid", names_from = "year", 
               values_from = "cty_cook_eav") %>% 
   mutate(pct_growth = (round((`2022`-`2010`)/`2010` * 100, digits = 1) ) ) %>%
   mutate(across(where(is.numeric), round, digits = 2)) %>%
@@ -397,11 +492,98 @@ df_panel %>%
 ```
 
 
+```{r}
+df_panel %>% 
+  filter(year == 2010 | year == 2022) %>% 
+  filter(town == "Muni" ) %>% 
+  select(year, uniqueid, cty_cook_eav) %>% 
+  pivot_wider(id_cols = "uniqueid", names_from = "year", 
+              values_from = "cty_cook_eav") %>% 
+  mutate(pct_growth = (round((`2022`-`2010`)/`2010` * 100, digits = 1) ) ) %>%
+  ungroup() %>%
+  summarize(
+    `2010 Median Tax Base` = median(`2010`, na.rm=TRUE),
+    `2010 Mean` = mean(`2010`, na.rm=TRUE),
+    `2010 Tax Base StdDv` = (sd(`2010`, na.rm=TRUE)),
+    `2022 Median Tax Base` = median(`2022`, na.rm=TRUE),
+    `2022 Mean` = mean(`2022`, na.rm=TRUE),
+
+    `2022 Tax Base StdDv` = round(sd(`2022`, na.rm=TRUE)),
+    
+    `Median Growth of Tax Base` = round(median(pct_growth, na.rm=TRUE), digits = 2),
+    `Growth StdDv` = round(sd(pct_growth, na.rm=TRUE), digits = 2),
+    `# of Agencies` = n()
+    
+  ) |>
+  mutate(across(where(is.numeric), round)) %>%
+  
+  pivot_longer(cols = c(`2010 Median Tax Base`:`# of Agencies`),  
+               names_to = "statistic", values_to = "value") |>
+  
+  DT::datatable(rownames = FALSE) %>%
+                DT::formatRound('value', mark = ",", digits = 0) 
+
+```
+
 ## Table 4: Tax Rate and Tax Rate Growth
 
 ```{r}
 #| label: tbl-taxrate-table
-#| tbl-cap: "Tax Rate Growth for Municipalities. 2010 to 2022"
+#| tbl-cap: "Tax Rate Growth for Grouped Taxing Agencies, 2010 to 2022"
+
+
+# agency level growth:
+rate_table <- df_panel %>% 
+  filter((year == 2010 | year == 2022)) %>% 
+  filter(!is.na(clean_name)) %>%
+  select(year, uniqueid, rate) %>% 
+  pivot_wider( id_cols = c("uniqueid"), names_from = "year", 
+               values_from = "rate") %>% 
+  mutate(pct_growth = (round((`2022`-`2010`)/`2010` * 100, digits = 1) )) %>%
+  mutate(across(where(is.numeric))) %>%
+  arrange(desc(pct_growth)) 
+
+rate_table %>% 
+  ungroup() %>%
+  summarize(
+    `2010 Median Rate` = median(`2010`, na.rm=TRUE),
+    `2010 Mean Rate` = mean(`2010`, na.rm=TRUE),
+    `2010 Rate StdDv` = round(sd(`2010`, na.rm=TRUE), digits = 2),
+    `2022 Median Rate` = median(`2022`, na.rm=TRUE),
+    `2022 Mean Rate` = mean(`2022`, na.rm=TRUE),
+    `2022 Rate StdDv` = round(sd(`2022`, na.rm=TRUE), digits = 2),
+    `Median Rate Growth` = round(median(pct_growth, na.rm=TRUE), digits = 2),
+    `Growth StdDv` = round(sd(pct_growth, na.rm=TRUE), digits = 2),
+    `# of Agencies` = n()
+    
+  ) |>
+  mutate(across(where(is.numeric), round, digits = 2)) %>%
+  pivot_longer(cols = c(`2010 Median Rate`:`# of Agencies`),  
+               names_to = "statistic", values_to = "value") |>
+  flextable::flextable(cwidth = 1.5)
+```
+
+```{r}
+df_panel %>% 
+  filter((year == 2010 | year == 2022)) %>% 
+  filter(!is.na(clean_name)) %>%
+  select(year, uniqueid, rate) %>% 
+  pivot_wider( id_cols = c("uniqueid"), names_from = "year", 
+               values_from = "rate") %>% 
+  mutate(pct_growth = (round((`2022`-`2010`)/`2010` * 100, digits = 1) ))%>%
+  ggplot() + 
+  geom_histogram(aes(x=pct_growth)) + 
+  labs(y = "# of Agencies", x = '% Growth',
+       title = "Distribution of Tax Rate Growth",
+       subtitle = "Municipality Taxing Agencies, 2010 to 2022")+
+  theme_classic()
+
+```
+
+
+```{r}
+#| label: tbl-taxrate-table-grouped
+#| tbl-cap: "Tax Rate Growth for Grouped Taxing Agencies, 2010 to 2022"
 
 
 # agency level growth:
@@ -418,38 +600,36 @@ rate_table %>%
   ungroup() %>%
   summarize(
     `2010 Median Rate` = median(`2010`, na.rm=TRUE),
+    `2010 Mean Rate` = mean(`2010`, na.rm=TRUE),
     `2010 Rate StdDv` = round(sd(`2010`, na.rm=TRUE), digits = 2),
     `2022 Median Rate` = median(`2022`, na.rm=TRUE),
+    `2022 Mean Rate` = mean(`2022`, na.rm=TRUE),
     `2022 Rate StdDv` = round(sd(`2022`, na.rm=TRUE), digits = 2),
     `Median Rate Growth` = round(median(pct_growth, na.rm=TRUE), digits = 2),
-    `Growth StdDv` = round(sd(pct_growth, na.rm=TRUE), digits = 2)
+    `Growth StdDv` = round(sd(pct_growth, na.rm=TRUE), digits = 2),
+    `# of Agencies` = n()
     
   ) |>
-  pivot_longer(cols = c(`2010 Median Rate`:`Growth StdDv`),  
+  pivot_longer(cols = c(`2010 Median Rate`:`# of Agencies`),  
                names_to = "statistic", values_to = "value") |>
   flextable::flextable(cwidth = 1.5)
 ```
 
-
 ```{r}
-#| label: tbl-agencylevy-taxrates
-#| tbl-cap: "Tax rates shown come from the `total_final_rate` variable within PTAXSIM's internal `agency` data table. It comes from the total_final_levy / cty_cook_eav. This is the pretty much the same as the rate that would exist if the TIFs did not exist."
+rate_table %>%
+  ggplot() + 
+  geom_histogram(aes(x=pct_growth)) + 
+  labs(y = "# of Agencies", x = '% Growth',
+       title = "Distribution of Tax Rate Growth",
+       subtitle = "Grouped Taxing Agencies, 2010 to 2022")+
+  theme_classic()
 
-df_panel %>% 
-  filter(year == 2010 | year == 2022) %>% 
-  select(year, grouped_label, rate) %>% 
-  pivot_wider(id_cols = "grouped_label", names_from = "year", values_from = "rate") %>%   
-  mutate(pct_growth = (round((`2022`-`2010`)/`2010` * 100, digits = 2) ),
-         `2022` = (round(`2022`, digits = 2) ) ) %>%
-
-  arrange(desc(`2022`)) %>% 
-  DT::datatable(rownames = FALSE)
 ```
 
 
 ```{r}
 #| label: tbl-agencylevy-taxrates-notgrouped
-#| tbl-cap: "Tax rates shown come from the `total_final_rate` variable within PTAXSIM's internal `agency` data table. It comes from the total_final_levy / cty_cook_eav. This is the pretty much the same as the rate that would exist if the TIFs did not exist. Not grouped!"
+#| tbl-cap: "Tax rates shown come from the `total_final_rate` variable within PTAXSIM's internal `agency` data table. It comes from the total_final_levy / cty_cook_eav. Not grouped!"
 
 df_panel %>% 
   filter(year == 2010 | year == 2022) %>% 
@@ -462,7 +642,51 @@ df_panel %>%
   DT::datatable(rownames = FALSE)
 ```
 
+### Not Grouped
 
+```{r}
+
+rate_table <- df |>
+  filter(!is.na(total_final_rate)) |>
+  filter(year %in% c("2010", "2022")) |>
+  select(year, minor_type, agency_name, total_final_rate) %>% 
+  pivot_wider( id_cols = c("minor_type", "agency_name"), names_from = "year", 
+              values_from = "total_final_rate") %>% 
+  mutate(pct_growth = (round((`2022`-`2010`)/`2010` * 100, digits = 1) ) ) %>%
+  arrange(desc(pct_growth))  
+
+rate_table  |> DT::datatable(rownames = FALSE)
+
+
+rate_table |>
+    ungroup() %>%
+    group_by(minor_type) |>
+
+   summarize(
+            `2010 Median Rate` = round(median(`2010`, na.rm=TRUE), digits = 2),
+            `2010 Mean Rate` = round(mean(`2010`, na.rm=TRUE), digits = 2),
+            `2010 Rate StdDv` = round(sd(`2010`, na.rm=TRUE), digits = 2),
+            `2022 Median Rate` = round(median(`2022`, na.rm=TRUE), digits = 2),
+            `2022 Mean Rate` = round(mean(`2022`, na.rm=TRUE), digits = 2),
+            `2010 Rate StdDv` = round(sd(`2010`, na.rm=TRUE), digits =2),
+            `Median Rate Growth` = round(median(pct_growth, na.rm=TRUE), digits = 2),
+            `Mean Rate Growth` = round(mean(pct_growth, na.rm=TRUE), digits = 2),
+            `StdDv` = round(sd(pct_growth, na.rm=TRUE), digits = 2),
+           `# of Agencies` = n()) |> 
+  flextable::flextable()
+```
+
+```{r}
+rate_table %>%
+  ggplot() + 
+  geom_histogram(aes(x=pct_growth)) + 
+  labs(y = "# of Agencies", x = '% Growth',
+       title = "Distribution of Tax Rate Growth",
+       subtitle = "All Taxing Agencies, 2010 to 2022")+
+  theme_classic()
+```
+
+# Models
 
 ## TWFE Models 
 
@@ -472,11 +696,54 @@ library(fixest)
 twfe = feols(log(total_final_levy) ~ log(cty_cook_eav)  | uniqueid + year, vcov = "twoway",  data = df_panel)
 
 
-onefe_lags = feols(log(total_final_levy)~ log(cty_cook_eav) + l(log(cty_cook_eav), 1) + l(log(cty_cook_eav), 2 ) | uniqueid + year, vcov = "twoway", panel.id = c("uniqueid", "year"), data = df_panel) 
+twfe_lags = feols(log(total_final_levy)~ log(cty_cook_eav) + l(log(cty_cook_eav), 1) + l(log(cty_cook_eav), 2 ) | uniqueid + year, vcov = "twoway", panel.id = c("uniqueid", "year"), data = df_panel) 
 
-etable(twfe, onefe_lags, fitstat = c('n', 'f' , 'rmse', 'r2', 'ar2', 'war2'))
+etable(twfe, twfe_lags, fitstat = c('n', 'f' , 'rmse', 'r2', 'ar2', 'war2'))
 ```
 
+
+```{r}
+
+twfe <- feols(log(total_final_levy) ~ log(cty_cook_eav) | uniqueid + year, data = df_panel, panel.id = c("uniqueid", "year"))
+  
+dummies <- feols(log(total_final_levy) ~ log(cty_cook_eav) + uniqueid + year, data = df_panel, panel.id = c("uniqueid", "year"))
+
+
+models <- list(
+    "Coef."     = twfe,
+    "Std.Error" = dummies,
+    "Coef."     = twfe,
+    "Std.Error" = dummies)
+
+# list <- list()
+
+
+modelsummary(models,
+             stars = TRUE,
+             estimate = c("estimate", "std.error", "estimate", "std.error"),
+            coef_omit = 'uniqueid| year',
+            output = "kableExtra"
+             )  %>%
+    kableExtra::add_header_above(c(" " = 1, "Model A" = 2, "Model B" = 2))
+
+
+side_by_side <- function(models, estimates, ...) {
+    models <- rep(models, each = length(estimates))
+    estimates <- rep(estimates, times = 2)
+    names(models) <- names(estimates)
+    modelsummary(models = models, estimate = estimates,
+                 statistic = NULL, gof_omit = ".*", ...)
+}
+
+models <- list(
+  twfe <- feols(log(total_final_levy) ~ log(cty_cook_eav) | uniqueid + year, data = df_panel, panel.id = c("uniqueid", "year")),
+  dummies <- feols(log(total_final_levy) ~ log(cty_cook_eav) + uniqueid + year, data = df_panel, panel.id = c("uniqueid", "year"))) 
+
+estimates <- c("Coef." = "estimate", "Std.Error" = "std.error")
+side_by_side(models, estimates = estimates,
+             coef_omit = 'uniqueid| year',
+            output = "kableExtra")
+```
 
 ```{r}
 
