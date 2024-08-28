@@ -382,27 +382,43 @@ levy_table %>%
 
 ## Table 3: Tax Base and Tax Base Growth
 
+
 ### Municipalities only 
 
 ```{r}
 #| label: tbl-table3
 #| tbl-cap-location: top
 #| tbl-cap: "Tax Base Summary Statistics (per capita), 2010 and 2022. pct change calculated from aggregated medians instead of individual pct change. ignore pct change standard deviation. "
-# 
-# df_panel |>
-#   filter(minor_type == "MUNI") |>
-#   filter(year %in% c("2010", "2022")) |>
-#   group_by(year) |>
-#   summarize("Median Per Capita Tax Base" = round(median(taxbase_percap, na.rm=TRUE)),
-#             "Standard Deviation" = round(sd(taxbase_percap, na.rm=TRUE)),
-#                                          "Agency Count" = n()
-#   )|>
-# 
-#   pivot_longer(-year, names_to = "statistic", values_to = "value") |>
-#   pivot_wider(names_from = year, values_from = value) |>
-#       mutate(pct_growth = (round((`2022`-`2010`)/`2010` * 100, digits = 1) )) |>
-# 
-#   flextable::flextable()
+
+
+
+
+# agency level growth:
+taxbase_table <- df_panel %>% 
+  filter((year == 2010 | year == 2022) & 
+           (minor_type == "MUNI")
+         ) %>% 
+  select(year, clean_name, cty_cook_eav) %>% 
+  pivot_wider( id_cols = c("clean_name"), names_from = "year", 
+              values_from = "cty_cook_eav") %>% 
+  mutate(pct_growth = (round((`2022`-`2010`)/`2010` * 100, digits = 1) )) %>%
+  arrange(desc(pct_growth)) 
+
+
+taxbase_table %>% #select(year`2022`) %>% 
+  ggplot() + geom_histogram(aes(x=pct_growth))
+
+hist(taxbase_table$pct_growth)
+
+df_panel %>% 
+  filter((year == 2010 | year == 2022) & 
+           (minor_type == "MUNI")
+         ) %>% 
+  group_by(year) %>%
+summarize(mean = mean(cty_cook_eav, na.rm=TRUE),
+          median = median(cty_cook_eav, na.rm=TRUE)) 
+
+
 
 
 # agency level growth:
@@ -416,15 +432,19 @@ taxbase_table <- df_panel %>%
   mutate(pct_growth = (round((`2022`-`2010`)/`2010` * 100, digits = 1) )) %>%
   arrange(desc(pct_growth)) 
 
+
 taxbase_table %>% 
   ungroup() %>%
    summarize(
             `2010 Median Tax Base per Capita` = median(`2010`, na.rm=TRUE),
+            `2010 Mean Base per Cap` = median(mean(`2010`, na.rm=TRUE)),
    `2010 Tax Base StdDv` = (sd(`2010`, na.rm=TRUE)),
             `2022 Median Tax Base per Capita` = median(`2022`, na.rm=TRUE),
                `2022 Tax Base StdDv` = round(sd(`2022`, na.rm=TRUE)),
 
             `Median Growth of Levy per Capita` = round(median(pct_growth, na.rm=TRUE), digits = 2),
+               `2022 Mean Base per Cap` = median(mean(`2022`, na.rm=TRUE)),
+
             `Growth StdDv` = round(sd(pct_growth, na.rm=TRUE), digits = 2)
 
            ) |>
@@ -556,13 +576,21 @@ Note: Some municipalities may have experienced growth that appears larger due to
 
 ```{r}
 library(fixest)
+list <- list(
+  twfe <- feols(log(total_final_levy) ~ log(cty_cook_eav) | agency_name + year, data = df_panel),
+  
+  dummies <- feols(log(total_final_levy) ~ log(cty_cook_eav) + agency_name + year, data = df_panel)
+)
 
-feols(log(total_final_levy)~ log(cty_cook_eav)  | agency_name + year, data = df_panel)
+modelsummary(list,
+             stars = TRUE,
+             coef_omit = 'agency_name',
+             )
 
-feols(log(total_final_levy)~ log(cty_cook_eav)  | agency_name + year + minor_type, data = df_panel)
+feols(log(total_final_levy) ~ log(cty_cook_eav) | agency_name + year + minor_type, data = df_panel)
 
 
-feols(log(total_final_levy)~ log(cty_cook_eav) + lag(log(cty_cook_eav), 1) + lag(log(cty_cook_eav), 2 ) | agency_name + year, data = df_panel) 
+feols(log(total_final_levy) ~ log(cty_cook_eav) + lag(log(cty_cook_eav), 1) + lag(log(cty_cook_eav), 2 ) | agency_name + year, data = df_panel) 
 
 ```
 
