@@ -724,24 +724,6 @@ twfe <- feols(log(total_final_levy) ~ log(cty_cook_eav) | uniqueid + year, data 
 dummies <- feols(log(total_final_levy) ~ log(cty_cook_eav) + uniqueid + year, data = df_panel, panel.id = c("uniqueid", "year"))
 
 
-models <- list(
-    "Coef."     = twfe,
-    "Std.Error" = dummies,
-    "Coef."     = twfe,
-    "Std.Error" = dummies)
-
-# list <- list()
-
-
-modelsummary(models,
-             stars = TRUE,
-             estimate = c("estimate", "std.error", "estimate", "std.error"),
-            coef_omit = 'uniqueid| year',
-            output = "kableExtra"
-             )  %>%
-    kableExtra::add_header_above(c(" " = 1, "Model A" = 2, "Model B" = 2))
-
-
 side_by_side <- function(models, estimates, ...) {
     models <- rep(models, each = length(estimates))
     estimates <- rep(estimates, times = 2)
