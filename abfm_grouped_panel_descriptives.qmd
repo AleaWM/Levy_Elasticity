@@ -326,6 +326,8 @@ levy_table %>%
 
     `2022 Levy StdDv` = round(sd(`2022`, na.rm=TRUE), digits = 2),
     `Median Growth of Levy per Capita` = round(median(pct_growth, na.rm=TRUE), digits = 2),
+    `Mean Growth of Levy per Capita` = round(mean(pct_growth, na.rm=TRUE), digits = 2),
+
     `Growth StdDv` = round(sd(pct_growth, na.rm=TRUE)),
     `# of Agencies` = n()
   ) |>
@@ -391,10 +393,13 @@ df_panel %>%
   ungroup() %>%
   summarize(
     `2010 Median Levy` = median(`2010`, na.rm=TRUE),
+    `2010 Mean Levy` = mean(`2010`, na.rm=TRUE),
     `2010 Levy StdDv` = (sd(`2010`, na.rm=TRUE)),
-    `2022 Median Levy` = median(`2022`, na.rm=TRUE),
+    `2022 Median Levy` = median(`2022`, na.rm=TRUE),   
+    `2022 Mean Levy` = mean(`2022`, na.rm=TRUE),
     `2022 Levy StdDv` = round(sd(`2022`, na.rm=TRUE), digits = 2),
     `Median Growth of Levy` = round(median(pct_growth, na.rm=TRUE), digits = 2),
+    `Mean Growth of Levy` = round(mean(pct_growth, na.rm=TRUE), digits = 2),
     `Growth StdDv` = round(sd(pct_growth, na.rm=TRUE)),
     `# of Agencies` = n()
   ) |>
@@ -432,11 +437,13 @@ taxbase_table %>%
   ungroup() %>%
   summarize(
     `2010 Median Tax Base per Capita` = median(`2010`, na.rm=TRUE),
+    `2010 Mean Tax Base per Capita` = mean(`2010`, na.rm=TRUE),
     `2010 Tax Base StdDv` = (sd(`2010`, na.rm=TRUE)),
     `2022 Median Tax Base per Capita` = median(`2022`, na.rm=TRUE),
+    `2022 Median Tax Base per Capita` = mean(`2022`, na.rm=TRUE),
     `2022 Tax Base StdDv` = round(sd(`2022`, na.rm=TRUE)),
-    
     `Median Growth of Tax Base per Capita` = round(median(pct_growth, na.rm=TRUE), digits = 2),
+    `Mean Growth of Tax Base per Capita` = round(mean(pct_growth, na.rm=TRUE), digits = 2),
     `Growth StdDv` = round(sd(pct_growth, na.rm=TRUE), digits = 2),
     `# of Agencies` = n()
     
@@ -507,13 +514,11 @@ df_panel %>%
     `2010 Tax Base StdDv` = (sd(`2010`, na.rm=TRUE)),
     `2022 Median Tax Base` = median(`2022`, na.rm=TRUE),
     `2022 Mean` = mean(`2022`, na.rm=TRUE),
-
     `2022 Tax Base StdDv` = round(sd(`2022`, na.rm=TRUE)),
-    
     `Median Growth of Tax Base` = round(median(pct_growth, na.rm=TRUE), digits = 2),
+    `Mean Growth of Tax Base` = round(mean(pct_growth, na.rm=TRUE), digits = 2),
     `Growth StdDv` = round(sd(pct_growth, na.rm=TRUE), digits = 2),
     `# of Agencies` = n()
-    
   ) |>
   mutate(across(where(is.numeric), round)) %>%
   
@@ -524,6 +529,15 @@ df_panel %>%
                 DT::formatRound('value', mark = ",", digits = 0) 
 
 ```
+
+```{r}
+taxbase_table %>% 
+  ggplot() + 
+  geom_histogram(aes(x=pct_growth)) + theme_classic() + 
+  labs(x = "Growth %", y = "Agency Count", 
+       title = "Growth in Tax Base (in EAV), 2010 to 2022")
+```
+
 
 ## Table 4: Tax Rate and Tax Rate Growth
 
@@ -553,6 +567,7 @@ rate_table %>%
     `2022 Mean Rate` = mean(`2022`, na.rm=TRUE),
     `2022 Rate StdDv` = round(sd(`2022`, na.rm=TRUE), digits = 2),
     `Median Rate Growth` = round(median(pct_growth, na.rm=TRUE), digits = 2),
+    `Mean Rate Growth` = round(mean(pct_growth, na.rm=TRUE), digits = 2),
     `Growth StdDv` = round(sd(pct_growth, na.rm=TRUE), digits = 2),
     `# of Agencies` = n()
     
