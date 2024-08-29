@@ -21,6 +21,14 @@ library(dplyr)
 ```{r}
 #| label: tryFMVdata
 
+southtriad <- c("Berwyn", "Bloom", "Bremen", "Calumet", "Cicero", "Lemont",
+                "Lyons", "Oak Park", "Orland", "Palos", "Proviso", "Rich", 
+                "River Forest", "Riverside", "Stickney", "Thornton", "Worth")
+
+northtriad <- c("Barrington", "Elk Grove","Evanston", "Hanover", "Leyden", 
+                "Maine", "New Trier", "Niles", "Northfield", "Norwood Park", 
+                "Palatine", "Schaumburg", "Wheeling")
+
 df <- read_csv("panel_data.csv")   ## 10,374
 
 df <- df |> filter(!minor_type %in% c("BOND", "UNIFIED", "COMM COLL", "COOK", "MISC", "MOSQUITO") ) # 9,864 obs
@@ -703,25 +711,53 @@ rate_table %>%
 
 # Models
 
+## Trying to deal with reassessment cycles
+
+
+```{r}
+library(fixest)
+twfe = feols(log(total_final_levy) ~ log(av) + Triad + reassess_year | uniqueid + year, vcov = "twoway",  data = df_panel |> filter(!is.na(reassess_year)))
+
+triadbyyear_fe = feols(log(total_final_levy) ~ log(av) + l(log(av), 1) + l(log(av), 2 ) | uniqueid + year^Triad, panel.id = c("uniqueid", "year"), data = df_panel |> filter(!is.na(Triad)))
+
+triad_dummy = feols(log(total_final_levy) ~ log(av) + l(log(av), 1) + l(log(av), 2 ) + Triad | Triad + uniqueid + year, panel.id = c("uniqueid", "year"), data = df_panel |> filter(!is.na(Triad)))
+
+twfe_lags = feols(log(total_final_levy)~ log(av) + l(log(av), 1) + l(log(av), 2 ) | uniqueid + year^Triad, vcov = "threeway", panel.id = c("uniqueid", "year"), data = df_panel) 
+
+etable(twfe, triadbyyear_fe, triad_dummy, twfe_lags, fitstat = c('n', 'f' , 'rmse', 'r2', 'ar2', 'war2'))
+```
+
+
 ## TWFE Models 
 
 ```{r}
 library(fixest)
 
-twfe = feols(log(total_final_levy) ~ log(cty_cook_eav)  | uniqueid + year, vcov = "twoway",  data = df_panel)
+twfe = feols(log(total_final_levy) ~ log(av)  | uniqueid + year, vcov = "twoway",  data = df_panel)
 
 
-twfe_lags = feols(log(total_final_levy)~ log(cty_cook_eav) + l(log(cty_cook_eav), 1) + l(log(cty_cook_eav), 2 ) | uniqueid + year, vcov = "twoway", panel.id = c("uniqueid", "year"), data = df_panel) 
+twfe_lags = feols(log(total_final_levy)~ log(av) + l(log(av), 1) + l(log(av), 2 ) | uniqueid + year, vcov = "twoway", panel.id = c("uniqueid", "year"), data = df_panel) 
 
 etable(twfe, twfe_lags, fitstat = c('n', 'f' , 'rmse', 'r2', 'ar2', 'war2'))
 ```
 
-
 ```{r}
+twfe = feols(log(total_final_levy) ~ log(av) + Triad  | uniqueid + year, vcov = "twoway",  data = df_panel |> filter(!is.na(Triad)))
 
-twfe <- feols(log(total_final_levy) ~ log(cty_cook_eav) | uniqueid + year, data = df_panel, panel.id = c("uniqueid", "year"))
-  
-dummies <- feols(log(total_final_levy) ~ log(cty_cook_eav) + uniqueid + year, data = df_panel, panel.id = c("uniqueid", "year"))
+triadbyyear_fe = feols(log(total_final_levy) ~ log(av) + l(log(av), 1) + l(log(av), 2 ) | uniqueid + year^Triad, panel.id = c("uniqueid", "year"), data = df_panel |> filter(!is.na(Triad)))
+
+triad_dummy = feols(log(total_final_levy) ~ log(av) + l(log(av), 1) + l(log(av), 2 ) + Triad | Triad + uniqueid + year, panel.id = c("uniqueid", "year"), data = df_panel |> filter(!is.na(Triad)))
+
+twfe_lags = feols(log(total_final_levy)~ log(av) + l(log(av), 1) + l(log(av), 2 ) | uniqueid + year^Triad, vcov = "threeway", panel.id = c("uniqueid", "year"), data = df_panel) 
+
+etable(twfe, triadbyyear_fe, triad_dummy, twfe_lags, fitstat = c('n', 'f' , 'rmse', 'r2', 'ar2', 'war2'))
+```
+
+```{r eval=FALSE}
+
+# twfe <- feols(log(total_final_levy) ~ log(cty_cook_eav) | uniqueid + year, data = df_panel, panel.id = c("uniqueid", "year"))
+#   
+# dummies <- feols(log(total_final_levy) ~ log(cty_cook_eav) + uniqueid + year, data = df_panel, panel.id = c("uniqueid", "year"))
 
 
 side_by_side <- function(models, estimates, ...) {
@@ -748,7 +784,7 @@ est1 = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2)  | uni
 
 est1_twowayse = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2)  | uniqueid + year , data = df_panel, panel.id = c("uniqueid", "year"), vcov = "twoway")
 
-est2 = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2)  | uniqueid[av] + year , data = df_panel, panel.id = c("uniqueid", "year"), vcov = "twoway")
+est2 = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2)  | uniqueid + Triad^year , data = df_panel, panel.id = c("uniqueid", "year"), vcov = "twoway")
 
 etable(est1, est1_twowayse, est2, fitstat = c('n', 'f' , 'rmse', 'r2', 'ar2', 'war2'))
 ```
@@ -767,14 +803,14 @@ etable(est1, est2, fitstat = c('n', 'f' , 'rmse', 'r2', 'ar2', 'war2'))
 **Subset by Muni, Town, and Schools**
 
 ```{r}
-muni = feols(log(total_final_levy) ~ log(cty_cook_eav) + l(log(cty_cook_eav)) + l(log(cty_cook_eav), 2) | uniqueid + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni"), vcov = "twoway")
+muni = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2) | grouped_label + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni"), vcov = "twoway")
 
-muni2 = feols(log(total_final_levy) ~ log(cty_cook_eav) + l(log(cty_cook_eav)) + l(log(cty_cook_eav), 2) | uniqueid + year + home_rule_ind, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni"), vcov = "twoway")
+muni2 = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2) | grouped_label + year + home_rule_ind, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni"), vcov = "twoway")
 
 
-town = feols(log(total_final_levy) ~ log(cty_cook_eav) + l(log(cty_cook_eav),-1:2) + l(log(cty_cook_eav), 2)   | uniqueid + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Town"), vcov = "twoway")
+town = feols(log(total_final_levy) ~ log(av) + l(log(av),-1:2) + l(log(av), 2)   | grouped_label + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Town"), vcov = "twoway")
 
-school = feols(log(total_final_levy) ~ log(cty_cook_eav) + l(log(cty_cook_eav)) + l(log(cty_cook_eav), 2)  | uniqueid + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="School"), vcov = "twoway")
+school = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2)  | grouped_label + year, panel.id = c("grouped_label", "year"), data = df_panel %>% filter(town=="School"), vcov = "twoway")
 
  etable(muni, muni2, town, school, fitstat = c('n', 'f' , 'rmse', 'r2', 'ar2', 'war2'))
 ```
@@ -790,9 +826,9 @@ school = feols(log(total_final_levy) ~ log(cty_cook_eav) + l(log(cty_cook_eav)) 
 ```{r}
 library(fixest)
 
-onefe = feols(log(total_final_levy) ~ log(cty_cook_eav)  | uniqueid,  data = df_panel)
+onefe = feols(log(total_final_levy) ~ log(av)  | uniqueid,  data = df_panel)
 
-onefe_lags = feols(log(total_final_levy)~ log(cty_cook_eav) + l(log(cty_cook_eav), 1) + l(log(cty_cook_eav), 2 ) + year | uniqueid,  panel.id = c("uniqueid", "year"), data = df_panel) 
+onefe_lags = feols(log(total_final_levy)~ log(av) + l(log(av), 1) + l(log(av), 2 ) + year | uniqueid,  panel.id = c("uniqueid", "year"), data = df_panel) 
 
 etable(onefe, onefe_lags, fitstat = c('n', 'f' , 'rmse', 'r2', 'ar2', 'war2'))
 ```
@@ -821,14 +857,14 @@ etable(est1, est2, fitstat = c('n', 'f' , 'rmse', 'r2', 'ar2', 'war2'))
 **Subset by Muni, Town, and Schools**
 
 ```{r}
-muni = feols(log(total_final_levy) ~ log(cty_cook_eav) + l(log(cty_cook_eav)) + l(log(cty_cook_eav), 2) | uniqueid, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni"))
+muni = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(cty_cook_eav), 2) | uniqueid, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni"))
 
-muni2 = feols(log(total_final_levy) ~ log(cty_cook_eav) + l(log(cty_cook_eav)) + l(log(cty_cook_eav), 2) | uniqueid + home_rule_ind, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni"))
+muni2 = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2) | uniqueid + home_rule_ind, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni"))
 
 
-town = feols(log(total_final_levy) ~ log(cty_cook_eav) + l(log(cty_cook_eav),-1:2) + l(log(cty_cook_eav), 2)   | uniqueid, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Town"))
+town = feols(log(total_final_levy) ~ log(av) + l(log(av),-1:2) + l(log(av), 2)   | uniqueid, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Town"))
 
-school = feols(log(total_final_levy) ~ log(cty_cook_eav) + l(log(cty_cook_eav)) + l(log(cty_cook_eav), 2)  | uniqueid, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="School"))
+school = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2)  | uniqueid, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="School"))
 
  etable(muni, muni2, town, school, fitstat = c('n', 'f' , 'rmse', 'r2', 'ar2', 'war2'))
 ```
