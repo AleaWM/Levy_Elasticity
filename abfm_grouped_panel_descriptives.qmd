@@ -737,12 +737,12 @@ etable(twfe, triadbyyear_fe, triad_dummy, twfe_lags, fitstat = c('n', 'f' , 'rms
 ```{r}
 library(fixest)
 
-twfe = feols(log(total_final_levy) ~ log(av)  | uniqueid + year, vcov = "twoway",  data = df_panel)
+models <- list(
+  twfe = feols(log(total_final_levy) ~ log(av)  | uniqueid + year, vcov = "twoway",  data = df_panel),
+  twfe_lags = feols(log(total_final_levy)~ log(av) + l(log(av), 1) + l(log(av), 2 ) | uniqueid + year, vcov = "twoway", panel.id = c("uniqueid", "year"), data = df_panel) )
 
-
-twfe_lags = feols(log(total_final_levy)~ log(av) + l(log(av), 1) + l(log(av), 2 ) | uniqueid + year, vcov = "twoway", panel.id = c("uniqueid", "year"), data = df_panel) 
-
-etable(twfe, twfe_lags, fitstat = c('n', 'f' , 'rmse', 'r2', 'ar2', 'war2'))
+#etable(twfe, twfe_lags, fitstat = c('n', 'f' , 'rmse', 'r2', 'ar2', 'war2'))
+modelsummary(models, stars = TRUE)
 ```
 
 ```{r}
@@ -818,7 +818,7 @@ models <- list(
 
 #etable(muni, muni2, town, school, fitstat = c('n', 'f' , 'rmse', 'r2', 'ar2', 'war2'))
  
-modelsummary::modelsummary(models, output = "flextable")
+modelsummary::modelsummary(models, output = "flextable", stars = TRUE)
 
 ```
 
