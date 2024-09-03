@@ -45,7 +45,10 @@ df <- df |> filter(year > 2009)  |>   ## 7539 obs
 df <- df |> 
   select(-c(muni_name, muni_num, agency_w_hr, first6_w_hr, log_eav:reassess_lag2, 
             lag_eav_pct_change1:lag_av_pct_change2)) %>%
-  mutate_at(c("home_rule_ind"), as.character)
+  mutate_at(c("home_rule_ind"), as.character)  %>%
+ # Code Cicero as a Municipality and not a township.
+  mutate(minor_type = ifelse(agency_name == "TOWN CICERO", "MUNI", minor_type))
+
 ```
 
 
@@ -137,7 +140,8 @@ grouped_manual <- df %>%
     uniqueid = str_c(grouped_label, "_", home_rule_ind, "_", bundled),
     panel_id = str_c(grouped_label, "_", home_rule_ind, "_", bundled, "_", lim_rate),
     first2_dig = str_sub(agency_num, 1,2),
-    town = ifelse(first2_dig == "02" | agency_name == "TOWN CICERO", "Town", "Muni")) %>% 
+    town = ifelse(first2_dig == "02", "Town", "Muni"),
+    town = ifelse( agency_name == "TOWN CICERO", "Muni", town)) %>% 
   filter(total_final_levy > 1) %>%
   select(year, uniqueid, panel_id, everything()) %>% ungroup() 
 
@@ -803,16 +807,19 @@ etable(est1, est2, fitstat = c('n', 'f' , 'rmse', 'r2', 'ar2', 'war2'))
 **Subset by Muni, Town, and Schools**
 
 ```{r}
-muni = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2) | grouped_label + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni"), vcov = "twoway")
+models <- list(
+  muni = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2) | grouped_label + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni"), vcov = "twoway"),
+  
+  muni2 = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2) | grouped_label + year + home_rule_ind, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni"), vcov = "twoway"),
 
-muni2 = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2) | grouped_label + year + home_rule_ind, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni"), vcov = "twoway")
+  town = feols(log(total_final_levy) ~ log(av) + l(log(av), 1:2)  | grouped_label + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Town"), vcov = "twoway"),
 
+  school = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2)  | grouped_label + year, panel.id = c("grouped_label", "year"), data = df_panel %>% filter(town=="School"), vcov = "twoway"))
 
-town = feols(log(total_final_levy) ~ log(av) + l(log(av),-1:2) + l(log(av), 2)   | grouped_label + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Town"), vcov = "twoway")
+#etable(muni, muni2, town, school, fitstat = c('n', 'f' , 'rmse', 'r2', 'ar2', 'war2'))
+ 
+modelsummary::modelsummary(models, output = "flextable")
 
-school = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2)  | grouped_label + year, panel.id = c("grouped_label", "year"), data = df_panel %>% filter(town=="School"), vcov = "twoway")
-
- etable(muni, muni2, town, school, fitstat = c('n', 'f' , 'rmse', 'r2', 'ar2', 'war2'))
 ```
 
 
