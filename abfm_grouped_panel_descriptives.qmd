@@ -292,7 +292,8 @@ levy_table <- df_panel %>%
   pivot_wider( id_cols = c("clean_name"), names_from = "year", 
                values_from = "ext_percap") %>% 
   mutate(pct_growth = (round((`2022`-`2010`)/`2010` * 100, digits = 1) )) %>%
-  arrange(desc(pct_growth))  
+  arrange(desc(pct_growth)) %>%  filter(!is.na(pct_growth))
+ 
 
 levy_table %>% DT::datatable(
   rownames = FALSE,
@@ -361,7 +362,7 @@ levy_table %>%
 #| label: tbl-extgrowth
 #| tbl-cap: "**Growth in total levy** from 2010 to 2022. Uses summed `total_final_levy` for grouped munis and townships."
 
-df_panel %>% 
+levy_table <- df_panel %>% 
   filter(year == 2010 | year == 2022 ) %>% 
   filter(!is.na(total_final_levy)) %>%
   select(year, uniqueid, total_final_levy) %>% 
@@ -369,6 +370,9 @@ df_panel %>%
                values_from = "total_final_levy") %>% 
   mutate(pct_growth = (round((`2022`-`2010`)/`2010` * 100, digits = 1) ) ) %>%
   arrange(desc(pct_growth)) %>% 
+    filter(!is.na(pct_growth))
+
+levy_table %>%
   DT::datatable(rownames = FALSE)
 ```
 
@@ -380,6 +384,7 @@ df_panel %>%
   pivot_wider( id_cols = c("uniqueid"), names_from = "year", 
                values_from = "total_final_levy") %>% 
   mutate(pct_growth = (round((`2022`-`2010`)/`2010` * 100, digits = 1) )) %>%
+    filter(!is.na(pct_growth)) %>%
   ggplot() + 
   geom_histogram(aes(x=pct_growth)) + 
   theme_classic() + 
@@ -402,6 +407,8 @@ df_panel %>%
   pivot_wider( id_cols = c("uniqueid"), names_from = "year", 
                values_from = "total_final_levy") %>% 
   mutate(pct_growth = (round((`2022`-`2010`)/`2010` * 100, digits = 1) )) %>%
+    filter(!is.na(pct_growth)) %>%
+
   ungroup() %>%
   summarize(
     `2010 Median Levy` = median(`2010`, na.rm=TRUE),
@@ -443,6 +450,8 @@ taxbase_table <- df_panel %>%
   pivot_wider( id_cols = c("clean_name"), names_from = "year", 
                values_from = "taxbase_percap") %>% 
   mutate(pct_growth = (round((`2022`-`2010`)/`2010` * 100, digits = 1) )) %>%
+    filter(!is.na(pct_growth)) %>%
+
   arrange(desc(pct_growth)) 
 
 taxbase_table %>% 
@@ -471,7 +480,8 @@ taxbase_table %>%
 
 ```{r}
 taxbase_table %>% 
-  ggplot() + geom_histogram(aes(x=pct_growth)) + theme_classic() + labs(x = "Growth %", y = "Agency Count", title = "Tax Base per Capita (in EAV) Growth, 2010 to 2022")
+  ggplot() + geom_histogram(aes(x=pct_growth)) + theme_classic() + 
+  labs(x = "Growth %", y = "Agency Count", title = "Tax Base per Capita (in EAV) Growth, 2010 to 2022")
 ```
 
 ```{r} 
@@ -485,6 +495,7 @@ df_panel %>%
   pivot_wider(id_cols = "clean_name", names_from = "year", 
               values_from = "taxbase_percap") %>% 
   mutate(pct_growth = (round((`2022`-`2010`)/`2010` * 100, digits = 1) ) ) %>%
+  filter(!is.na(pct_growth)) %>%
 
   arrange(desc(`2022`)) %>% 
   DT::datatable(rownames = FALSE)
@@ -498,27 +509,34 @@ df_panel %>%
 #| label: tbl-taxbasegrowth
 #| tbl-cap: "**Growth in the tax base** from 2010 to 2022. Uses 2010 population counts for 2010 and 2020 population counts for 2020."
 
-df_panel %>% 
+taxbase_table <- df_panel %>% 
   filter(year == 2010 | year == 2022) %>% 
   select(year, uniqueid, cty_cook_eav) %>% 
   pivot_wider(id_cols = "uniqueid", names_from = "year", 
               values_from = "cty_cook_eav") %>% 
   mutate(pct_growth = (round((`2022`-`2010`)/`2010` * 100, digits = 1) ) ) %>%
-  mutate(across(where(is.numeric), round, digits = 2)) %>%
+  mutate(across(where(is.numeric), round, digits = 2)) %>%  
+  filter(!is.na(pct_growth))
 
+
+taxbase_table %>%
   arrange(desc(pct_growth)) %>% 
   DT::datatable(rownames = FALSE)
+
+
 ```
 
 
 ```{r}
 df_panel %>% 
   filter(year == 2010 | year == 2022) %>% 
-  filter(town == "Muni" ) %>% 
+ # filter(town == "Muni" ) %>% 
   select(year, uniqueid, cty_cook_eav) %>% 
   pivot_wider(id_cols = "uniqueid", names_from = "year", 
               values_from = "cty_cook_eav") %>% 
   mutate(pct_growth = (round((`2022`-`2010`)/`2010` * 100, digits = 1) ) ) %>%
+  filter(!is.na(pct_growth)) %>%
+
   ungroup() %>%
   summarize(
     `2010 Median Tax Base` = median(`2010`, na.rm=TRUE),
@@ -567,7 +585,9 @@ rate_table <- df_panel %>%
                values_from = "rate") %>% 
   mutate(pct_growth = (round((`2022`-`2010`)/`2010` * 100, digits = 1) )) %>%
   mutate(across(where(is.numeric))) %>%
-  arrange(desc(pct_growth)) 
+  arrange(desc(pct_growth)) %>%  
+  filter(!is.na(pct_growth))
+
 
 rate_table %>% 
   ungroup() %>%
@@ -715,20 +735,38 @@ rate_table %>%
 
 # Models
 
+
+- vcov options in modelsummary: robust, classical, HC3, bootstrap
+
+- gof_omit options in modelsummary: 
+
+-gof_map to exclude specific goodness of fit measures   
+- gof_omit to exclude specific measures.   
+
+-vcov options: HC, HC0, HC1(aka Stata's), HC2, HC3(robust, R default), HC4, HC5, HAC, and more.
+
+
 ## Trying to deal with reassessment cycles
 
 
 ```{r}
 library(fixest)
-twfe = feols(log(total_final_levy) ~ log(av) + Triad + reassess_year | uniqueid + year, vcov = "twoway",  data = df_panel |> filter(!is.na(reassess_year)))
 
-triadbyyear_fe = feols(log(total_final_levy) ~ log(av) + l(log(av), 1) + l(log(av), 2 ) | uniqueid + year^Triad, panel.id = c("uniqueid", "year"), data = df_panel |> filter(!is.na(Triad)))
+models <- list(
+  twfe = feols(log(total_final_levy) ~ log(av) + Triad + reassess_year | uniqueid + year, vcov = "twoway",  data = df_panel |> filter(!is.na(reassess_year))),
 
-triad_dummy = feols(log(total_final_levy) ~ log(av) + l(log(av), 1) + l(log(av), 2 ) + Triad | Triad + uniqueid + year, panel.id = c("uniqueid", "year"), data = df_panel |> filter(!is.na(Triad)))
+triadbyyear_fe = feols(log(total_final_levy) ~ log(av) + l(log(av), 1) + l(log(av), 2 ) | uniqueid + year^Triad, panel.id = c("uniqueid", "year"), data = df_panel |> filter(!is.na(Triad))),
 
-twfe_lags = feols(log(total_final_levy)~ log(av) + l(log(av), 1) + l(log(av), 2 ) | uniqueid + year^Triad, vcov = "threeway", panel.id = c("uniqueid", "year"), data = df_panel) 
+triad_dummy = feols(log(total_final_levy) ~ log(av) + l(log(av), 1) + l(log(av), 2 ) + Triad | Triad + uniqueid + year, panel.id = c("uniqueid", "year"), data = df_panel |> filter(!is.na(Triad))),
 
-etable(twfe, triadbyyear_fe, triad_dummy, twfe_lags, fitstat = c('n', 'f' , 'rmse', 'r2', 'ar2', 'war2'))
+twfe_lags = feols(log(total_final_levy)~ log(av) + l(log(av), 1) + l(log(av), 2 ) | uniqueid + year^Triad, vcov = "threeway", panel.id = c("uniqueid", "year"), data = df_panel) )
+
+modelsummary(
+  models,
+  output = "flextable",
+  gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
+              stars = TRUE
+)
 ```
 
 
@@ -741,20 +779,33 @@ models <- list(
   twfe = feols(log(total_final_levy) ~ log(av)  | uniqueid + year, vcov = "twoway",  data = df_panel),
   twfe_lags = feols(log(total_final_levy)~ log(av) + l(log(av), 1) + l(log(av), 2 ) | uniqueid + year, vcov = "twoway", panel.id = c("uniqueid", "year"), data = df_panel) )
 
-#etable(twfe, twfe_lags, fitstat = c('n', 'f' , 'rmse', 'r2', 'ar2', 'war2'))
-modelsummary(models, stars = TRUE)
+
+modelsummary(
+  models,
+  output = "flextable",
+  gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
+              stars = TRUE
+)
 ```
 
 ```{r}
-twfe = feols(log(total_final_levy) ~ log(av) + Triad  | uniqueid + year, vcov = "twoway",  data = df_panel |> filter(!is.na(Triad)))
+models <- list(
+  twfe = feols(log(total_final_levy) ~ log(av) + Triad  | uniqueid + year, vcov = "twoway",  data = df_panel |> filter(!is.na(Triad))),
 
-triadbyyear_fe = feols(log(total_final_levy) ~ log(av) + l(log(av), 1) + l(log(av), 2 ) | uniqueid + year^Triad, panel.id = c("uniqueid", "year"), data = df_panel |> filter(!is.na(Triad)))
+  triadbyyear_fe = feols(log(total_final_levy) ~ log(av) + l(log(av), 1) + l(log(av), 2 ) | uniqueid + year^Triad, panel.id = c("uniqueid", "year"), data = df_panel |> filter(!is.na(Triad))),
 
-triad_dummy = feols(log(total_final_levy) ~ log(av) + l(log(av), 1) + l(log(av), 2 ) + Triad | Triad + uniqueid + year, panel.id = c("uniqueid", "year"), data = df_panel |> filter(!is.na(Triad)))
+  triad_dummy = feols(log(total_final_levy) ~ log(av) + l(log(av), 1) + l(log(av), 2 ) + Triad | Triad + uniqueid + year, panel.id = c("uniqueid", "year"), data = df_panel |> filter(!is.na(Triad))),
 
-twfe_lags = feols(log(total_final_levy)~ log(av) + l(log(av), 1) + l(log(av), 2 ) | uniqueid + year^Triad, vcov = "threeway", panel.id = c("uniqueid", "year"), data = df_panel) 
+  twfe_lags = feols(log(total_final_levy)~ log(av) + l(log(av), 1) + l(log(av), 2 ) | uniqueid + year^Triad, vcov = "threeway", panel.id = c("uniqueid", "year"), data = df_panel) 
+)
 
-etable(twfe, triadbyyear_fe, triad_dummy, twfe_lags, fitstat = c('n', 'f' , 'rmse', 'r2', 'ar2', 'war2'))
+modelsummary(
+  models,
+  output = "flextable",
+  gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
+              stars = TRUE
+)
+
 ```
 
 ```{r eval=FALSE}
@@ -783,24 +834,33 @@ side_by_side(models, estimates = estimates,
 ```
 
 ```{r}
+models <- list(
+  est1 = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2)  | uniqueid + year, data = df_panel, panel.id = c("uniqueid", "year")),
+  est1_twowayse = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2)  | uniqueid + year , data = df_panel, panel.id = c("uniqueid", "year"), vcov = "twoway"),
+  est2 = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2)  | uniqueid + Triad^year , data = df_panel, panel.id = c("uniqueid", "year"), vcov = "twoway"))
 
-est1 = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2)  | uniqueid + year, data = df_panel, panel.id = c("uniqueid", "year"))
-
-est1_twowayse = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2)  | uniqueid + year , data = df_panel, panel.id = c("uniqueid", "year"), vcov = "twoway")
-
-est2 = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2)  | uniqueid + Triad^year , data = df_panel, panel.id = c("uniqueid", "year"), vcov = "twoway")
-
-etable(est1, est1_twowayse, est2, fitstat = c('n', 'f' , 'rmse', 'r2', 'ar2', 'war2'))
+modelsummary(
+  models,
+  output = "flextable",
+  gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
+              stars = TRUE
+)
 ```
 
 **Uses Reassess Year** Only works for Munis, maybe Towns. Schools do not have the reassess year variable.
 
 ```{r}
-est1 = feols(log(total_final_levy) ~ log(av) + l(log(av), 1:2) + l(log(av))  + reassess_year + l(reassess_year, 1:2) + log(av)*l(reassess_year, 1:2) | uniqueid + year, data = df_panel, panel.id = c("uniqueid", "year"), vcov = "twoway")
+models <- list(
+est1 = feols(log(total_final_levy) ~ log(av) + l(log(av), 1:2) + l(log(av))  + reassess_year + l(reassess_year, 1:2) + log(av)*l(reassess_year, 1:2) | uniqueid + year, data = df_panel, panel.id = c("uniqueid", "year"), vcov = "twoway"),
 
-est2 = feols(log(total_final_levy) ~ log(av)  + l(log(av))* reassess_year | uniqueid + year, data = (df_panel %>% filter(town=="Muni")), panel.id = c("uniqueid", "year"),vcov = "twoway")
+est2 = feols(log(total_final_levy) ~ log(av)  + l(log(av))* reassess_year | uniqueid + year, data = (df_panel %>% filter(town=="Muni")), panel.id = c("uniqueid", "year"),vcov = "twoway"))
 
-etable(est1, est2, fitstat = c('n', 'f' , 'rmse', 'r2', 'ar2', 'war2'))
+modelsummary(
+  models,
+  output = "flextable",
+  gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
+              stars = TRUE
+)
 ```
 
 
@@ -816,9 +876,12 @@ models <- list(
 
   school = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2)  | grouped_label + year, panel.id = c("grouped_label", "year"), data = df_panel %>% filter(town=="School"), vcov = "twoway"))
 
-#etable(muni, muni2, town, school, fitstat = c('n', 'f' , 'rmse', 'r2', 'ar2', 'war2'))
- 
-modelsummary::modelsummary(models, output = "flextable", stars = TRUE)
+modelsummary(
+  models,
+  output = "flextable",
+  gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
+              stars = TRUE
+)
 
 ```
 
@@ -833,47 +896,72 @@ modelsummary::modelsummary(models, output = "flextable", stars = TRUE)
 ```{r}
 library(fixest)
 
-onefe = feols(log(total_final_levy) ~ log(av)  | uniqueid,  data = df_panel)
+models <- list(
+  onefe = feols(log(total_final_levy) ~ log(av)  | uniqueid,  data = df_panel),
 
-onefe_lags = feols(log(total_final_levy)~ log(av) + l(log(av), 1) + l(log(av), 2 ) + year | uniqueid,  panel.id = c("uniqueid", "year"), data = df_panel) 
+onefe_lags = feols(log(total_final_levy)~ log(av) + l(log(av), 1) + l(log(av), 2 ) + year | uniqueid,  panel.id = c("uniqueid", "year"), data = df_panel) )
 
-etable(onefe, onefe_lags, fitstat = c('n', 'f' , 'rmse', 'r2', 'ar2', 'war2'))
+modelsummary(
+  models,
+  output = "flextable",
+  gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
+              stars = TRUE
+)
 ```
 
 
 ```{r}
+models <- list(
+est1 = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2)  | uniqueid, data = df_panel, panel.id = c("uniqueid", "year")),
 
-est1 = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2)  | uniqueid, data = df_panel, panel.id = c("uniqueid", "year"))
+est2 = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2)  | uniqueid[av], data = df_panel, panel.id = c("uniqueid", "year")))
 
-est2 = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2)  | uniqueid[av], data = df_panel, panel.id = c("uniqueid", "year"))
 
-etable(est1, est2, fitstat = c('n', 'f' , 'rmse', 'r2', 'ar2', 'war2'))
+modelsummary(
+  models,
+  output = "flextable",
+  gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
+              stars = TRUE
+)
 ```
 
 **Uses Reassess Year** Only works for Munis, maybe Towns. Schools do not have the reassess year variable.
 
 ```{r}
-est1 = feols(log(total_final_levy) ~ log(av) + l(log(av), 1:2) + l(log(av))  + reassess_year + l(reassess_year, 1:2) + log(av)*l(reassess_year, 1:2) | uniqueid, data = df_panel, panel.id = c("uniqueid", "year"))
+models <- list(
+  est1 = feols(log(total_final_levy) ~ log(av) + l(log(av), 1:2) + l(log(av))  + reassess_year + l(reassess_year, 1:2) + log(av)*l(reassess_year, 1:2) | uniqueid, data = df_panel, panel.id = c("uniqueid", "year")),
 
-est2 = feols(log(total_final_levy) ~ log(av)  + l(log(av))* reassess_year | uniqueid, data = (df_panel %>% filter(town=="Muni")), panel.id = c("uniqueid", "year"))
+  est2 = feols(log(total_final_levy) ~ log(av)  + l(log(av))* reassess_year | uniqueid, data = (df_panel %>% filter(town=="Muni")), panel.id = c("uniqueid", "year")) )
 
-etable(est1, est2, fitstat = c('n', 'f' , 'rmse', 'r2', 'ar2', 'war2'))
+
+modelsummary(
+  models,
+  output = "flextable",
+  gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
+              stars = TRUE
+)
 ```
 
 
 **Subset by Muni, Town, and Schools**
 
 ```{r}
-muni = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(cty_cook_eav), 2) | uniqueid, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni"))
+models <- list(
+  muni = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(cty_cook_eav), 2) | uniqueid, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni")),
+  
+  muni2 = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2) | uniqueid + home_rule_ind, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni")),
 
-muni2 = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2) | uniqueid + home_rule_ind, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni"))
 
+  town = feols(log(total_final_levy) ~ log(av) + l(log(av),-1:2) + l(log(av), 2)   | uniqueid, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Town")),
 
-town = feols(log(total_final_levy) ~ log(av) + l(log(av),-1:2) + l(log(av), 2)   | uniqueid, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Town"))
+  school = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2)  | uniqueid, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="School")) )
 
-school = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2)  | uniqueid, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="School"))
+modelsummary(
+  models,
+  output = "flextable",
+  gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
+              stars = TRUE)
 
- etable(muni, muni2, town, school, fitstat = c('n', 'f' , 'rmse', 'r2', 'ar2', 'war2'))
 ```
 
 
