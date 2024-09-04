@@ -776,33 +776,53 @@ modelsummary(
 library(fixest)
 
 models <- list(
-  twfe = feols(log(total_final_levy) ~ log(av)  | uniqueid + year, vcov = "twoway",  data = df_panel),
-  twfe_lags = feols(log(total_final_levy)~ log(av) + l(log(av), 1) + l(log(av), 2 ) | uniqueid + year, vcov = "twoway", panel.id = c("uniqueid", "year"), data = df_panel) )
+  "Plain TWFE" = feols(log(total_final_levy) ~ log(av)  | uniqueid + year, vcov = "twoway",  data = df_panel),
+  
+       "TWFE - year^reassess" = feols(log(total_final_levy) ~ log(av)  | uniqueid + year^reassess_year, vcov = "twoway", panel.id = c("uniqueid", "year"), data = df_panel),
+  
+     "TWFE - year^lagreassess" = feols(log(total_final_levy) ~ log(av)  | uniqueid + year^l(reassess_year,1), vcov = "twoway", panel.id = c("uniqueid", "year"), data = df_panel),
+  
+  "TWFE w/ AV Lags" = feols(log(total_final_levy)~ log(av) + l(log(av), 1) + l(log(av), 2 ) | uniqueid + year, vcov = "twoway", panel.id = c("uniqueid", "year"), data = df_panel),
+
+
+     "TWFE - interaction" = feols(log(total_final_levy)~ log(av) +i(l(reassess_year,1), log(av)) | uniqueid + year^l(reassess_year,1), vcov = "twoway", panel.id = c("uniqueid", "year"), data = df_panel),
+  
+     "TWFE - Agency Type" = feols(log(total_final_levy)~ log(av) + l(log(av), 1:2) | uniqueid + year + town, vcov = "threeway", panel.id = c("uniqueid", "year"), data = df_panel)
+  
+  )
 
 
 modelsummary(
   models,
   output = "flextable",
-  gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
+ # gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
               stars = TRUE
 )
+
+# year coefficients
+fixef(models$`Plain TWFE`)[[2]]
+fixef(models$`TWFE - year^lagreassess`)[[2]]
+fixef(models$`TWFE - Agency Type`)[[2]]
+
+
+
 ```
 
 ```{r}
 models <- list(
-  twfe = feols(log(total_final_levy) ~ log(av) + Triad  | uniqueid + year, vcov = "twoway",  data = df_panel |> filter(!is.na(Triad))),
+  twfe_slopes = feols(log(total_final_levy) ~ log(av) + reassess_year | uniqueid + year, vcov = "twoway",  data = df_panel |> filter(!is.na(Triad))),
 
-  triadbyyear_fe = feols(log(total_final_levy) ~ log(av) + l(log(av), 1) + l(log(av), 2 ) | uniqueid + year^Triad, panel.id = c("uniqueid", "year"), data = df_panel |> filter(!is.na(Triad))),
+  triadbyyear_fe = feols(log(total_final_levy) ~ log(av) + l(log(av), 1) + l(log(av), 2 ) | uniqueid + year^reassess_year, panel.id = c("uniqueid", "year"), data = df_panel |> filter(!is.na(Triad))),
 
   triad_dummy = feols(log(total_final_levy) ~ log(av) + l(log(av), 1) + l(log(av), 2 ) + Triad | Triad + uniqueid + year, panel.id = c("uniqueid", "year"), data = df_panel |> filter(!is.na(Triad))),
 
-  twfe_lags = feols(log(total_final_levy)~ log(av) + l(log(av), 1) + l(log(av), 2 ) | uniqueid + year^Triad, vcov = "threeway", panel.id = c("uniqueid", "year"), data = df_panel) 
+  id_yearTriad_fe = feols(log(total_final_levy)~ log(av) + l(log(av), 1) + l(log(av), 2 ) | uniqueid + year^Triad, vcov = "threeway", panel.id = c("uniqueid", "year"), data = df_panel) 
 )
 
 modelsummary(
   models,
   output = "flextable",
-  gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
+ # gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
               stars = TRUE
 )
 
@@ -834,43 +854,41 @@ side_by_side(models, estimates = estimates,
 ```
 
 ```{r}
+#| warning: false
+#| message: false
+
+
 models <- list(
   est1 = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2)  | uniqueid + year, data = df_panel, panel.id = c("uniqueid", "year")),
-  est1_twowayse = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2)  | uniqueid + year , data = df_panel, panel.id = c("uniqueid", "year"), vcov = "twoway"),
-  est2 = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2)  | uniqueid + Triad^year , data = df_panel, panel.id = c("uniqueid", "year"), vcov = "twoway"))
+  
+  est_twowayse = feols(log(total_final_levy) ~ log(av)  + l(log(av), 2)  | uniqueid + year , data = df_panel, panel.id = c("uniqueid", "year"), vcov = "twoway"),
+  
+  est_threewayse = feols(log(total_final_levy) ~ log(av)  + l(log(av), 1:2)  | uniqueid + year + Triad^year, data = df_panel, panel.id = c("uniqueid", "year"), vcov = "threeway"))
 
 modelsummary(
   models,
   output = "flextable",
-  gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
+ # gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
               stars = TRUE
 )
 ```
 
-**Uses Reassess Year** Only works for Munis, maybe Towns. Schools do not have the reassess year variable.
-
-```{r}
-models <- list(
-est1 = feols(log(total_final_levy) ~ log(av) + l(log(av), 1:2) + l(log(av))  + reassess_year + l(reassess_year, 1:2) + log(av)*l(reassess_year, 1:2) | uniqueid + year, data = df_panel, panel.id = c("uniqueid", "year"), vcov = "twoway"),
-
-est2 = feols(log(total_final_levy) ~ log(av)  + l(log(av))* reassess_year | uniqueid + year, data = (df_panel %>% filter(town=="Muni")), panel.id = c("uniqueid", "year"),vcov = "twoway"))
-
-modelsummary(
-  models,
-  output = "flextable",
-  gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
-              stars = TRUE
-)
-```
 
 
 **Subset by Muni, Town, and Schools**
 
 ```{r}
+#| tbl-cap: "Grouped_label fixed effects."
+
+#| warning: false
+#| message: false
+
 models <- list(
-  muni = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2) | grouped_label + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni"), vcov = "twoway"),
+  muni_groupedlabel = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2) | grouped_label + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni"), vcov = "twoway"),
   
-  muni2 = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2) | grouped_label + year + home_rule_ind, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni"), vcov = "twoway"),
+   muni_uniqueid = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2) | grouped_label + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni"), vcov = "twoway"),
+  
+  muni_HRFE = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2) | grouped_label + year + home_rule_ind, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni"), vcov = "twoway"),
 
   town = feols(log(total_final_levy) ~ log(av) + l(log(av), 1:2)  | grouped_label + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Town"), vcov = "twoway"),
 
@@ -879,10 +897,38 @@ models <- list(
 modelsummary(
   models,
   output = "flextable",
-  gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
+ # gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
               stars = TRUE
 )
 
+fixef(models$muni_HRFE)[[3]]
+```
+
+```{r}
+#| tbl-cap: "Grouped_label fixed effects."
+
+#| warning: false
+#| message: false
+
+models <- list(
+  muni_groupedlabel = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2) | uniqueid + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni"), vcov = "twoway"),
+  
+   muni_uniqueid = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2) | uniqueid + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni"), vcov = "twoway"),
+  
+  muni_HRFE = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2) | uniqueid + year + home_rule_ind, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni"), vcov = "twoway"),
+
+  town = feols(log(total_final_levy) ~ log(av) + l(log(av), 1:2)  | uniqueid + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Town"), vcov = "twoway"),
+
+  school = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2)  | uniqueid + year, panel.id = c("grouped_label", "year"), data = df_panel %>% filter(town=="School"), vcov = "twoway"))
+
+modelsummary(
+  models,
+  output = "flextable",
+ # gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
+              stars = TRUE
+)
+
+fixef(models$muni_HRFE)[[3]]
 ```
 
 
@@ -904,7 +950,7 @@ onefe_lags = feols(log(total_final_levy)~ log(av) + l(log(av), 1) + l(log(av), 2
 modelsummary(
   models,
   output = "flextable",
-  gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
+ # gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
               stars = TRUE
 )
 ```
@@ -937,7 +983,9 @@ models <- list(
 modelsummary(
   models,
   output = "flextable",
-  gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
+ # gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse", "statistic"),
+ gof_omit = c("AIC|BIC"
+              ),
               stars = TRUE
 )
 ```
@@ -946,20 +994,25 @@ modelsummary(
 **Subset by Muni, Town, and Schools**
 
 ```{r}
+#| tbl-cap: "Unique ID fixed effects."
+#| warning: false
+#| message: false
+
 models <- list(
-  muni = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(cty_cook_eav), 2) | uniqueid, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni")),
+  muni = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2) | uniqueid, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni")),
   
-  muni2 = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2) | uniqueid + home_rule_ind, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni")),
+  muni2 = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2) | uniqueid + home_rule_ind, panel.id = c("uniqueid", "year"), vcov = "threeway", data = df_panel %>% filter(town=="Muni")),
 
 
-  town = feols(log(total_final_levy) ~ log(av) + l(log(av),-1:2) + l(log(av), 2)   | uniqueid, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Town")),
+  town = feols(log(total_final_levy) ~ log(av) + l(log(av), 1) + l(log(av), 2)   | uniqueid, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Town")),
 
   school = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2)  | uniqueid, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="School")) )
 
 modelsummary(
   models,
   output = "flextable",
-  gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
+ # gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
+ gof_omit = "AIC|BIC",
               stars = TRUE)
 
 ```
