@@ -874,19 +874,23 @@ modelsummary(
 ```
 
 
+### Main Models 
 
 **Subset by Muni, Town, and Schools**
 
 ```{r}
-#| tbl-cap: "Grouped_label fixed effects."
-
+#| label: tbl-groupedlabelFE
+#| tbl-cap: "Grouped_label and year fixed effects."
 #| warning: false
 #| message: false
 
 models <- list(
-  muni_groupedlabel = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2) | grouped_label + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni"), vcov = "twoway"),
+  munis = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2) | grouped_label + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni"), vcov = "twoway"),
   
-   muni_uniqueid = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2) | grouped_label + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni"), vcov = "twoway"),
+     muni_nonhr = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2) | grouped_label + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni" & home_rule_ind==1), vcov = "twoway"),
+  
+     muni_hr = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2) | grouped_label + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni" & home_rule_ind==0), vcov = "twoway"),
+
   
   muni_HRFE = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2) | grouped_label + year + home_rule_ind, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni"), vcov = "twoway"),
 
@@ -905,15 +909,17 @@ fixef(models$muni_HRFE)[[3]]
 ```
 
 ```{r}
-#| tbl-cap: "Grouped_label fixed effects."
-
+#| label: tbl-uniqueidyearFE
+#| tbl-cap: "UniqueID and year fixed effects."
 #| warning: false
 #| message: false
 
 models <- list(
-  muni_groupedlabel = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2) | uniqueid + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni"), vcov = "twoway"),
+  munis = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2) | uniqueid + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni"), vcov = "twoway"),
   
-   muni_uniqueid = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2) | uniqueid + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni"), vcov = "twoway"),
+   muni_nonhr = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2) | uniqueid + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni" & home_rule_ind==1), vcov = "twoway"),
+  
+     muni_hr = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2) | uniqueid + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni" & home_rule_ind==0), vcov = "twoway"),
   
   muni_HRFE = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2) | uniqueid + year + home_rule_ind, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni"), vcov = "twoway"),
 
@@ -966,7 +972,7 @@ est2 = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2)  | uni
 modelsummary(
   models,
   output = "flextable",
-  gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
+ # gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
               stars = TRUE
 )
 ```
@@ -994,6 +1000,7 @@ modelsummary(
 **Subset by Muni, Town, and Schools**
 
 ```{r}
+#| label: tbl-uniqueidFE
 #| tbl-cap: "Unique ID fixed effects."
 #| warning: false
 #| message: false
