@@ -36,8 +36,11 @@ library(modelsummary)
 library(dplyr)
 #install.packages("did")
 library(did)
+```
 
-ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/ptaxsim.db/ptaxsim-2021.0.4.db")
+
+```{reval = FALSE}
+ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/ptaxsim.db/ptaxsim-2022.0.0.db")
 #set_summ_defaults(digits = 2, pvals = FALSE, robust = "HC3" )
 
 
@@ -119,7 +122,7 @@ after2014_hr <- recoded_data %>%
   #           agency_count = n(),
   #           reassess_year = first(reassess_year),
   #           home_rule_ind = first(home_rule_ind)) %>% 
-    left_join(muni_agency_names) %>% 
+   # left_join(muni_agency_names) %>% 
     #select(-c(Column1, `Most recent reassessed`)) %>% 
     # mutate(
     #   log_eav = log(cty_total_eav),
@@ -148,12 +151,33 @@ table(after2014_hr$year)
 93 HR if only majortype munis is included. 
 
 ```{r}
+after2014_hr <- after2014_hr %>% 
+  group_by(agency_name) %>% 
+  mutate(indexed_av = av/av[year == 2014],
+         indexed_levy = total_final_levy / total_final_levy[year==2014]) %>% 
+  ungroup() 
 
 after2014_hr %>% ggplot() + 
   geom_point(aes(x=year, y=av,# color = home_rule_ind, 
                  alpha = .1)) +
   geom_line(aes(x=year, y = av, group = agency_name, alpha = .1, color = Triad)) +
   geom_smooth(aes(x=year, y=av, # 
+                  color = Triad, se=FALSE, size = 2)) + 
+  theme_classic() + 
+  labs(title = "Assessment impact on AV",
+       subtitle = "Years shown are Tax Years (Reassessment year + 1)", 
+       caption = "North Triad was reasessed in 2015,
+       South Triad was reassessed in 2016,
+       Chicago was reassessed in 2017.")
+
+# Rosemont is the crazy outlier. They have NOT had any TIFs expire,so notsure what is going on there. 
+after2014_hr %>% arrange(desc(indexed_av))
+
+after2014_hr %>% ggplot() + 
+  geom_point(aes(x=year, y=indexed_av,# color = home_rule_ind, 
+                 alpha = .1)) +
+  geom_line(aes(x=year, y = indexed_av, group = agency_name, alpha = .1, color = Triad)) +
+  geom_smooth(aes(x=year, y=indexed_av, # 
                   color = Triad, se=FALSE, size = 2)) + 
   theme_classic() + 
   labs(title = "Assessment impact on AV",
@@ -193,6 +217,16 @@ after2014_hr %>% ggplot() +
                  alpha = .1)) +
   geom_line(aes(x=year, y = total_final_levy, group = agency_name, alpha = .1)) +
   geom_smooth(aes(x=year, y=total_final_levy, # 
+                  group = Triad,
+                 # group = grouped_w_hr_ind, 
+                  color = Triad), se=FALSE, size = 2) + 
+  theme_classic()
+
+after2014_hr %>% ggplot() + 
+  geom_point(aes(x=year, y=indexed_levy,# color = home_rule_ind, 
+                 alpha = .1)) +
+  geom_line(aes(x=year, y = indexed_levy, group = agency_name, alpha = .1)) +
+  geom_smooth(aes(x=year, y=indexed_levy, # 
                   group = Triad,
                  # group = grouped_w_hr_ind, 
                   color = Triad), se=FALSE, size = 2) + 
