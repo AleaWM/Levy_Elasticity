@@ -251,6 +251,8 @@ df_panel <- grouped_manual %>%
   ungroup() %>% 
   arrange(uniqueid, year)
 
+write_csv(df_panel, "model_data_Sept102024.csv")
+
 df_panel %>% 
   group_by(uniqueid, year) %>% 
   summarize(count = n()) %>%  
@@ -435,6 +437,61 @@ df_panel %>%
 
 ```
 
+### Levy CAGR
+
+```{r}
+current_year <- 2022
+df_panel <- df_panel %>% mutate(uniqueid = as.character(uniqueid),
+                                year = as.character(year))
+
+levysumms <- df_panel %>% group_by(year) %>% summarize(total_final_levy = sum(total_final_levy, na.rm=TRUE))
+# function for calculating the CAGR
+calc_cagr <- function(df, n) {
+  df <- levysumms %>%
+     arrange(year) %>%
+   # group_by(uniqueid) %>%
+    mutate(cagr = ((`total_final_levy` / lag(`total_final_levy`, n)) ^ (1 / n)) - 1)
+
+  return(df)
+}
+
+# 2011 to 2022 is 12 years of data
+cagr_12 <- calc_cagr(levysumms, 12) %>% 
+    filter(year == as.numeric(as.character(current_year))) %>%
+  summarize(cagr_12 = case_when(year == current_year ~ round(sum(cagr*100, na.rm = TRUE), 2)))
+
+cagr_10 <- calc_cagr(levysumms, 10) %>% 
+    filter(year == as.numeric(as.character(current_year))) %>%
+  summarize(cagr_10 = case_when(year == current_year ~ round(sum(cagr*100, na.rm = TRUE), 2)))
+
+cagr_5 <- calc_cagr(levysumms, 5) %>% 
+  filter(year == as.numeric(as.character(current_year))) %>%
+  summarize(cagr_5 = case_when(year == current_year ~ round(sum(cagr*100, na.rm = TRUE), 2)))
+
+cagr_3 <- calc_cagr(levysumms, 3) %>% 
+  filter(year == current_year) %>%
+  summarize(cagr_3 = case_when(year == current_year ~ round(sum(cagr*100, na.rm = TRUE), 2)))
+
+cagr_2 <- calc_cagr(levysumms, 2) %>% 
+  filter(year == current_year) %>%
+  summarize(cagr_2 = case_when(year == current_year ~ round(sum(cagr*100, na.rm = TRUE), 2)))
+
+cagr_1 <- calc_cagr(levysumms, 1) %>% 
+  filter(year == current_year) %>%
+  summarize(cagr_1 = case_when(year == current_year ~ round(sum(cagr*100, na.rm = TRUE), 2)))
+
+# update variables so cagr_24 becomes cagr_25
+CAGR_levies <- data.frame(cagr_1, cagr_2, cagr_3, cagr_5, cagr_10, cagr_12 ) %>% 
+  #select(-c(uniqueid.1, uniqueid.2, uniqueid.3, uniqueid.4, uniqueid.5 )) %>% 
+  rename(#"Unique ID" = uniqueid, 
+         "1 Year CAGR" = cagr_1, "2 Year CAGR" = cagr_2, "3 Year CAGR" = cagr_3, "5 Year CAGR" = cagr_5, "10 Year CAGR" = cagr_10, "12 Year CAGR" = cagr_12)
+
+
+CAGR_levies %>%   
+  DT::datatable(rownames = FALSE) 
+
+```
+
 
 
 ## Table 3: Tax Base and Tax Base Growth
@@ -570,6 +627,62 @@ taxbase_table %>%
   geom_histogram(aes(x=pct_growth)) + theme_classic() + 
   labs(x = "Growth %", y = "Agency Count", 
        title = "Growth in Tax Base (in EAV), 2010 to 2022")
+```
+
+### CAGR 
+
+First year is 2011, last year is 2022.
+
+```{r}
+current_year <- 2022
+taxbasessums <- df_panel %>% group_by(year) %>% 
+  summarize(cty_cook_eav = sum(cty_cook_eav, na.rm=TRUE))
+
+# function for calculating the CAGR
+calc_cagr <- function(df, n) {
+  df <- taxbasessums %>%
+     arrange(year) %>%
+  #  group_by(uniqueid) %>%
+    mutate(cagr = ((`cty_cook_eav` / lag(`cty_cook_eav`, n)) ^ (1 / n)) - 1)
+
+  return(df)
+}
+
+# 2011 to 2022 is 12 years of data
+cagr_12 <- calc_cagr(taxbasessums, 12) %>% 
+    filter(year == as.numeric(as.character(current_year))) %>%
+  summarize(cagr_12 = case_when(year == current_year ~ round(sum(cagr*100, na.rm = TRUE), 2)))
+
+cagr_10 <- calc_cagr(taxbasessums, 10) %>% 
+    filter(year == as.numeric(as.character(current_year))) %>%
+  summarize(cagr_10 = case_when(year == current_year ~ round(sum(cagr*100, na.rm = TRUE), 2)))
+
+cagr_5 <- calc_cagr(taxbasessums, 5) %>% 
+  filter(year == as.numeric(as.character(current_year))) %>%
+  summarize(cagr_5 = case_when(year == current_year ~ round(sum(cagr*100, na.rm = TRUE), 2)))
+
+cagr_3 <- calc_cagr(taxbasessums, 3) %>% 
+  filter(year == current_year) %>%
+  summarize(cagr_3 = case_when(year == current_year ~ round(sum(cagr*100, na.rm = TRUE), 2)))
+
+cagr_2 <- calc_cagr(taxbasessums, 2) %>% 
+  filter(year == current_year) %>%
+  summarize(cagr_2 = case_when(year == current_year ~ round(sum(cagr*100, na.rm = TRUE), 2)))
+
+cagr_1 <- calc_cagr(taxbasessums, 1) %>% 
+  filter(year == current_year) %>%
+  summarize(cagr_1 = case_when(year == current_year ~ round(sum(cagr*100, na.rm = TRUE), 2)))
+
+# update variables so cagr_24 becomes cagr_25
+CAGR_taxbase <- data.frame(cagr_1, cagr_2, cagr_3, cagr_5, cagr_10, cagr_12 ) %>% 
+ # select(-c(uniqueid.1, uniqueid.2, uniqueid.3, uniqueid.4, uniqueid.5 )) %>% 
+  rename(#"Unique ID" = uniqueid, 
+         "1 Year CAGR" = cagr_1, "2 Year CAGR" = cagr_2, "3 Year CAGR" = cagr_3, "5 Year CAGR" = cagr_5, "10 Year CAGR" = cagr_10, "12 Year CAGR" = cagr_12)
+
+
+CAGR_taxbase%>%   
+  DT::datatable(rownames = FALSE) 
+
 ```
 
 
@@ -748,7 +861,7 @@ rate_table %>%
 -gof_map to exclude specific goodness of fit measures   
 - gof_omit to exclude specific measures.   
 
--vcov options: HC, HC0, HC1(aka Stata's), HC2, HC3(robust, R default), HC4, HC5, HAC, and more.
+-vcov options: HC, HC0, HC1(aka Stata's), HC2, HC3(robust, R default in plm package), HC4, HC5, HAC, and more.
 
 
 ## Trying to deal with reassessment cycles
