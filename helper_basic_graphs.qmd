@@ -76,6 +76,8 @@ theme_awm <- function(){
     )
 }
 
+panel_data <- panel_data |> filter(!minor_type %in% c("BOND", "UNIFIED", "COMM COLL", "COOK", "MISC", "MOSQUITO") ) 
+
 ```
 
 ```{r}
@@ -97,6 +99,15 @@ raw_data_joined %>%
   labs(title = "Taxing Agency Count: Before Dropping any Observations", y="Number of taxing agencies", x= "'minor_type' Categories") + 
   scale_y_continuous(label = scales::comma)
 
+raw_data_joined %>% 
+  filter(year == 2022) %>%
+  ggplot (aes(x= minor_type)) + 
+  geom_bar() + 
+  theme_awm( ) + 
+  geom_text(aes(label = ..count..), stat = "count", hjust=-.1, size = 2) + 
+  coord_flip() +
+  labs(title = "Taxing Agency Count: Before Dropping any Observations", y="Number of taxing agencies", x= "'minor_type' Categories") + 
+  scale_y_continuous(label = scales::comma)
 
 panel_data %>% 
   ggplot (aes(x= major_type)) + 
@@ -108,6 +119,16 @@ panel_data %>%
   scale_y_continuous(label = scales::comma)
 
 panel_data %>% 
+  ggplot (aes(x= minor_type)) + 
+  geom_bar() + 
+  theme_awm( ) + 
+  geom_text(aes(label = ..count..), stat = "count", hjust=-.1, size = 2) + 
+  coord_flip() +
+  labs(title = "Taxing Agency Count: After Dropping Observations", y="Number of taxing agencies", x= "'minor_type' Categories") + 
+  scale_y_continuous(label = scales::comma)
+
+panel_data %>% 
+  filter(year == 2022) %>%
   ggplot (aes(x= minor_type)) + 
   geom_bar() + 
   theme_awm( ) + 
