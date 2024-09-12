@@ -50,7 +50,8 @@ df <- df |>
             lag_eav_pct_change1:lag_av_pct_change2)) %>%
   mutate_at(c("home_rule_ind"), as.character)  %>%
  # Code Cicero as a Municipality and not a township.
-  mutate(minor_type = ifelse(agency_name == "TOWN CICERO", "MUNI", minor_type))
+  mutate(minor_type = ifelse(agency_name == "TOWN CICERO", "MUNI", minor_type)) %>%
+  filter(!grepl('ROSEMONT|DISTRICT 78', agency_name))
 
 ```
 
@@ -904,8 +905,10 @@ models <- list(
   "TWFE w/ AV Lags" = feols(log(total_final_levy)~ log(av) + l(log(av), 1) + l(log(av), 2 ) | uniqueid + year, vcov = "newey_west", panel.id = c("uniqueid", "year"), data = df_panel),
 
 
-     "TWFE - interaction" = feols(log(total_final_levy)~ log(av) +i(l(reassess_year,1), log(av)) | uniqueid + year, vcov = "newey_west", panel.id = c("uniqueid", "year"), data = df_panel),
-  
+"TWFE - interaction" = feols(log(total_final_levy)~ log(av) + l(log(av),1)*reassess_year + l(log(av),1)
+   +i(reassess_year, l(log(av)) )
+   | uniqueid + year, vcov = "newey_west", panel.id = c("uniqueid", "year"), data = df_panel),
+
      "TWFE - Agency Type" = feols(log(total_final_levy)~ log(av) + l(log(av), 1:2) + i(town, log(av)) | uniqueid + year, vcov = "newey_west", panel.id = c("uniqueid", "year"), data = df_panel)
   
   )
