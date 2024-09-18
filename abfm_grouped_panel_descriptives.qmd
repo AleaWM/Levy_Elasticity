@@ -33,11 +33,13 @@ northtriad <- c("Barrington", "Elk Grove","Evanston", "Hanover", "Leyden",
 
 df <- read_csv("panel_data.csv")   ## 10,374
 
-df <- df |> filter(!minor_type %in% c("BOND", "UNIFIED", "COMM COLL", "COOK", "MISC", "MOSQUITO") ) # 9,796 obs
+df <- df |> filter(!minor_type %in% c("BOND", "UNIFIED", "COMM COLL", 
+                                      "COOK", "MISC", 
+                                      "MOSQUITO", "WATER") ) # 9,764 obs
 
 
 
-df <- df |> filter(year > 2009)  |>   ## 7487 obs
+df <- df |> filter(year > 2009)  |>   ## 7463 obs
 
   mutate(tfl_pct_change = if_else(is.na(tfl_pct_change) |
                                     is.infinite(tfl_pct_change),
@@ -49,8 +51,11 @@ df <- df |>
             log_eav:reassess_lag2, 
             lag_eav_pct_change1:lag_av_pct_change2)) %>%
   mutate_at(c("home_rule_ind"), as.character)  %>%
- # Code Cicero as a Municipality and not a township.
+  # Code Cicero as a Municipality and not a township.
   mutate(minor_type = ifelse(agency_name == "TOWN CICERO", "MUNI", minor_type)) %>%
+  
+  # Rosemont and its school district have huge jump 
+  # in tax base and levy due to TIF expiring
   filter(!grepl('ROSEMONT|DISTRICT 78', agency_name))
 
 ```
@@ -59,8 +64,6 @@ df <- df |>
 #| include: false
 
 df %>% filter(is.na(clean_name))
-df %>% filter(is.na(clean_name))
-
 df %>% filter(is.na(Triad))
 
 
