@@ -19,6 +19,7 @@ library(DT)
 ```
 
 
+# Data Prep
 
 ```{r}
 #| label: tryFMVdata
@@ -57,32 +58,8 @@ df <- df |>
 
 ```
 
-# Descriptive Stats
-
-```{r}
-datasummary_skim(df)
-datasummary_skim(df, type  = "categorical")
-```
 
 
-```{r eval=FALSE, include = FALSE}
-muni_fmv <- read_csv("Necessary_Files/ptaxsim_muni_level_2006-2022.csv")
-
-muni_fmv <- muni_fmv |> select(-muni_pct_eav_taxed) 
-## muni_pct_eav_taxed is actually the muni wide tax rate calculated from the 
-## Levy / Taxed EAV. It was mislabeled in the summary file.
-
-#muni_fmv_2006 <- muni_fmv |> filter(year == 2006)
-
-muni_fmv_2022 <- muni_fmv |> 
-  filter(year == 2022)  
-
-
-datasummary_skim(muni_fmv_2022)
-
-muni_fmv %>% filter(year==2022) %>% select(muni_fmv, muni_fmv_taxed, muni_eav_taxed, muni_levy, muni_current_rate_avg, muni_PC_total, muni_eav, muni_avg_C2_bill_noexe, muni_avg_C2_bill_withexe) %>% datasummary_skim(fmt = fmt_sprintf("%.0f"))
-muni_fmv %>% filter(year==2006)%>% select(muni_fmv, muni_fmv_taxed, muni_eav_taxed, muni_levy, muni_current_rate_avg, muni_PC_total, muni_eav, muni_avg_C2_bill_noexe, muni_avg_C2_bill_withexe) %>% datasummary_skim(fmt = fmt_sprintf("%.0f"))
-```
 
 
 > df_panel only includes Municipality Taxing Agecncies (which should be grouped with the miscellaneous and other muni/township taxing agencies but is not in these tables) and Elementary and Secondary School Districts.
@@ -622,5 +599,112 @@ feols(log(total_final_levy) ~ log(cty_cook_eav) + lag(log(cty_cook_eav)) + lag(l
 
 
 > Schools are still always different than Towns or Municipalities
+
+
+
+### Main Models 
+
+**Subset by Muni, Town, and Schools**
+
+```{r}
+#| label: tbl-groupedlabelFE
+#| tbl-cap: "Grouped_label and year fixed effects."
+#| warning: false
+#| message: false
+
+models <- list(
+  Munis = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2) | grouped_label + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni"), vcov = "newey_west"),
+  
+     'Homerule Muni' = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2) | grouped_label + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni" & home_rule_ind==1), vcov = "newey_west"),
+  
+     'Non-HR Muni' = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2) | grouped_label + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni" & home_rule_ind==0), vcov = "newey_west"),
+
+  
+  # muni_HRFE = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2) | grouped_label + year + home_rule_ind, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni"), vcov = "newey_west"),
+
+  Towns = feols(log(total_final_levy) ~ log(av) + l(log(av), 1:2)  | grouped_label + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Town"), vcov = "newey_west"),
+
+  Schools = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2)  | grouped_label + year, panel.id = c("grouped_label", "year"), data = df_panel %>% filter(town=="School"), vcov = "newey_west")
+                 )
+
+modelsummary(
+  models,
+  output = "flextable",
+ # gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
+              stars = TRUE
+)
+
+# fixef(models$muni_HRFE)[[3]]
+```
+
+```{r}
+#| label: tbl-uniqueidyearFE
+#| tbl-cap: "UniqueID and year fixed effects."
+
+
+models <- list(
+  Munis = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2) | uniqueid + year, panel.id = c("uniqueid", "year"), 
+                data = df_panel %>% filter(town=="Muni"), vcov = "newey_west"
+                ),
+  
+   'Homerule Muni' = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2) | uniqueid + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni" & home_rule_ind==1), vcov = "newey_west"
+                      ),
+  
+     'Non-HR Muni' = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2) | uniqueid + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni" & home_rule_ind==0), vcov = "newey_west"
+                     ),
+  
+  # muni_HRFE = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2) | uniqueid + year + home_rule_ind, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni"), vcov = "newey_west"),
+
+  Towns = feols(log(total_final_levy) ~ log(av) + l(log(av), 1:2)  | uniqueid + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Town"), vcov = "newey_west"
+               ),
+
+  Schools = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2)  | uniqueid + year, panel.id = c("uniqueid", "year"),  vcov = "newey_west", 
+                 data = df_panel %>% filter(town=="School"))
+  )
+
+modelsummary(
+  models,
+  output = "flextable",
+ # gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
+              stars = TRUE
+)
+
+#fixef(models$muni_HRFE)[[3]]
+```
+
+```{r}
+#| label: tbl-uniqueidyearFE-noLags
+#| tbl-cap: "**Log(Levy)~Log(AV):** UniqueID and Year fixed effects."
+
+
+models <- list(
+  Munis = feols(log(total_final_levy) ~ log(av)  | uniqueid + year, panel.id = c("uniqueid", "year"), 
+                data = df_panel %>% filter(town=="Muni" & year > 2011), vcov = "newey_west"
+                ),
+  
+   'Homerule Muni' = feols(log(total_final_levy) ~ log(av)  | uniqueid + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni" & home_rule_ind==1 & year > 2011), vcov = "newey_west"
+                      ),
+  
+     'Non-HR Muni' = feols(log(total_final_levy) ~ log(av)  | uniqueid + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni" & home_rule_ind==0  & year > 2011), vcov = "newey_west"
+                     ),
+ 
+
+  Towns = feols(log(total_final_levy) ~ log(av)  | uniqueid + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Town" & year > 2011), vcov = "newey_west"
+               ),
+
+  Schools = feols(log(total_final_levy) ~ log(av) | uniqueid + year, panel.id = c("uniqueid", "year"),  vcov = "newey_west", 
+                 data = df_panel %>% filter(town=="School" & year > 2011))
+  )
+
+modelsummary(
+  models,
+  output = "flextable",
+              stars = TRUE
+)
+
+```
+
+
+
 
 
