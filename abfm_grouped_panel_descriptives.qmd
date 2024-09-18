@@ -16,6 +16,7 @@ library(modelsummary)
 library(tidyverse)
 library(janitor)
 library(dplyr)
+library(fixest)
 library(sandwich)
 ```
 
@@ -129,9 +130,10 @@ munis <- df %>%
          first6 = str_pad(first6, 6, "left", "0"), # add leading zeros
          lim_rate = ifelse(is.na(lim_rate), "NA", lim_rate)) |>
   left_join(groupies2, by = c("agency_name", "agency_num")) %>%
-  filter( major_type == "MUNICIPALITY/TOWNSHIP" | minor_type %in% c("LIBRARY", "PARK")) %>% 
+  filter(major_type == "MUNICIPALITY/TOWNSHIP" | minor_type %in% c("LIBRARY", "PARK")) %>% 
  
   group_by(year, grouped_label) %>% 
+  arrange(agency_num) %>%
   summarize(home_rule_ind = mean(as.numeric(home_rule_ind), na.rm=TRUE),
     agency_name = first(agency_name),
             types = paste(list(unique(minor_type)), sep = ", "),
@@ -163,10 +165,12 @@ munis <- df %>%
     bundled = ifelse(agency_count > 1, 1, 0),
     uniqueid = str_c(grouped_label, "_", home_rule_ind, "_", bundled),
     first2_dig = str_sub(agency_num, 1,2),
-    town = ifelse(first2_dig == "02", "Town", "Muni"),
+    town = ifelse(first2_dig == "03", "Muni", 
+                  ifelse(first2_dig == "02", "Town", "Other")),
     town = ifelse( agency_name == "TOWN CICERO", "Muni", town)) %>% 
   filter(total_final_levy > 1) %>%
-  select(year, uniqueid, everything()) %>% ungroup() 
+  select(year, uniqueid, everything()) %>% ungroup() %>%
+  filter(grepl("MUNI|TOWN", types))
 
 grouped_manual <- df %>% 
     mutate(agency_num = str_pad(agency_num, 9, "left", "0"),
@@ -177,11 +181,14 @@ grouped_manual <- df %>%
   
   left_join(groupies2,
             by = c("agency_name", "agency_num")) %>%
+  
+  # might be dropping extra observations that we maybe do want?
     filter(!grouped_label %in% munis$grouped_label) %>%
 
   filter((major_type == "MUNICIPALITY/TOWNSHIP"  
          & minor_type != "MISC") |  major_type == "MISCELLANEOUS") %>% 
-  
+    arrange(agency_num) %>%
+
   group_by(year, grouped_label, home_rule_ind) %>% 
   summarize(agency_name = first(agency_name),
             types = paste(list(unique(minor_type)), sep = ", "),
@@ -201,7 +208,7 @@ grouped_manual <- df %>%
             connected_count = n(),
             lim_rate = mean(as.numeric(lim_rate), na.rm=TRUE),
             clean_name = first(clean_name),
-                   min_group_eav = min(cty_cook_eav),
+            min_group_eav = min(cty_cook_eav),
             max_group_eav = max(cty_cook_eav)
   ) %>%
   mutate(
@@ -213,7 +220,8 @@ grouped_manual <- df %>%
     bundled = ifelse(agency_count > 1, 1, 0),
     uniqueid = str_c(grouped_label, "_", home_rule_ind, "_", bundled),
     first2_dig = str_sub(agency_num, 1,2),
-    town = ifelse(first2_dig == "02", "Town", "Muni"),
+    town = ifelse(first2_dig == "02", "Town", 
+                  ifelse(first2_dig == "03", "Muni", "Other")),
     town = ifelse( agency_name == "TOWN CICERO", "Muni", town)) %>% 
   filter(total_final_levy > 1) %>%
   select(year, uniqueid, everything()) %>% ungroup() 
@@ -248,8 +256,6 @@ schools <- df %>%
             connected_count = n(),
             lim_rate = sum(as.numeric(lim_rate), na.rm=TRUE),
             clean_name = first(clean_name),
-        
-            
   ) %>%
   mutate(
     dif_group_eav = max_group_eav - min_group_eav,
@@ -265,27 +271,32 @@ schools <- df %>%
   select(year, uniqueid, everything()) %>% ungroup() 
 
 
-# 194 non-HR and 77 HR in 2022
-
 grouped_manual %>%  
   ungroup() %>%
   filter(year == 2022) %>%
   group_by(home_rule_ind) %>%
   summarize(count = n())
  
-#140 schools
+#139 schools
 schools %>%  
   ungroup() %>%
   filter(year == 2022) %>%
   group_by(home_rule_ind) %>%
   summarize(count = n())
 
-
+ 
+munis %>%  
+  ungroup() %>%
+  filter(year == 2022) %>%
+  group_by(home_rule_ind) %>%
+  summarize(count = n())
 ```
 
 ```{r}
-grouped_manual <- rbind(grouped_manual, schools) %>% 
-  arrange(uniqueid, year)
+grouped_manual <- rbind(munis, schools, grouped_manual
+                        ) %>% 
+  arrange(uniqueid, year) %>%
+  mutate(home_rule_ind = ifelse(home_rule_ind > 0, 1, 0))
 
 table(grouped_manual$town)
 
@@ -324,7 +335,7 @@ grouped_manual <- grouped_manual %>%
 df_panel <- grouped_manual %>% 
   ungroup() %>% 
   arrange(uniqueid, year) %>% 
-  filter(grouped_label != "drop")
+  filter(grouped_label != "drop") 
 
 
 write_csv(df_panel, "model_data_Sept172024.csv")
@@ -519,6 +530,7 @@ df_panel %>%
 
 ```{r}
 current_year <- 2022
+
 df_panel <- df_panel %>% mutate(uniqueid = as.character(uniqueid),
                                 year = as.character(year))
 
@@ -1026,30 +1038,6 @@ modelsummary(
 
 ```
 
-```{r eval=FALSE}
-
-# twfe <- feols(log(total_final_levy) ~ log(cty_cook_eav) | uniqueid + year, data = df_panel, panel.id = c("uniqueid", "year"))
-#   
-# dummies <- feols(log(total_final_levy) ~ log(cty_cook_eav) + uniqueid + year, data = df_panel, panel.id = c("uniqueid", "year"))
-
-
-side_by_side <- function(models, estimates, ...) {
-    models <- rep(models, each = length(estimates))
-    estimates <- rep(estimates, times = 2)
-    names(models) <- names(estimates)
-    modelsummary(models = models, estimate = estimates,
-                 statistic = NULL, gof_omit = ".*", ...)
-}
-
-models <- list(
-  twfe <- feols(log(total_final_levy) ~ log(cty_cook_eav) | uniqueid + year, data = df_panel, panel.id = c("uniqueid", "year")),
-  dummies <- feols(log(total_final_levy) ~ log(cty_cook_eav) + uniqueid + year, data = df_panel, panel.id = c("uniqueid", "year"))) 
-
-estimates <- c("Coef." = "estimate", "Std.Error" = "std.error")
-side_by_side(models, estimates = estimates,
-             coef_omit = 'uniqueid| year',
-            output = "kableExtra")
-```
 
 ```{r}
 #| warning: false
@@ -1075,45 +1063,45 @@ modelsummary(
 
 ### Main Models 
 
-**Subset by Muni, Town, and Schools**
-
 ```{r}
-#| label: tbl-groupedlabelFE
-#| tbl-cap: "Grouped_label and year fixed effects."
+#| label: tbl-AllAgencies
+#| tbl-cap: "All taxing agencies remaining in sample with agency and year fixed effects."
 #| warning: false
 #| message: false
 
 models <- list(
-  Munis = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2) | grouped_label + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni"), vcov = "newey_west"),
   
-     'Homerule Muni' = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2) | grouped_label + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni" & home_rule_ind==1), vcov = "newey_west"),
+    'All Agencies Remaining' = feols(log(total_final_levy) ~ log(av) | grouped_label + year, panel.id = c("uniqueid", "year"), data = df_panel, vcov = "newey_west"),
   
-     'Non-HR Muni' = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2) | grouped_label + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni" & home_rule_ind==0), vcov = "newey_west"),
 
+  'All Agencies Remaining - Lags' = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2) | grouped_label + year, panel.id = c("uniqueid", "year"), data = df_panel, vcov = "newey_west")
   
-  # muni_HRFE = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2) | grouped_label + year + home_rule_ind, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni"), vcov = "newey_west"),
 
-  Towns = feols(log(total_final_levy) ~ log(av) + l(log(av), 1:2)  | grouped_label + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Town"), vcov = "newey_west"),
-
-  Schools = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2)  | grouped_label + year, panel.id = c("grouped_label", "year"), data = df_panel %>% filter(town=="School"), vcov = "newey_west")
                  )
 
 modelsummary(
   models,
   output = "flextable",
- # gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
               stars = TRUE
 )
 
-# fixef(models$muni_HRFE)[[3]]
 ```
 
+
+**Subset by Muni, Town, and Schools**
 ```{r}
 #| label: tbl-uniqueidyearFE
 #| tbl-cap: "UniqueID and year fixed effects."
 
+df_panel %>% group_by(uniqueid) %>% summarize(n=n()) %>% arrange(desc(n))
+df_panel <- df_panel %>% mutate(years_existed = n(), .by = uniqueid) %>%
+  filter(years_existed > 10)
+df_panel %>% summarize(unique_n = n_distinct(uniqueid),
+                       years_existed = n(), .by = uniqueid)
+
 
 models <- list(
+  
   Munis = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2) | uniqueid + year, panel.id = c("uniqueid", "year"), 
                 data = df_panel %>% filter(town=="Muni"), vcov = "newey_west"
                 ),
@@ -1124,8 +1112,6 @@ models <- list(
      'Non-HR Muni' = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2) | uniqueid + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni" & home_rule_ind==0), vcov = "newey_west"
                      ),
   
-  # muni_HRFE = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2) | uniqueid + year + home_rule_ind, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni"), vcov = "newey_west"),
-
   Towns = feols(log(total_final_levy) ~ log(av) + l(log(av), 1:2)  | uniqueid + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Town"), vcov = "newey_west"
                ),
 
