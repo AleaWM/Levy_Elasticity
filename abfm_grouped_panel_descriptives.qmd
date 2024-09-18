@@ -34,7 +34,7 @@ northtriad <- c("Barrington", "Elk Grove","Evanston", "Hanover", "Leyden",
 df <- read_csv("panel_data.csv")   ## 10,374
 
 df <- df |> filter(!minor_type %in% c("BOND", "UNIFIED", "COMM COLL", 
-                                      "COOK", "MISC", 
+                                      "COOK", "MISC", "SANITARY", "FIRE",
                                       "MOSQUITO", "WATER") ) # 9,764 obs
 
 
@@ -116,11 +116,57 @@ df <- after2009
 
 groupies2 <- read_csv("grouped_labels.csv") %>%      
   mutate(agency_num = str_pad(agency_num, 9, "left", "0"),
-         first6 = as.character(first6), # make character
-          hr_ind = as.character(hr_ind),
-        first6 = str_pad(first6, 6, "left", "0"), # add leading zeros
-         first6_w_hr_ind = str_c(first6, "_", hr_ind)
+       #  first6 = as.character(first6), # make character
+       #   hr_ind = as.character(hr_ind),
+        #first6 = str_pad(first6, 6, "left", "0"), # add leading zeros
+         #first6_w_hr_ind = str_c(first6, "_", hr_ind)
        )
+
+munis <- df %>% 
+    mutate(agency_num = str_pad(agency_num, 9, "left", "0"),
+         first6 = as.character(first6), # make character
+         home_rule_ind = as.character(home_rule_ind),
+         first6 = str_pad(first6, 6, "left", "0"), # add leading zeros
+         lim_rate = ifelse(is.na(lim_rate), "NA", lim_rate)) |>
+  left_join(groupies2, by = c("agency_name", "agency_num")) %>%
+  filter( major_type == "MUNICIPALITY/TOWNSHIP" | minor_type %in% c("LIBRARY", "PARK")) %>% 
+ 
+  group_by(year, grouped_label) %>% 
+  summarize(home_rule_ind = mean(as.numeric(home_rule_ind), na.rm=TRUE),
+    agency_name = first(agency_name),
+            types = paste(list(unique(minor_type)), sep = ", "),
+
+            agency_num = first(agency_num),
+            total_final_levy = sum(total_final_levy, na.rm=TRUE),
+                min_group_eav = min(cty_cook_eav),
+            max_group_eav = max(cty_cook_eav),
+            cty_cook_eav = first(cty_cook_eav),
+            cty_total_eav = first(cty_total_eav), 
+            av = first(av), ## mistake fixed: was sum, now is first()
+            Triad = first(Triad), 
+            agency_count = n(),  # Agencies in Grouped
+            reassess_year = first(reassess_year),
+            home_rule_ind = first(home_rule_ind),
+            rate = sum(total_final_rate, na.rm=TRUE),
+            connected_count = n(),
+            lim_rate = mean(as.numeric(lim_rate), na.rm=TRUE),
+            clean_name = first(clean_name),
+                   min_group_eav = min(cty_cook_eav),
+            max_group_eav = max(cty_cook_eav)
+  ) %>%
+  mutate(
+        dif_group_eav = max_group_eav - min_group_eav,
+    conn_agency_flag = ifelse(connected_count > 1, 1, 0),
+    log_eav = log(cty_total_eav),
+    log_levy = log(total_final_levy),
+    log_av =  log(av),
+    bundled = ifelse(agency_count > 1, 1, 0),
+    uniqueid = str_c(grouped_label, "_", home_rule_ind, "_", bundled),
+    first2_dig = str_sub(agency_num, 1,2),
+    town = ifelse(first2_dig == "02", "Town", "Muni"),
+    town = ifelse( agency_name == "TOWN CICERO", "Muni", town)) %>% 
+  filter(total_final_levy > 1) %>%
+  select(year, uniqueid, everything()) %>% ungroup() 
 
 grouped_manual <- df %>% 
     mutate(agency_num = str_pad(agency_num, 9, "left", "0"),
@@ -131,7 +177,8 @@ grouped_manual <- df %>%
   
   left_join(groupies2,
             by = c("agency_name", "agency_num")) %>%
-  
+    filter(!grouped_label %in% munis$grouped_label) %>%
+
   filter((major_type == "MUNICIPALITY/TOWNSHIP"  
          & minor_type != "MISC") |  major_type == "MISCELLANEOUS") %>% 
   
@@ -170,6 +217,7 @@ grouped_manual <- df %>%
     town = ifelse( agency_name == "TOWN CICERO", "Muni", town)) %>% 
   filter(total_final_levy > 1) %>%
   select(year, uniqueid, everything()) %>% ungroup() 
+
 
 
 schools <- df %>% 
@@ -299,7 +347,6 @@ df_panel %>% ungroup() %>% group_by(year,town) %>% summarize(count = n()) %>%
 # Presentation Tables
 
 ## Table 1: Name and Number of Taxing Agencies
-
 
 
 ```{r}
