@@ -1114,6 +1114,9 @@ models <- list(
   
   Towns = feols(log(total_final_levy) ~ log(av) + l(log(av), 1:2)  | uniqueid + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Town"), vcov = "newey_west"
                ),
+   Other = feols(log(total_final_levy) ~ log(av) + l(log(av), 1:2)  | uniqueid + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Other"), vcov = "newey_west"
+               ),
+
 
   Schools = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2)  | uniqueid + year, panel.id = c("uniqueid", "year"),  vcov = "newey_west", 
                  data = df_panel %>% filter(town=="School"))
@@ -1147,6 +1150,8 @@ models <- list(
  
 
   Towns = feols(log(total_final_levy) ~ log(av)  | uniqueid + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Town" & year > 2011), vcov = "newey_west"
+               ),
+     Other = feols(log(total_final_levy) ~ log(av) | uniqueid + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Other"), vcov = "newey_west"
                ),
 
   Schools = feols(log(total_final_levy) ~ log(av) | uniqueid + year, panel.id = c("uniqueid", "year"),  vcov = "newey_west", 
