@@ -1,6 +1,7 @@
 ---
 title: "Descriptive Stats for Levy Project Data"
-format: 
+warning: false
+format:
   html:
     df-print: paged
     code-fold: true
@@ -8,6 +9,14 @@ format:
     toc: true
     toc-location: left
 ---
+# Questions/Comments so I don't forget them.
+
+- I looked at the names of minor_type = "INFRA" (it isn't a citation to something further down the document)
+-- They are 22 infrastructure funds, one for each county. We probs want to call them "infrastructure" and group them with the counties?
+- Did we want to filter out total_final_levy > 1 as late as line ~135?
+- I think ~line 146 has the filter messing things up. I comment more on that _infra_.
+- The obs we want to drop for the models would be filtered from the "munis" df with the filter: filter(!grouped_label %in% munis$grouped_label)
+-- I don't know exactly how to apply that to df_panel
 
 # Data Prep
 
@@ -37,14 +46,18 @@ df <- read_csv("panel_data.csv")   ## 10,374
 df <- df |> filter(!minor_type %in% c("BOND", "UNIFIED", "COMM COLL", 
                                       "COOK", "MISC", "SANITARY", "FIRE",
                                       "MOSQUITO", "WATER") ) # 9,764 obs
+# MVH IS GETTING 9051 OBS AT THIS STEP. HAVE WE CHANGED THE FILTER WITHOUT THE OBS COUNT?
+# (See line 84ish)
 
 
 
-df <- df |> filter(year > 2009)  |>   ## 7463 obs
+df <- df |> 
+  filter(year > 2009)  |>   ## 7463 obs MVH: 6922
 
+  # Change infinite values from tfl % delta to 0
   mutate(tfl_pct_change = if_else(is.na(tfl_pct_change) |
                                     is.infinite(tfl_pct_change),
-                                  0, tfl_pct_change) )
+                                  0, tfl_pct_change))
 
 
 df <- df |> 
@@ -57,7 +70,7 @@ df <- df |>
   
   # Rosemont and its school district have huge jump 
   # in tax base and levy due to TIF expiring
-  filter(!grepl('ROSEMONT|DISTRICT 78', agency_name))
+  filter(!grepl('ROSEMONT|DISTRICT 78', agency_name)) #6883 obs. MVH: 6883 obs. LOLOLOL
 
 ```
 
@@ -77,7 +90,8 @@ df %>% filter(is.na(Triad))
 
 df %>% ungroup () |> 
   group_by(year, minor_type) %>% 
-  filter((major_type == "MUNICIPALITY/TOWNSHIP" & minor_type != "MISC") | major_type == "SCHOOL" | major_type == "MISCELLANEOUS") %>% 
+  filter((major_type == "MUNICIPALITY/TOWNSHIP" # & minor_type != "MISC" MVH: YOU FILTERED THese ABOVE! YOU'RE TOO GOOD! 
+          ) | major_type == "SCHOOL" | major_type == "MISCELLANEOUS") %>% 
   summarize(count = n()) %>%
   pivot_wider(names_from = year, values_from = count) %>% 
   flextable::flextable()
@@ -113,7 +127,7 @@ datasummary_skim(df, type  = "categorical")
 
 ```{r}
 after2009 <- df %>% filter(year > 2009) 
-df <- after2009
+df <- after2009 #lol
 
 groupies2 <- read_csv("grouped_labels.csv") %>%      
   mutate(agency_num = str_pad(agency_num, 9, "left", "0"),
@@ -124,13 +138,14 @@ groupies2 <- read_csv("grouped_labels.csv") %>%
        )
 
 munis <- df %>% 
-    mutate(agency_num = str_pad(agency_num, 9, "left", "0"),
+    mutate(#agency_num = str_pad(agency_num, 9, "left", "0"),
          first6 = as.character(first6), # make character
          home_rule_ind = as.character(home_rule_ind),
          first6 = str_pad(first6, 6, "left", "0"), # add leading zeros
          lim_rate = ifelse(is.na(lim_rate), "NA", lim_rate)) |>
   left_join(groupies2, by = c("agency_name", "agency_num")) %>%
-  filter(major_type == "MUNICIPALITY/TOWNSHIP" | minor_type %in% c("LIBRARY", "PARK")) %>% 
+  filter(major_type == "MUNICIPALITY/TOWNSHIP" | minor_type %in% c("LIBRARY", "PARK")) %>% # HERE HERE HERE THIS IS THE KEY FILTER THAT NEEDS TO BE CHANGED
+                                                                                           # COMMENT THIS OUT AND ADD THE FILTER ON LINE 174
  
   group_by(year, grouped_label) %>% 
   arrange(agency_num) %>%
@@ -156,6 +171,9 @@ munis <- df %>%
                    min_group_eav = min(cty_cook_eav),
             max_group_eav = max(cty_cook_eav)
   ) %>%
+  
+  # HEY UNCOMMENT ME!!!!!
+  #filter(!types %in% "MUNI") |>
   mutate(
         dif_group_eav = max_group_eav - min_group_eav,
     conn_agency_flag = ifelse(connected_count > 1, 1, 0),
@@ -183,17 +201,14 @@ grouped_manual <- df %>%
   left_join(groupies2,
             by = c("agency_name", "agency_num")) %>%
   
-  # might be dropping extra observations that we maybe do want?
     filter(!grouped_label %in% munis$grouped_label) %>%
-
   filter((major_type == "MUNICIPALITY/TOWNSHIP"  
-         & minor_type != "MISC") |  major_type == "MISCELLANEOUS") %>% 
+         & minor_type != "MISC") |  major_type == "MISCELLANEOUS") %>% # I think this is the analogous filter to remove
     arrange(agency_num) %>%
 
   group_by(year, grouped_label, home_rule_ind) %>% 
   summarize(agency_name = first(agency_name),
-            types = paste(list(unique(minor_type)), sep = ", "),
-
+            types = paste(list(unique(minor_type)), sep = ", "), #Filtering off of this! Here goes nothing!
             agency_num = first(agency_num),
             total_final_levy = sum(total_final_levy, na.rm=TRUE),
                 min_group_eav = min(cty_cook_eav),
@@ -212,6 +227,7 @@ grouped_manual <- df %>%
             min_group_eav = min(cty_cook_eav),
             max_group_eav = max(cty_cook_eav)
   ) %>%
+ # filter(!types %in% "MUNI") |> #AND TRY UNCOMMENTING THIS OUT!
   mutate(
         dif_group_eav = max_group_eav - min_group_eav,
     conn_agency_flag = ifelse(connected_count > 1, 1, 0),
