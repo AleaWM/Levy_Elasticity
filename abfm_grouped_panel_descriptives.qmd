@@ -45,14 +45,12 @@ df <- read_csv("panel_data.csv")   ## 10,374
 
 df <- df |> filter(!minor_type %in% c("BOND", "UNIFIED", "COMM COLL", 
                                       "COOK", "MISC", "SANITARY", "FIRE",
-                                      "MOSQUITO", "WATER") ) # 9,764 obs
-# MVH IS GETTING 9051 OBS AT THIS STEP. HAVE WE CHANGED THE FILTER WITHOUT THE OBS COUNT?
-# (See line 84ish)
-
+                                      "MOSQUITO", "WATER") ) # 9,051 obs
+# MVH & AWM obs match
 
 
 df <- df |> 
-  filter(year > 2009)  |>   ## 7463 obs MVH: 6922
+  filter(year > 2009)  |>   ## 6922 obs MVH: 6922
 
   # Change infinite values from tfl % delta to 0
   mutate(tfl_pct_change = if_else(is.na(tfl_pct_change) |
@@ -70,7 +68,7 @@ df <- df |>
   
   # Rosemont and its school district have huge jump 
   # in tax base and levy due to TIF expiring
-  filter(!grepl('ROSEMONT|DISTRICT 78', agency_name)) #6883 obs. MVH: 6883 obs. LOLOLOL
+  filter(!grepl('ROSEMONT|DISTRICT 78', agency_name)) #6883 obs. MVH & AWM match
 
 ```
 
@@ -90,8 +88,7 @@ df %>% filter(is.na(Triad))
 
 df %>% ungroup () |> 
   group_by(year, minor_type) %>% 
-  filter((major_type == "MUNICIPALITY/TOWNSHIP" # & minor_type != "MISC" MVH: YOU FILTERED THese ABOVE! YOU'RE TOO GOOD! 
-          ) | major_type == "SCHOOL" | major_type == "MISCELLANEOUS") %>% 
+  filter((major_type == "MUNICIPALITY/TOWNSHIP") | major_type == "SCHOOL" | major_type == "MISCELLANEOUS") %>% 
   summarize(count = n()) %>%
   pivot_wider(names_from = year, values_from = count) %>% 
   flextable::flextable()
@@ -127,15 +124,12 @@ datasummary_skim(df, type  = "categorical")
 
 ```{r}
 after2009 <- df %>% filter(year > 2009) 
-df <- after2009 #lol
+df <- after2009 # yes, I suck.
 
 groupies2 <- read_csv("grouped_labels.csv") %>%      
-  mutate(agency_num = str_pad(agency_num, 9, "left", "0"),
-       #  first6 = as.character(first6), # make character
-       #   hr_ind = as.character(hr_ind),
-        #first6 = str_pad(first6, 6, "left", "0"), # add leading zeros
-         #first6_w_hr_ind = str_c(first6, "_", hr_ind)
-       )
+  mutate(agency_num = str_pad(agency_num, 9, "left", "0"))
+
+
 
 munis <- df %>% 
     mutate(#agency_num = str_pad(agency_num, 9, "left", "0"),
@@ -143,10 +137,15 @@ munis <- df %>%
          home_rule_ind = as.character(home_rule_ind),
          first6 = str_pad(first6, 6, "left", "0"), # add leading zeros
          lim_rate = ifelse(is.na(lim_rate), "NA", lim_rate)) |>
-  left_join(groupies2, by = c("agency_name", "agency_num")) %>%
-  filter(major_type == "MUNICIPALITY/TOWNSHIP" | minor_type %in% c("LIBRARY", "PARK")) %>% # HERE HERE HERE THIS IS THE KEY FILTER THAT NEEDS TO BE CHANGED
-                                                                                           # COMMENT THIS OUT AND ADD THE FILTER ON LINE 174
- 
+    left_join(groupies2, by = c("agency_name", "agency_num")) %>%
+  
+  # HERE HERE HERE THIS IS THE KEY FILTER THAT NEEDS TO BE CHANGED
+
+ # filter(major_type == "MUNICIPALITY/TOWNSHIP" | minor_type %in% c("LIBRARY", "PARK")) %>% 
+                                                                                  # Added old MUNI filter back
+ filter(minor_type =="MUNI") %>%
+  
+
   group_by(year, grouped_label) %>% 
   arrange(agency_num) %>%
   summarize(home_rule_ind = mean(as.numeric(home_rule_ind), na.rm=TRUE),
@@ -171,10 +170,7 @@ munis <- df %>%
                    min_group_eav = min(cty_cook_eav),
             max_group_eav = max(cty_cook_eav)
   ) %>%
-  
-  # HEY UNCOMMENT ME!!!!!
-  #filter(!types %in% "MUNI") |>
-  mutate(
+    mutate(
         dif_group_eav = max_group_eav - min_group_eav,
     conn_agency_flag = ifelse(connected_count > 1, 1, 0),
     log_eav = log(cty_total_eav),
@@ -190,6 +186,8 @@ munis <- df %>%
   filter(total_final_levy > 1) %>%
   select(year, uniqueid, everything()) %>% ungroup() %>%
   filter(grepl("MUNI|TOWN", types))
+
+
 
 grouped_manual <- df %>% 
     mutate(agency_num = str_pad(agency_num, 9, "left", "0"),
@@ -1167,8 +1165,8 @@ models <- list(
      'Non-HR Muni' = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2) | uniqueid + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Muni" & home_rule_ind==0), vcov = "newey_west"
                      ),
   
-  Township = feols(log(total_final_levy) ~ log(av) + l(log(av), 1:2)  | uniqueid + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Township"), vcov = "newey_west"
-               ),
+  # Township = feols(log(total_final_levy) ~ log(av) + l(log(av), 1:2)  | uniqueid + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Township"), vcov = "newey_west"
+  #              ),
    # Other = feols(log(total_final_levy) ~ log(av) + l(log(av), 1:2)  | uniqueid + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Other"), vcov = "newey_west"
    #             ),
 
@@ -1201,8 +1199,8 @@ models <- list(
      'Non-HR Muni' = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2) | uniqueid + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter((town=="Muni" | town == "Other") & home_rule_ind==0), vcov = "newey_west"
                      ),
   
-  Township = feols(log(total_final_levy) ~ log(av) + l(log(av), 1:2)  | uniqueid + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Township"), vcov = "newey_west"
-               ),
+  # Township = feols(log(total_final_levy) ~ log(av) + l(log(av), 1:2)  | uniqueid + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Township"), vcov = "newey_west"
+  #              ),
 
   Schools = feols(log(total_final_levy) ~ log(av) + l(log(av)) + l(log(av), 2)  | uniqueid + year, panel.id = c("uniqueid", "year"),  vcov = "newey_west", 
                  data = df_panel %>% filter(town=="School"))
@@ -1215,7 +1213,6 @@ modelsummary(
               stars = TRUE
 )
 
-#fixef(models$muni_HRFE)[[3]]
 ```
 
 ```{r}
@@ -1235,8 +1232,8 @@ models <- list(
                      ),
  
 
-  Township = feols(log(total_final_levy) ~ log(av)  | uniqueid + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Township" & year > 2011), vcov = "newey_west"
-               ),
+  # Township = feols(log(total_final_levy) ~ log(av)  | uniqueid + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Township" & year > 2011), vcov = "newey_west"
+  #              ),
      # Other = feols(log(total_final_levy) ~ log(av) | uniqueid + year, panel.id = c("uniqueid", "year"), data = df_panel %>% filter(town=="Other" & year > 2011), vcov = "newey_west"
      #           ),
 
