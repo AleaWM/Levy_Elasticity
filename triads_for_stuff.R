@@ -1,5 +1,6 @@
 library(tidyverse)
 
+
 agency_triads <- read_csv("Assessor_-_Parcel_Universe_20240917.csv") |>
   filter(tax_year == 2022) |>
   select(-tax_year)
@@ -29,3 +30,67 @@ agency_triads_pivot <- agency_triads %>%
   )
 
 
+##### API Attempt ############
+
+library(DBI)
+library(glue)
+library(jsonlite)
+library(httr)
+library(ptaxsim)
+
+ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/ptaxsim.db/ptaxsim-2022.0.0.db")
+
+
+alldistinct_pins <- DBI::dbGetQuery(
+  ptaxsim_db_conn,
+  glue_sql(
+    "SELECT DISTINCT pin, tax_code_num
+  FROM pin",
+    .con = ptaxsim_db_conn
+  ))
+
+
+base_url <- "https://datacatalog.cookcountyil.gov/resource/tx2p-k2g9.json"
+
+puniverse <- GET(
+  base_url,
+  query = list(
+    tax_year = 2022,
+    `$select` = paste0(c("distinct pin", "triad_name"#,# "township_code", "township_name",
+                        # "nbhd_code",
+                       #    "lat","lon"
+                         ),
+                       
+    collapse = ","),
+    `$limit` = 20000000L
+  )
+)
+
+puniverse <- fromJSON(rawToChar(puniverse$content))
+
+
+joined <-  left_join(alldistinct_pins, puniverse, by = "pin")
+
+triads_intaxcodes <- joined %>% 
+  arrange(tax_code_num, triad_name) %>%
+  group_by(tax_code_num) %>% 
+  summarize(triad_name = first(triad_name))
+
+taxing_agencies <- lookup_agency(2006:2022, triads_intaxcodes$tax_code_num) 
+
+taxing_agencies <- left_join(taxing_agencies, triads_intaxcodes, by = c("tax_code"="tax_code_num"))
+
+
+# has binary variable for if it was a reassessment year or not. 
+# Manually created based on the 3 year rotation used for reassessments.
+reassessment_years <- read_csv("./Necessary_Files/Triad_reassessment_years.csv")
+
+reassessments_long <- reassessment_years %>% 
+  pivot_longer(cols = c(`2006`:`2022`), names_to = "year", values_to = "reassess_year") %>% 
+  mutate(year = as.numeric(year))
+
+taxing_agencies <- left_join(taxing_agencies, reassessments_long, by = c("year", "triad_name" = "Triad"))
+
+agency_triads <- taxing_agencies %>% distinct(year, agency_num, agency_name,  triad_name, reassess_year, agency_minor_type, agency_major_type)
+
+agency_triads %>% write_csv("agency_reassessmentyears.csv")
