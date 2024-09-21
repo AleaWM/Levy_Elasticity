@@ -37,8 +37,11 @@ library(glue)
 library(jsonlite)
 library(httr)
 library(ptaxsim)
+library(tidyverse)
 
-ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/ptaxsim.db/ptaxsim-2022.0.0.db")
+ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "./ptaxsim.db/ptaxsim-2022.0.0.db"
+                                  #C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/ptaxsim.db/ptaxsim-2022.0.0.db"
+                                  )
 
 
 alldistinct_pins <- DBI::dbGetQuery(
@@ -47,7 +50,7 @@ alldistinct_pins <- DBI::dbGetQuery(
     "SELECT DISTINCT pin, tax_code_num
   FROM pin",
     .con = ptaxsim_db_conn
-  ))
+  )) #2475053 obs.
 
 
 base_url <- "https://datacatalog.cookcountyil.gov/resource/tx2p-k2g9.json"
@@ -69,7 +72,7 @@ puniverse <- GET(
 puniverse <- fromJSON(rawToChar(puniverse$content))
 
 
-joined <-  left_join(alldistinct_pins, puniverse, by = "pin")
+joined <-  dplyr::left_join(alldistinct_pins, puniverse, by = "pin")
 
 triads_intaxcodes <- joined %>% 
   arrange(tax_code_num, triad_name) %>%
@@ -93,4 +96,10 @@ taxing_agencies <- left_join(taxing_agencies, reassessments_long, by = c("year",
 
 agency_triads <- taxing_agencies %>% distinct(year, agency_num, agency_name,  triad_name, reassess_year, agency_minor_type, agency_major_type)
 
-agency_triads %>% write_csv("agency_reassessmentyears.csv")
+#agency_triads %>% write_csv("agency_reassessmentyears.csv")
+
+supp <- read_csv("needs_triads - needs_triads.csv")
+
+df <- read_csv("model_data_Sept102024.csv")
+
+# is this not a command? triad_supp <- col_bind
