@@ -121,9 +121,10 @@ agency_triads <- agency_triads %>%
 agency_triads %>% write_csv("agency_reassessmentyears.csv")
 
 
-df <- read_csv("model_data_Sept172024.csv") %>%   
+df <- read_csv("model_data_Sept102024.csv") %>%   
   ungroup() %>%
   select(-c(Triad, reassess_year)) %>%
-  left_join(agency_triads, by = c("year", "grouped_label"= "agency_name"))
+  left_join(agency_triads, by = c("year", "agency_name"= "agency_name"))
 
   
+df %>% write_csv("model_data_Sept212024.csv")
