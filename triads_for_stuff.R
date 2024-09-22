@@ -113,7 +113,10 @@ agency_triads <- agency_triads %>%
     triad_name == "SCHOOL DISTRICT 111" ~	"South",
     triad_name == "COMMUNITY HIGH SCHOOL 220" ~	"North",
     TRUE ~ triad_name)
-  ) %>% ungroup()
+  ) %>% 
+  group_by(year, agency_num, agency_name) %>% arrange(triad_name) %>%
+  summarize(triad_name = first(triad_name),
+            reassess_year = first(reassess_year)) %>% ungroup() 
 
 agency_triads %>% write_csv("agency_reassessmentyears.csv")
 
