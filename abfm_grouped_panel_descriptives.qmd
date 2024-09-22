@@ -9,6 +9,7 @@ format:
     toc: true
     toc-location: left
 ---
+
 # Questions/Comments so I don't forget them.
 
 - I looked at the names of minor_type = "INFRA" (it isn't a citation to something further down the document)
@@ -1010,6 +1011,9 @@ rate_table %>%
 
 -vcov options: HC, HC0, HC1(aka Stata's), HC2, HC3(robust, R default in plm package), HC4, HC5, HAC, and more.
 
+```{r}
+df_panel <- read_csv("model_data_Sept212024.csv")
+```
 
 ## Trying to deal with reassessment cycles
 
@@ -1019,13 +1023,13 @@ rate_table %>%
 library(fixest)
 
 models <- list(
-  twfe = feols(log(total_final_levy) ~ log(av) + Triad + reassess_year | uniqueid + year, panel.id = c("uniqueid", "year"), vcov = "newey_west",  data = df_panel |> filter(!is.na(reassess_year))),
+  twfe = feols(log(total_final_levy) ~ log(av) + triad_name + reassess_year | uniqueid + year, panel.id = c("uniqueid", "year"), vcov = "newey_west",  data = df_panel),
 
-triadbyyear_fe = feols(log(total_final_levy) ~ log(av) + l(log(av), 1) + l(log(av), 2 ) | uniqueid + year^Triad,vcov = "newey_west", panel.id = c("uniqueid", "year"), data = df_panel |> filter(!is.na(Triad))),
+triadbyyear_fe = feols(log(total_final_levy) ~ log(av) + l(log(av), 1) + l(log(av), 2 ) | uniqueid + year^triad_name,vcov = "newey_west", panel.id = c("uniqueid", "year"), data = df_panel),
 
-triad_dummy = feols(log(total_final_levy) ~ log(av) + l(log(av), 1) + l(log(av), 2 ) + Triad | Triad + uniqueid + year, vcov = "newey_west", panel.id = c("uniqueid", "year"), data = df_panel |> filter(!is.na(Triad))),
+triad_dummy = feols(log(total_final_levy) ~ log(av) + l(log(av), 1) + l(log(av), 2 ) + triad_name | triad_name + uniqueid + year, vcov = "newey_west", panel.id = c("uniqueid", "year"), data = df_panel),
 
-twfe_lags = feols(log(total_final_levy)~ log(av) + l(log(av), 1) + l(log(av), 2 ) | uniqueid + year^Triad, vcov = "newey_west", panel.id = c("uniqueid", "year"), data = df_panel) )
+twfe_lags = feols(log(total_final_levy)~ log(av) + l(log(av), 1) + l(log(av), 2 ) | uniqueid + year^triad_name, vcov = "newey_west", panel.id = c("uniqueid", "year"), data = df_panel) )
 
 modelsummary(
   models,
@@ -1044,14 +1048,14 @@ library(fixest)
 models <- list(
   "Plain TWFE" = feols(log(total_final_levy) ~ log(av)  | uniqueid + year,  data = df_panel, vcov = "newey_west", panel.id = c("uniqueid", "year")),
   
-     #   "TWFE - year^reassess" = feols(log(total_final_levy) ~ log(av)  | uniqueid + year^reassess_year, vcov = "newey_west", panel.id = c("uniqueid", "year"), data = df_panel),
-     # 
-     # "TWFE - year^lagreassess" = feols(log(total_final_levy) ~ log(av)  | uniqueid + year^l(reassess_year,1),vcov = "newey_west", panel.id = c("uniqueid", "year"), data = df_panel),
-     # 
+        "TWFE - year^reassess" = feols(log(total_final_levy) ~ log(av)  | uniqueid + year^reassess_year, vcov = "newey_west", panel.id = c("uniqueid", "year"), data = df_panel),
+      
+      "TWFE - year^lagreassess" = feols(log(total_final_levy) ~ log(av)  | uniqueid + year^l(reassess_year,1),vcov = "newey_west", panel.id = c("uniqueid", "year"), data = df_panel),
+      
   "TWFE w/ AV Lags" = feols(log(total_final_levy)~ log(av) + l(log(av), 1) + l(log(av), 2 ) | uniqueid + year, vcov = "newey_west", panel.id = c("uniqueid", "year"), data = df_panel),
 
 
-"TWFE - interaction" = feols(log(total_final_levy)~ log(av) + l(log(av),1)*reassess_year + l(log(av),1)
+ "TWFE - interaction" = feols(log(total_final_levy)~ log(av) + l(log(av),1)*reassess_year + l(log(av),1)
    +i(reassess_year, l(log(av)) )
    | uniqueid + year, vcov = "newey_west", panel.id = c("uniqueid", "year"), data = df_panel),
 
@@ -1063,7 +1067,6 @@ models <- list(
 modelsummary(
   models,
   output = "flextable",
- # gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs", "std.error.type", "rmse"),
               stars = TRUE
 )
 
@@ -1077,19 +1080,18 @@ fixef(models$`TWFE - Agency Type`)[[2]]
 
 ```{r}
 models <- list(
-  twfe_slopes = feols(log(total_final_levy) ~ log(av) + reassess_year | uniqueid + year, vcov = "newey_west",  panel.id = c("uniqueid", "year"), data = df_panel |> filter(!is.na(Triad))),
+  twfe_slopes = feols(log(total_final_levy) ~ log(av) + reassess_year | uniqueid + year, vcov = "newey_west",  panel.id = c("uniqueid", "year"), data = df_panel),
 
   year_reassess_fe = feols(log(total_final_levy) ~ log(av) + l(log(av), 1) + l(log(av), 2 ) | uniqueid + year^reassess_year, vcov = "newey_west", panel.id = c("uniqueid", "year"), data = df_panel),
 
-  triad_dummy = feols(log(total_final_levy) ~ log(av) + log(av)*Triad | uniqueid + year, vcov = "newey_west", panel.id = c("uniqueid", "year"), data = df_panel |> filter(!is.na(Triad))),
+  triad_dummy = feols(log(total_final_levy) ~ log(av) + log(av)*triad_name | uniqueid + year, vcov = "newey_west", panel.id = c("uniqueid", "year"), data = df_panel),
 
-  id_yearTriad_fe = feols(log(total_final_levy)~ log(av) + l(log(av), 1) + l(log(av), 2 ) | uniqueid + year^Triad, vcov = "newey_west", panel.id = c("uniqueid", "year"), data = df_panel) 
+  id_yearTriad_fe = feols(log(total_final_levy)~ log(av) + l(log(av), 1) + l(log(av), 2 ) | uniqueid + year^triad_name, vcov = "newey_west", panel.id = c("uniqueid", "year"), data = df_panel) 
 )
 
 modelsummary(
   models,
   output = "flextable",
- # gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
               stars = TRUE
 )
 
