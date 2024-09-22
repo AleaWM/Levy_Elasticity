@@ -1,36 +1,7 @@
-library(tidyverse)
+## Creates agency_reassessment.csv
+## Which is just the agency_dt from ptaxsim with the triad and 
+## reassessment year indicator added to it.
 
-
-agency_triads <- read_csv("Assessor_-_Parcel_Universe_20240917.csv") |>
-  filter(tax_year == 2022) |>
-  select(-tax_year)
-
-agency_triads_pivot <- agency_triads |>
-  mutate(across(ends_with("_num"),
-                # Get rid of brackets
-                ~ str_replace_all(.x, "\\[(\\d+)\\]", "\\1") |>
-                # Replace empty strings with NA
-                  str_replace_all("\\[\\]", NA_character_))) |>
-  # Pivot!
-  pivot_longer(names_from = ends_with("_num"), values_from = "triad_name")
-
-write_csv(agency_triads_pivot, "triads_pivot.csv")
-  
-library(dplyr)
-library(tidyr)
-
-# Pivot the data from wide to long format
-agency_triads_pivot <- agency_triads %>%
-  tidyr::pivot_longer(
-
-    cols = dplyr::ends_with("_n"),                # Select all columns that end with "_n"
-    names_to = "taxing_agency",                 # Name for the new column that will hold the names of the original columns
-    values_to = "triad",                   # Name for the new column that will hold the values
-    values_drop_na = TRUE                  # Drop rows where the value is NA
-  )
-
-
-##### API Attempt ############
 
 library(DBI)
 library(glue)
@@ -39,8 +10,9 @@ library(httr)
 library(ptaxsim)
 library(tidyverse)
 
-ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "./ptaxsim.db/ptaxsim-2022.0.0.db"
-                                  #C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/ptaxsim.db/ptaxsim-2022.0.0.db"
+ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), 
+                                  #"./ptaxsim.db/ptaxsim-2022.0.0.db"
+                                  "C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/ptaxsim.db/ptaxsim-2022.0.0.db"
                                   )
 
 
@@ -59,11 +31,10 @@ puniverse <- GET(
   base_url,
   query = list(
     tax_year = 2022,
-    `$select` = paste0(c("distinct pin", "triad_name"#,# "township_code", "township_name",
-                        # "nbhd_code",
-                       #    "lat","lon"
+    `$select` = paste0(c("distinct pin", "triad_name"
+                         #, "township_code", "township_name",
+                        # "nbhd_code", "lat","lon"
                          ),
-                       
     collapse = ","),
     `$limit` = 20000000L
   )
@@ -94,12 +65,62 @@ reassessments_long <- reassessment_years %>%
 
 taxing_agencies <- left_join(taxing_agencies, reassessments_long, by = c("year", "triad_name" = "Triad"))
 
-agency_triads <- taxing_agencies %>% distinct(year, agency_num, agency_name,  triad_name, reassess_year, agency_minor_type, agency_major_type)
+agency_triads <- taxing_agencies %>% distinct(year, agency_num, agency_name,  
+                                              triad_name, reassess_year, 
+                                              agency_minor_type, agency_major_type
+                                              )
 
+#agency_triads %>% filter(is.na(triad_name)) %>% distinct(agency_name)
 #agency_triads %>% write_csv("agency_reassessmentyears.csv")
 
-supp <- read_csv("needs_triads - needs_triads.csv")
+agency_triads <- read_csv("agency_reassessmentyears.csv") %>% 
+  select(year, agency_num, 
+         agency_name,  
+           triad_name, reassess_year, 
+         #  agency_minor_type, agency_major_type
+  )
 
-df <- read_csv("model_data_Sept102024.csv")
 
-# is this not a command? triad_supp <- col_bind
+agency_triads <- agency_triads %>%
+  mutate(triad_name = case_when(
+    triad_name == "SCHOOL DISTRICT CC 59" ~	"North",
+    triad_name == "ARLINGTON HEIGHTS TOWNSHIP HIGH SCHOOL 214" ~	"North",
+    triad_name == "SCHOOL DISTRICT 83" ~	"South",
+    triad_name == "COMMUNITY HIGH SCHOOL 212"	~ "South",
+    triad_name == "SCHOOL DISTRICT 104"	~ "South",
+    triad_name == "COMMUNITY HIGH SCHOOL 217"	~ "South",
+    triad_name == "SCHOOL DISTRICT 72" ~ "North",
+    triad_name == "COMMUNITY HIGH SCHOOL 219"	~ "North",
+    triad_name == "SCHOOL DISTRICT 70" ~	"North",
+    triad_name == "SCHOOL DISTRICT 31" ~	"North",
+    triad_name == "NORTHFIELD TOWNSHIP HIGH SCHOOL 225"	~ "North",
+    triad_name == "SCHOOL DISTRICT CC 15"	~ "North",
+    triad_name == "PALATINE TOWNSHIP HIGH SCHOOL 211"	~ "North",
+    triad_name == "SCHOOL DISTRICT 152 1/2" ~	"South",
+    triad_name == "THORNTON TOWNSHIP HIGH SCHOOL 205" ~	"South",
+    triad_name == "SCHOOL DISTRICT 152"	~ "South",
+    triad_name == "SCHOOL DISTRICT 21 WHEELING COMMUNITY CONSOLIDATED"	~ "South",
+    triad_name == "SCHOOL DISTRICT 130"	~ "South",
+    triad_name == "COMMUNITY HIGH SCHOOL 218"	~ "South",
+    triad_name == "SCHOOL DISTRICT 144" ~	"South",
+    triad_name == "COMMUNITY HIGH SCHOOL 228" ~	"South",
+    triad_name == "SCHOOL DISTRICT 103" ~	"North",
+    triad_name == "BERWYN CICERO STICKNEY HIGH SCHOOL 201" ~ "South",
+    triad_name == "SCHOOL DISTRICT 162" ~	"South",
+    triad_name == "RICH TOWNSHIP HIGH SCHOOL 227" ~	"South",
+    triad_name == "BLOOM TOWNSHIP HIGH SCHOOL 206"~	"South",
+    triad_name == "SCHOOL DISTRICT CC 54" ~	"North",
+    triad_name == "SCHOOL DISTRICT 111" ~	"South",
+    triad_name == "COMMUNITY HIGH SCHOOL 220" ~	"North",
+    TRUE ~ triad_name)
+  ) %>% ungroup()
+
+agency_triads %>% write_csv("agency_reassessmentyears.csv")
+
+
+df <- read_csv("model_data_Sept172024.csv") %>%   
+  ungroup() %>%
+  select(-c(Triad, reassess_year)) %>%
+  left_join(agency_triads, by = c("year", "grouped_label"= "agency_name"))
+
+  
