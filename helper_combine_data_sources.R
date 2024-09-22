@@ -2,12 +2,13 @@ library(tidyverse)
 library(DBI)
 library(ptaxsim)
 library(glue)
-library(dplyr)
 library(httr)
+library(jsonlite)
 
 ## Change database file path to match your computer's location 
 ## of the PTAXSIM database!
-ptaxsim_db_conn <- DBI::dbConnect(#RSQLite::SQLite(), "./ptaxsim.db/ptaxsim-2022.0.0.db"
+ptaxsim_db_conn <- DBI::dbConnect(
+  RSQLite::SQLite(), #"./ptaxsim.db/ptaxsim-2022.0.0.db"
   "C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/ptaxsim.db/ptaxsim-2022.0.0.db"
 )
 
@@ -41,7 +42,7 @@ puniverse <- GET(
 puniverse <- fromJSON(rawToChar(puniverse$content))
 
 
-joined <-  dplyr::left_join(alldistinct_pins, puniverse, by = "pin")
+joined <- left_join(alldistinct_pins, puniverse, by = "pin")
 
 triads_intaxcodes <- joined %>% 
   arrange(tax_code_num, triad_name) %>%
@@ -59,7 +60,8 @@ taxing_agencies <- left_join(taxing_agencies, triads_intaxcodes,
 reassessment_years <- read_csv("./Necessary_Files/Triad_reassessment_years.csv")
 
 reassessments_long <- reassessment_years %>% 
-  pivot_longer(cols = c(`2006`:`2022`), names_to = "year", 
+  pivot_longer(cols = c(`2006`:`2022`), 
+               names_to = "year", 
                values_to = "reassess_year") %>% 
   mutate(year = as.numeric(year))
 
@@ -67,13 +69,12 @@ taxing_agencies <- left_join(taxing_agencies, reassessments_long,
                              by = c("year", "triad_name" = "Triad"))
 
 agency_triads <- taxing_agencies %>% 
-  distinct(year, agency_num, agency_name,  triad_name, reassess_year, 
-           agency_minor_type, agency_major_type)
+  distinct(year, agency_num, agency_name,  triad_name, reassess_year)
 
 # agency_triads %>% 
 #   filter(is.na(triad_name)) %>% 
 #   distinct(agency_name)
-#agency_triads %>% write_csv("agency_reassessmentyears.csv")
+# agency_triads %>% write_csv("agency_reassessmentyears.csv")
 
 agency_triads <- agency_triads %>%
   mutate(triad_name = case_when(
@@ -110,16 +111,16 @@ agency_triads <- agency_triads %>%
   )
 
 
-# muni_agency_names <- DBI::dbGetQuery(
-#   ptaxsim_db_conn,
-#   "SELECT DISTINCT agency_num, agency_name, minor_type
-#   FROM agency_info
-#   WHERE minor_type = 'MUNI'
-#   OR agency_num = '020060000'
-#   "
-#   ) %>% 
-#   mutate(first6 = str_sub(agency_num,1,6)) %>%
-#   select(-minor_type)
+muni_agency_names <- DBI::dbGetQuery(
+  ptaxsim_db_conn,
+  "SELECT DISTINCT agency_num, agency_name, minor_type
+  FROM agency_info
+  WHERE minor_type = 'MUNI'
+  OR agency_num = '020060000'
+  "
+  ) %>%
+  mutate(first6 = str_sub(agency_num,1,6)) %>%
+  select(-minor_type)
 
 
 agency_dt <- DBI::dbGetQuery(
@@ -138,15 +139,6 @@ is.integer64 <- function(x){
 
 agency_dt <- agency_dt %>%
   mutate_if(is.integer64, as.integer)
-
-
-# has binary variable for if it was a reassessment year or not. 
-# Manually created based on the 3 year rotation used for reassessments.
-# reassessment_years <- read_csv("./Necessary_Files/Triad_reassessment_years.csv")
-# 
-# 
-# reassessments_long <- reassessment_years %>% 
-#   pivot_longer(cols = c(`2006`:`2022`), names_to = "year", values_to = "reassess_year")
 
 
 nicknames <- readxl::read_xlsx("./Necessary_Files/muni_shortnames.xlsx") %>% 
@@ -171,7 +163,8 @@ all_taxing_agencies <- all_taxing_agencies %>%
   rename(muni_name =  agency_name.y,
          muni_num = agency_num.y,
          agency_name = agency_name.x,
-         agency_num = agency_num.x)
+         agency_num = agency_num.x) %>%
+  left_join(agency_triads, by = c("year", "agency_num", "agency_name"))
 
 raw_data_joined <- left_join(agency_dt, all_taxing_agencies, by = c("agency_num", "first6"))
 
