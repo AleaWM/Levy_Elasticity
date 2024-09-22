@@ -4,12 +4,12 @@ format: html
 editor: visual
 ---
 
-```{r}
+```{r message=FALSE, warning=FALSE, output = FALSE}
 
 library(tidyverse)
 library(did)
 
-source("helper_recode_variables.R")
+panel_df <- read_csv("agency_reassessmentyears.csv")
 ```
 
 ```{r}
@@ -24,7 +24,7 @@ TRA2 <- pivot_longer(TRA, cols = `2006`:`2022`, names_to = "year", values_to = "
 ```{r eval=FALSE}
 
 panel_data1 <- panel_data %>%
-  filter(home_rule_ind == 1) %>%
+  #filter(home_rule_ind == 1) %>%
   mutate(year_control = as.numeric(ifelse(year == 2015, 0,
                                 ifelse(year == 2016, 1,
                                   ifelse(year == 2017, 2,
@@ -37,44 +37,50 @@ panel_data1 <- panel_data %>%
 
 ```{r}
 
-panel_data1 <- recoded_data %>%
-  filter(home_rule_ind == 1) %>%
+panel_data1 <- df_panel %>%
+ # filter(home_rule_ind == 1) %>%
   mutate(reassess_year = as.numeric(reassess_year)) %>%
-  mutate(agency_num = as.numeric(agency_num)) %>%
   mutate(year = as.numeric(as.character(year)))
 
 TRA2 <- TRA2 %>%
   mutate(year = as.numeric(year))
 
-panel_data2 <- left_join(panel_data1, TRA2, by = c("Triad", "year")) 
+panel_data2 <- left_join(panel_data1, TRA2, by = c("triad_name" = "Triad", "year")) 
 
-panel_data3 <- panel_data2 %>% filter(year > 2014 & year < 2019)
+panel_data3 <- panel_data2 %>% filter(year > 2014 & year < 2020)
 ```
 
 ```{r}
 
 panel_data3 <- panel_data3 %>%
-  mutate(AG = if_else(Triad == "North", 1,
-                      if_else(Triad == "South", 2,
-                              if_else(Triad == "City", 3,
-                                      NA))))
+  mutate(AG = case_when(
+   # year == 2015 ~ 0,
+    triad_name == "South" ~ 2016,
+    triad_name == "City" ~ 2017,
+    triad_name == "North" ~ 2018,
+
+    T ~ 0))
+panel_data3 <- panel_data3 |> filter(!is.na(AG))
+
+table(panel_data3$AG)
+table(panel_data3$year)
 ```
 
-```{r, warning = F}
+```{r}
 
 att1 <- att_gt(
   yname = "total_final_levy",
-  tname = "reassess_01",
-  idname = "agency_num",
+  tname = "year",
+  idname = "uniqueid",
+#  xformula = ~homerule_ind,
   gname = "AG",
   data = panel_data3,
-  panel = F,
-  allow_unbalanced_panel = T,
-  control_group = "notyettreated",
-  #anticipation = 0
+   panel = TRUE,
+   allow_unbalanced_panel = T,
+  control_group = "notyettreated"
 )
 
-summary(att1)
+summary(att1) 
 ```
 
 Needs to switch to 1 for all periods after the treatment in the window.
@@ -85,9 +91,9 @@ att1 <- att_gt(
   yname = "total_final_levy",
   tname = "year",
   idname = "agency_num",
-  gname = "reassess_year",
+  gname = "AG",
   data = panel_data3,
-  panel = F,
+  panel = T,
   allow_unbalanced_panel = T,
   control_group = "notyettreated"
   #anticipation = 0
