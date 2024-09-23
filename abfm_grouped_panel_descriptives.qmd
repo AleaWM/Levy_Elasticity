@@ -12,11 +12,11 @@ format:
 
 # Questions/Comments so I don't forget them.
 
-- I looked at the names of minor_type = "INFRA" (it isn't a citation to something further down the document)
--- They are 22 infrastructure funds, one for each county. We probs want to call them "infrastructure" and group them with the counties?
 - Did we want to filter out total_final_levy > 1 as late as line ~135?
+
 - I think ~line 146 has the filter messing things up. I comment more on that _infra_.
 - The obs we want to drop for the models would be filtered from the "munis" df with the filter: filter(!grouped_label %in% munis$grouped_label)
+
 -- I don't know exactly how to apply that to df_panel
 
 # Data Prep
@@ -1009,7 +1009,10 @@ alpha = ( square root (B/A ) ) - 1
 
 r = cube_root(B/A) - 1
 
-```{r merriman_model_w_triads}
+```{r }
+#| label: tbl-merriman_model_w_triads
+#| tbl-cap: "Uses September 21st 2024 csv file."
+
 
 df_temp <- read_csv("model_data_Sept212024.csv") %>% 
   ungroup() %>%
@@ -1024,7 +1027,10 @@ df_temp <- read_csv("model_data_Sept212024.csv") %>%
   
 ```
 
-```{r triad_merriman_data_expl}
+```{r}
+#| label: tbl-merriman_data_expl
+#| tbl-cap: "Includes log(av) and av_true in model. Uses September 21st 2024 csv file."
+
 
 df_temp |>
   filter(is.na(rate)) |>
@@ -1066,8 +1072,10 @@ df_mmm <- df_temp_2 |>
 df_mmm <- panel(df_mmm, panel.id = c("uniqueid", "year"))
 
 ```
-```{r merriman_models-withlogs}
 
+```{r }
+#| label: tbl-merriman_models-withlogs
+#| tbl-cap: "Logged av_true for comparison."
 
 
 mods_nw <- list(
@@ -1141,9 +1149,9 @@ modelsummary::modelsummary(
 
 ```
 
-```{r merriman_models}
-
-
+```{r}
+#| label: tbl-merriman_models
+#| tbl-cap: "Includes log(av) and av_true in model. Uses September 21st 2024 csv file."
 
 mods_1 <- list(
   
@@ -1216,7 +1224,9 @@ modelsummary::modelsummary(
 
 ```
 
-```{r visualizing_mm_data}
+```{r }
+#| label: visualizing_mm_data
+#| fig-cap: "Relationshp between log(av) and log(av_true) created from the imputed assessed values during non assessment years."
 
 df_mmm |>
   ggplot(aes(x = log(av), y = log(av_true))) +
@@ -1243,7 +1253,6 @@ df_panel <- read_csv("model_data_Sept212024.csv")
 
 ## Trying to deal with reassessment cycles
 
-> Wait until info for school taxing agencies with their triad is collected. Less observations in these tables due to many agencies not having a triad associated with them until manually merged in.
 
 ```{r eval=FALSE}
 library(fixest)
