@@ -1015,7 +1015,7 @@ df_temp <- read_csv("model_data_Sept212024.csv") %>%
   ungroup() %>%
   group_by(uniqueid) %>% 
   arrange(year)%>% 
-  mutate(rate = ifelse(reassess_year == 1 & !is.na(lead(av,3)), sqrt(lead(av, 3) / av) - 1, NA)) %>%
+  mutate(rate = ifelse(reassess_year == 1 & !is.na(lead(av,3)), (lead(av, 3) / av)^(1/3) - 1, NA)) %>%
   select(year, reassess_year, uniqueid, grouped_label, av, cty_cook_eav, agency_count, rate, everything()) %>% 
   arrange(uniqueid, year) %>%
   fill(rate, .direction = "down") %>%
@@ -1070,7 +1070,7 @@ df_mmm <- panel(df_mmm, panel.id = c("uniqueid", "year"))
 
 
 
-mods_1 <- list(
+mods_nw <- list(
   
   "1" = feols(log(total_final_levy) ~ log(av) + log(av_true) | uniqueid + year,
                data = df_mmm,
@@ -1098,33 +1098,33 @@ mods_1 <- list(
   )
 
 modelsummary::modelsummary(
-  mods_1,
+  mods_nw,
   output = "flextable",
- gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
+ #gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
               stars = TRUE
 )
 
 mods_iid <- list(
   
-  "1" = feols(log(total_final_levy) ~ log(av) + log(av_true) | uniqueid + year,
+  "AV (iid)" = feols(log(total_final_levy) ~ log(av) + log(av_true) | uniqueid + year,
                data = df_mmm,
                vcov = "iid",
                panel.id = c("uniqueid", "year")
                 ),
   
-  "Interact" = feols(log(total_final_levy) ~ log(av) + log(av_true) + log(av)*log(av_true) | uniqueid + year,
+  "AV Interact (iid)" = feols(log(total_final_levy) ~ log(av) + log(av_true) + log(av)*log(av_true) | uniqueid + year,
                data = df_mmm,
                vcov = "iid",
                panel.id = c("uniqueid", "year")
                 ),
   
-  "EAV" = feols(log(total_final_levy) ~ log_eav + log(av_true) | uniqueid + year,
+  "EAV (iid)" = feols(log(total_final_levy) ~ log_eav + log(av_true) | uniqueid + year,
                data = df_mmm,
                vcov = "iid",
                panel.id = c("uniqueid", "year")
                 ),
   
-    "EAV Interact" = feols(log(total_final_levy) ~ log_eav + log(av_true) + log_eav*log(av_true) | uniqueid + year,
+    "EAV Interact (iid)" = feols(log(total_final_levy) ~ log_eav + log(av_true) + log_eav*log(av_true) | uniqueid + year,
                data = df_mmm,
                vcov = "iid",
                panel.id = c("uniqueid", "year")
@@ -1135,7 +1135,7 @@ mods_iid <- list(
 modelsummary::modelsummary(
   mods_iid,
   output = "flextable",
- gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
+ #gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
               stars = TRUE
 )
 
