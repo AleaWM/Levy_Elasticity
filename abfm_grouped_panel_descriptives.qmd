@@ -1101,6 +1101,51 @@ modelsummary::modelsummary(
               stars = TRUE
 )
 
+mods_iid <- list(
+  
+  "1" = feols(log(total_final_levy) ~ log(av) + av_true | uniqueid + year,
+               data = df_mmm,
+               vcov = "iid",
+               panel.id = c("uniqueid", "year")
+                ),
+  
+  "Interact" = feols(log(total_final_levy) ~ log(av) + av_true + log(av)*av_true | uniqueid + year,
+               data = df_mmm,
+               vcov = "iid",
+               panel.id = c("uniqueid", "year")
+                ),
+  
+  "EAV" = feols(log(total_final_levy) ~ log_eav + av_true | uniqueid + year,
+               data = df_mmm,
+               vcov = "iid",
+               panel.id = c("uniqueid", "year")
+                ),
+  
+    "EAV Interact" = feols(log(total_final_levy) ~ log_eav + av_true + log_eav*av_true | uniqueid + year,
+               data = df_mmm,
+               vcov = "iid",
+               panel.id = c("uniqueid", "year")
+                )
+  )
+
+
+modelsummary::modelsummary(
+  mods_iid,
+  output = "flextable",
+ gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
+              stars = TRUE
+)
+
+```
+
+```{r visualizing_mm_data}
+
+df_mmm |>
+  ggplot(aes(x = log(av), y = log(av_true))) +
+  geom_point() +
+  geom_abline() +
+  theme_classic()
+
 
 ```
 
