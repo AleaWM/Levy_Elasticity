@@ -1001,6 +1001,25 @@ rate_table %>%
 # Models
 
 
+A is given assessment year's taxed AV and B is the next year's taxed AV.
+
+alpha = ( square root (B/A ) ) - 1
+
+```{r}
+df_panel %>% 
+  ungroup() %>%
+  group_by(uniqueid) %>% 
+  arrange(year)%>% 
+  mutate(rate = ifelse(reassess_year == 1 & !is.na(lead(av,3)), sqrt(lead(av, 3) / av) - 1, NA)) %>%
+  select(year, reassess_year, uniqueid, grouped_label, av, cty_cook_eav, agency_count, rate, everything()) %>% 
+  arrange(uniqueid, year) %>%
+  fill(rate, .direction = "down") %>%
+  mutate(av_true = av*(1+rate), .before = av)
+  
+  
+```
+
+
 - vcov options in modelsummary: robust, classical, HC3, bootstrap
 - vcov options in feols(): newey_west, hc1, etc.
 
@@ -1121,6 +1140,35 @@ modelsummary(
 
 
 ### Main Models 
+
+```{r}
+#| label: tbl-AllAgencies-leads
+#| tbl-cap: "All taxing agencies remaining in sample with agency and year fixed effects."
+#| warning: false
+#| message: false
+
+models <- list(
+  
+    'All Agencies Remaining' = feols(log(total_final_levy) ~ log(av) | uniqueid + year, panel.id = c("uniqueid", "year"), data = df_panel, vcov = "newey_west"),
+  
+
+  'All Agencies Remaining - Leads' = feols(log(total_final_levy) ~ log(av) + f(log(av), 1:2) | uniqueid + year, panel.id = c("uniqueid", "year"), data = df_panel, vcov = "newey_west"),
+  
+  'All Agencies Remaining - Leads +' = feols(log(total_final_levy) ~ log(av) + f(log(av), 1:2)*reassess_year*triad_name | uniqueid + year, panel.id = c("uniqueid", "year"), data = df_panel, vcov = "newey_west")
+  
+  
+
+                 )
+
+modelsummary(
+  models,
+  output = "flextable",
+              stars = TRUE
+)
+
+```
+
+
 
 ```{r}
 #| label: tbl-AllAgencies
