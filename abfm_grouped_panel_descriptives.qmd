@@ -1005,6 +1005,10 @@ A is given assessment year's taxed AV and B is the next year's taxed AV.
 
 alpha = ( square root (B/A ) ) - 1
 
+*Changed 9/23 by MVH. Should be:*
+
+r = cube_root(B/A) - 1
+
 ```{r merriman_model_w_triads}
 
 df_temp <- read_csv("model_data_Sept212024.csv") %>% 
