@@ -1087,14 +1087,14 @@ mods_1 <- list(
                panel.id = c("uniqueid", "year")
                 ),
   
-    "EAV Interact" = feols(log(total_final_levy) ~ log_eav + av_true + log_eav*log(total_final_levy) | uniqueid + year,
+    "EAV Interact" = feols(log(total_final_levy) ~ log_eav + av_true + log_eav*av_true | uniqueid + year,
                data = df_mmm,
                vcov = "newey_west",
                panel.id = c("uniqueid", "year")
                 )
   )
 
-modelsummary(
+modelsummary::modelsummary(
   mods_1,
   output = "flextable",
  gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
