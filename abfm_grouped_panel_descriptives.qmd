@@ -1066,6 +1066,80 @@ df_mmm <- df_temp_2 |>
 df_mmm <- panel(df_mmm, panel.id = c("uniqueid", "year"))
 
 ```
+```{r merriman_models-withlogs}
+
+
+
+mods_1 <- list(
+  
+  "1" = feols(log(total_final_levy) ~ log(av) + log(av_true) | uniqueid + year,
+               data = df_mmm,
+               vcov = "newey_west",
+               panel.id = c("uniqueid", "year")
+                ),
+  
+  "Interact" = feols(log(total_final_levy) ~ log(av) + log(av_true) + log(av)*log(av_true) | uniqueid + year,
+               data = df_mmm,
+               vcov = "newey_west",
+               panel.id = c("uniqueid", "year")
+                ),
+  
+  "EAV" = feols(log(total_final_levy) ~ log_eav + log(av_true) | uniqueid + year,
+               data = df_mmm,
+               vcov = "newey_west",
+               panel.id = c("uniqueid", "year")
+                ),
+  
+    "EAV Interact" = feols(log(total_final_levy) ~ log_eav + log(av_true) + log_eav*log(av_true) | uniqueid + year,
+               data = df_mmm,
+               vcov = "newey_west",
+               panel.id = c("uniqueid", "year")
+                )
+  )
+
+modelsummary::modelsummary(
+  mods_1,
+  output = "flextable",
+ gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
+              stars = TRUE
+)
+
+mods_iid <- list(
+  
+  "1" = feols(log(total_final_levy) ~ log(av) + log(av_true) | uniqueid + year,
+               data = df_mmm,
+               vcov = "iid",
+               panel.id = c("uniqueid", "year")
+                ),
+  
+  "Interact" = feols(log(total_final_levy) ~ log(av) + log(av_true) + log(av)*log(av_true) | uniqueid + year,
+               data = df_mmm,
+               vcov = "iid",
+               panel.id = c("uniqueid", "year")
+                ),
+  
+  "EAV" = feols(log(total_final_levy) ~ log_eav + log(av_true) | uniqueid + year,
+               data = df_mmm,
+               vcov = "iid",
+               panel.id = c("uniqueid", "year")
+                ),
+  
+    "EAV Interact" = feols(log(total_final_levy) ~ log_eav + log(av_true) + log_eav*log(av_true) | uniqueid + year,
+               data = df_mmm,
+               vcov = "iid",
+               panel.id = c("uniqueid", "year")
+                )
+  )
+
+
+modelsummary::modelsummary(
+  mods_iid,
+  output = "flextable",
+ gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
+              stars = TRUE
+)
+
+```
 
 ```{r merriman_models}
 
