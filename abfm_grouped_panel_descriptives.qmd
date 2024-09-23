@@ -1008,7 +1008,6 @@ alpha = ( square root (B/A ) ) - 1
 ```{r merriman_model_w_triads}
 
 df_temp <- read_csv("model_data_Sept212024.csv") %>% 
-  filter(grouped_label )
   ungroup() %>%
   group_by(uniqueid) %>% 
   arrange(year)%>% 
