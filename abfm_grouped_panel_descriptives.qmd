@@ -1008,6 +1008,7 @@ alpha = ( square root (B/A ) ) - 1
 ```{r merriman_model_w_triads}
 
 df_temp <- read_csv("model_data_Sept212024.csv") %>% 
+  filter(grouped_label )
   ungroup() %>%
   group_by(uniqueid) %>% 
   arrange(year)%>% 
@@ -1060,6 +1061,80 @@ df_mmm <- df_temp_2 |>
   filter(year >= 2012)
 
 df_mmm <- panel(df_mmm, panel.id = c("uniqueid", "year"))
+
+```
+```{r merriman_models-withlogs}
+
+
+
+mods_1 <- list(
+  
+  "1" = feols(log(total_final_levy) ~ log(av) + log(av_true) | uniqueid + year,
+               data = df_mmm,
+               vcov = "newey_west",
+               panel.id = c("uniqueid", "year")
+                ),
+  
+  "Interact" = feols(log(total_final_levy) ~ log(av) + log(av_true) + log(av)*log(av_true) | uniqueid + year,
+               data = df_mmm,
+               vcov = "newey_west",
+               panel.id = c("uniqueid", "year")
+                ),
+  
+  "EAV" = feols(log(total_final_levy) ~ log_eav + log(av_true) | uniqueid + year,
+               data = df_mmm,
+               vcov = "newey_west",
+               panel.id = c("uniqueid", "year")
+                ),
+  
+    "EAV Interact" = feols(log(total_final_levy) ~ log_eav + log(av_true) + log_eav*log(av_true) | uniqueid + year,
+               data = df_mmm,
+               vcov = "newey_west",
+               panel.id = c("uniqueid", "year")
+                )
+  )
+
+modelsummary::modelsummary(
+  mods_1,
+  output = "flextable",
+ gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
+              stars = TRUE
+)
+
+mods_iid <- list(
+  
+  "1" = feols(log(total_final_levy) ~ log(av) + log(av_true) | uniqueid + year,
+               data = df_mmm,
+               vcov = "iid",
+               panel.id = c("uniqueid", "year")
+                ),
+  
+  "Interact" = feols(log(total_final_levy) ~ log(av) + log(av_true) + log(av)*log(av_true) | uniqueid + year,
+               data = df_mmm,
+               vcov = "iid",
+               panel.id = c("uniqueid", "year")
+                ),
+  
+  "EAV" = feols(log(total_final_levy) ~ log_eav + log(av_true) | uniqueid + year,
+               data = df_mmm,
+               vcov = "iid",
+               panel.id = c("uniqueid", "year")
+                ),
+  
+    "EAV Interact" = feols(log(total_final_levy) ~ log_eav + log(av_true) + log_eav*log(av_true) | uniqueid + year,
+               data = df_mmm,
+               vcov = "iid",
+               panel.id = c("uniqueid", "year")
+                )
+  )
+
+
+modelsummary::modelsummary(
+  mods_iid,
+  output = "flextable",
+ gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
+              stars = TRUE
+)
 
 ```
 
