@@ -51,7 +51,7 @@ df <- df |> filter(!minor_type %in% c("BOND", "UNIFIED", "COMM COLL",
 
 
 df <- df |> 
-  filter(year > 2009)  |>   ## 6922 obs MVH: 6922
+#  filter(year > 2009)  |>   ## 6922 obs MVH: 6922
 
   # Change infinite values from tfl % delta to 0
   mutate(tfl_pct_change = if_else(is.na(tfl_pct_change) |
@@ -124,8 +124,8 @@ datasummary_skim(df, type  = "categorical")
 ## Grouping Values 
 
 ```{r}
-after2009 <- df %>% filter(year > 2009) 
-df <- after2009 # yes, I suck.
+#after2009 <- df %>% filter(year > 2009) 
+#df <- after2009 # yes, I suck.
 
 groupies2 <- read_csv("grouped_labels.csv") %>%      
   mutate(agency_num = str_pad(agency_num, 9, "left", "0"))
@@ -373,7 +373,7 @@ pop2 <- pop2 %>%
   )
   )
 grouped_manual <- grouped_manual %>% 
-  filter(year > 2009) %>%
+  #filter(year > 2009) %>%
   left_join(pop2, by = c("clean_name" = "Name")) 
 
 grouped_manual <- grouped_manual %>% 
@@ -395,7 +395,7 @@ df_panel <- grouped_manual %>%
   arrange(uniqueid, year)  
 
 
-write_csv(df_panel, "model_data_Sept172024.csv")
+#write_csv(df_panel, "model_data_Sept242024.csv")
 
 df_panel %>% 
   group_by(uniqueid, year) %>% 
@@ -1004,7 +1004,7 @@ rate_table %>%
 
 cagr = ((B/A)^1/years ) - 1
 
-4 Year Compound Growth Rate between Assessment Years (base years and the next assessment year)
+3 Year Compound Growth Rate between Assessment Years (base years and the next assessment year)
 
 > Fill down using assesssment year AV for non assessment years (ignore appeals?) I guess so. 
 
@@ -1013,57 +1013,78 @@ cagr = ((B/A)^1/years ) - 1
 #| tbl-cap: "Uses September 21st 2024 csv file."
 
 
-df_temp <- read_csv("model_data_Sept212024.csv") %>% 
+df_temp <- read_csv("model_data_Sept242024.csv") %>% 
   ungroup() %>%
   group_by(uniqueid) %>% 
   arrange(year)%>% 
-  
-  mutate(rate = if_else(reassess_year == 1 & !is.na(lead(av, 3)), ((lead(av, 3) / av)^(1/4)) - 1, NA),
-        ) %>%
-  fill(rate, .direction = "down") %>%
-  mutate(rate = ifelse(lead(reassess_year == 1), 0, rate),
-         assess_year_av = ifelse(reassess_year == 1, av, NA),
-         # rate = if_else(lag(reassess_year == 1, n=1) & !is.na(lead(av, n=2)), (1+rate)(1+rate), rate),
-        # rate = if_else(lag(reassess_year == 1, n=2) & !is.na(lead(av, n=1)), (1+rate)^3, rate) 
-       ) %>%
-  
-  select(year, reassess_year, uniqueid, grouped_label, av, cty_cook_eav, agency_count, rate, everything()) %>% 
-  arrange(uniqueid, year) %>%
-  fill(assess_year_av, .direction = "down") %>%
-
-  # for comparison with line that will show the jump from assessment year
   mutate(
-    av_true = assess_year_av*(1+rate),
-   ) %>%
-  select(year, av, assess_year_av, av_true, rate, everything())
+    assess_year_av = ifelse(reassess_year == 1, av, NA)) %>%
   
+  fill(assess_year_av, .direction = "down") %>%
+  
+  mutate(
+    # rate of growth in assessment year is 0
 
-# df_temp %>%
-#   group_by(year, triad_name) %>%
-#   summarize(av = mean(av, na.rm=TRUE),
-#             av_true = mean(av_true, na.rm=TRUE),
-#            # av_hybrid = mean(av_hybrid, na.rm=TRUE)
-#            ) %>% 
-#   filter(triad_name == "North") %>%
-#   ggplot() +
-#  # geom_line(aes(x=year, y = av_true, color = "Imputed MV"))  +
-#     geom_line(aes(x=year, y = av_true, color = "Market Value"))+
-# 
-#   geom_line(aes(x=year, y = av, color = "AV"))
+    # rate of growth from point A to point B
+    # 3-year CAGR 
+    rate_smooth_2 = if_else(lag(reassess_year) == 1 | lead(reassess_year, n=2) == 1, ((lead(av, 3) / av)^(1/4)) - 1, 0),
+    av_stair_2 = ifelse(lag(reassess_year, n=1) ==1 | lead(reassess_year, n = 2) == 1, assess_year_av*(1+rate_smooth_2), assess_year_av),
+    rate_smooth_2 = if_else(lag(reassess_year) == 1, ((lead(av, 2) / av_stair_2)^(1/3)) - 1, rate_smooth_2),
+    av_stair_2 = ifelse(lead(reassess_year) ==1 | lag(reassess_year, n = 2) == 1, lag(av_stair_2)*(1+lag(rate_smooth_2)), av_stair_2),
+   # rate_smooth_2 = if_else(lag(reassess_year, n=2) == 1, ((lead(av, 1) / av_stair_2)^(1/2)) - 1, rate_smooth_2),
+
+    
+    
+    rate_smooth = if_else(lag(reassess_year, n=1) == 1 | lead(reassess_year, n=2) == 1, ((lead(av, 2) / assess_year_av)^(1/3)) - 1, 0),
+    
+   rate_smooth = if_else(lag(reassess_year, n=2) == 1 | lead(reassess_year, n=1) == 1, (lead(assess_year_av, 1) / assess_year_av)^(1/2) - 1, rate_smooth),
+
+  rate_smooth = if_else(reassess_year == 1, 0, rate_smooth),
+  av_stair = assess_year_av*(1+rate_smooth),
+  av_true = av_stair_2,) %>%
+  
+  select(year, reassess_year, uniqueid, grouped_label, av, cty_cook_eav, agency_count, rate_smooth, everything()) %>% 
+  arrange(uniqueid, year) %>%
+  select(year, av, assess_year_av, #av_true, 
+         av_stair, rate_smooth, everything()) %>%
+  ungroup()
+  
 
 df_temp %>%
-  filter(uniqueid == "Evanston_1_1") %>%
-  group_by(year) %>%
-  summarize(
-            av = mean(av, na.rm=TRUE),
-            av_true = mean(av_true, na.rm=TRUE)
-           ) %>% 
+  filter(year>2010) %>%
+  filter(uniqueid == "Arlington Heights_1_0") %>%
   ggplot() +
-  #geom_line(aes(x=year, y = av_true, color = "Imputed MV"))  +
-    geom_line(aes(x=year, y = av_true, color = "Market Value"))+
+  geom_line(aes(x=year, y = av_true, color = "Imputed MV"))  +
+     geom_line(aes(x=year, y = av_true, color = "Market Value"))+
+    geom_line(aes(x=year, y = av_stair, color = "AV-Stair"))+
+      geom_point(aes(x=year, y = av_stair, color = "AV-Stair"))+
 
-  geom_line(aes(x=year, y = av, color = "AV"))
+   geom_line(aes(x=year, y = av_stair_2, color = "AV-Stair2"))+
+     geom_point(aes(x=year, y = av_stair_2, color = "AV-Stair2"))+
 
+    geom_line(aes(x=year, y = assess_year_av, color = "AV-No appeals"))+
+
+  geom_line(aes(x=year, y = av, color = "Taxed AV")) + 
+  scale_x_continuous(breaks = seq(ceiling(min(2006)), floor(max(2022)), by = 2)) +
+  scale_y_continuous(labels = scales::dollar_format())
+
+df_temp %>%
+  filter(year>2010) %>%
+  filter(uniqueid == "Evanston_1_0") %>%
+  ggplot() +
+  geom_line(aes(x=year, y = av_true, color = "Imputed MV"))  +
+     geom_line(aes(x=year, y = av_true, color = "Market Value"))+
+    geom_line(aes(x=year, y = av_stair, color = "AV-Stair"))+
+      geom_point(aes(x=year, y = av_stair, color = "AV-Stair"))+
+
+   geom_line(aes(x=year, y = av_stair_2, color = "AV-Stair2"))+
+     geom_point(aes(x=year, y = av_stair_2, color = "AV-Stair2"))+
+
+    geom_line(aes(x=year, y = assess_year_av, color = "AV-No appeals"))+
+
+  geom_line(aes(x=year, y = av, color = "Taxed AV")) + 
+  scale_x_continuous(breaks = seq(ceiling(min(2006)), floor(max(2022)), by = 2)) +
+  scale_y_continuous(labels = scales::dollar_format())
 ```
 
 ```{r}
