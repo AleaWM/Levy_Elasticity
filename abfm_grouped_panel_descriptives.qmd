@@ -1018,21 +1018,26 @@ df_temp <- read_csv("model_data_Sept212024.csv") %>%
   group_by(uniqueid) %>% 
   arrange(year)%>% 
   
-  mutate(rate = ifelse(reassess_year == 1 & !is.na(lead(av, 3)), ((lead(av, 3) / av)^(1/4)) - 1, NA)) %>%
+  mutate(rate = if_else(reassess_year == 1 & !is.na(lead(av, 3)), ((lead(av, 3) / av)^(1/4)) - 1, NA),
+        ) %>%
+  fill(rate, .direction = "down") %>%
+  mutate(rate = ifelse(lead(reassess_year == 1), 0, rate),
+         assess_year_av = ifelse(reassess_year == 1, av, NA),
+         # rate = if_else(lag(reassess_year == 1, n=1) & !is.na(lead(av, n=2)), (1+rate)(1+rate), rate),
+        # rate = if_else(lag(reassess_year == 1, n=2) & !is.na(lead(av, n=1)), (1+rate)^3, rate) 
+       ) %>%
   
   select(year, reassess_year, uniqueid, grouped_label, av, cty_cook_eav, agency_count, rate, everything()) %>% 
   arrange(uniqueid, year) %>%
-  fill(rate, .direction = "down") %>%
-  mutate(rate = ifelse(reassess_year == 1 & year > 2012, 0, rate)) %>%
-  
+  fill(assess_year_av, .direction = "down") %>%
+
   # for comparison with line that will show the jump from assessment year
   mutate(
-    av_true = av*(1+rate),
-  #  av_hybrid = ifelse(reassess_year==1, av, av_true),
-  #  year = as.Date(year)
+    av_true = assess_year_av*(1+rate),
    ) %>%
-  select(year, av, av_true, everything())
+  select(year, av, assess_year_av, av_true, rate, everything())
   
+
 # df_temp %>%
 #   group_by(year, triad_name) %>%
 #   summarize(av = mean(av, na.rm=TRUE),
