@@ -203,7 +203,11 @@ munis <- df_pg_types %>%
   select(year, uniqueid, everything()) %>% ungroup()
 
 not_munis <- munis |>
-  filter(town != "Muni") #443 obs--makes sense!
+  filter(town == "Muni") |> #443 obs--makes sense!
+  filter(!("MUNI" %in% town)) |>
+  filter(year == 2022) |>
+  group_by(minor_type) |>
+  summarize(n = n(), sum(total_final_levy, na.rm = T), sum(total_final_levy, na.rm = T)/9464898504)
 
 type_filter <- groupies2_w_types |>
   select(agency_num, major_type, minor_type) |>
@@ -299,6 +303,23 @@ schools |>
 
 df |>
   filter(year == 2022) |>
-  filter(major_type == "SCHOOL") |>
-  group_by(minor_type) |>
-  summarize(n = n())
+  filter(minor_type %in% c("ELEMENTARY", "SECONDARY")) |>
+  summarize(n = n(), sum(av, na.rm = T), sum(total_final_levy, na.rm = T))
+
+munis |>
+  filter(year == 2022) |>
+  summarize(sum(av, na.rm = T), sum(total_final_levy, na.rm = T))
+
+df_pre_group |>
+  filter(year == 2022) |>
+  filter(str_sub(agency_num, 1,2) == "02") |>
+  summarize(n = n(), sum(av, na.rm = T), sum(total_final_levy, na.rm = T))
+
+### EMAIL RE: SUMMED AV
+
+df_2 <- read_csv("model_data_Sept212024.csv")
+
+df_2 |>
+  filter(year == 2022) |>
+  group_by(town) |>
+  summarize(n = n(), sum(av, na.rm = T), sum(total_final_levy, na.rm = T))
