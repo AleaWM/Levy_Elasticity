@@ -213,11 +213,14 @@ munis <- df_pg_types %>%
   select(year, uniqueid, everything()) %>% ungroup()
 
 not_munis <- munis |>
-  filter(town == "Muni") |> #443 obs--makes sense!
-  filter(!("MUNI" %in% town)) |>
+  filter(town != "Muni") |> #443 obs--makes sense!
+#  filter(!("MUNI" %in% town)) |>
   filter(year == 2022) |>
-  group_by(minor_type) |>
-  summarize(n = n(), sum(total_final_levy, na.rm = T), sum(total_final_levy, na.rm = T)/9464898504)
+  mutate(total_levy = sum(total_final_levy)) %>%
+  group_by(minor_type, total_levy) |>
+  summarize(n = n(), 
+            group_levy = sum(total_final_levy, na.rm = T)) %>%
+  mutate(group_pct = group_levy / total_levy)
 
 type_filter <- groupies2_w_types |>
   select(agency_num, major_type, minor_type) |>
