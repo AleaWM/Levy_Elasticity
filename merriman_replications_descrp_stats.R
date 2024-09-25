@@ -82,7 +82,7 @@ df <- df |> filter(!minor_type %in% c("BOND", "UNIFIED", "COMM COLL",
 
 
 df <- df |>
-  #  filter(year > 2009)  |>   ## 6922 obs MVH: 6922
+   # filter(year > 2009)  |>   ## 6922 obs MVH: 6922
 
   # Change infinite values from tfl % delta to 0
   mutate(tfl_pct_change = if_else(is.na(tfl_pct_change) |
@@ -91,12 +91,15 @@ df <- df |>
 
 
 df <- df |>
-  select(-c(muni_name, muni_num, agency_w_hr, first6_w_hr,
+  select(-c(#muni_name, muni_num, 
+            agency_w_hr, first6_w_hr,
             log_eav:reassess_lag2,
             lag_eav_pct_change1:lag_av_pct_change2)) %>%
   mutate_at(c("home_rule_ind"), as.character)  %>%
   # Code Cicero as a Municipality and not a township.
-  mutate(minor_type = ifelse(agency_name == "TOWN CICERO", "MUNI", minor_type)) %>%
+  mutate(minor_type == ifelse( agency_name %in% c("TOWN EVANSTON", "GENERAL ASSISTANCE EVANSTON", 
+                                                  "TOWN CICERO", "GENERAL ASSISTANCE CICERO"), "MUNI", minor_type)
+         ) %>%
 
   # Rosemont and its school district have huge jump
   # in tax base and levy due to TIF expiring
@@ -106,8 +109,11 @@ df_pre_group <- df
 
 df_pre_group |>
   filter(year == 2022) |>
-  group_by(minor_type) |>
-  summarize(sum(total_final_levy)/9464898504)
+ # MVH's total levy: 9464898504
+  mutate(total_levy = sum(total_final_levy) ) %>%
+  group_by(minor_type, total_levy) |>
+  summarize(group_levy = sum(total_final_levy)) %>%
+  mutate(group_pct = group_levy/total_levy)
 
 groupies2 <- read_csv("grouped_labels.csv") %>%
   mutate(agency_num = str_pad(agency_num, 9, "left", "0"))
@@ -131,33 +137,37 @@ df_pg_types <- df_pre_group |>
 df_pg_types |>
   filter(year == 2022) |>
   group_by(minor_type) |>
-  summarize(n = n(), sum(total_final_levy, na.rm = T))
+  summarize(n = n(), 
+            sum(total_final_levy, na.rm = T))
+# 531 total and 9464898504 total levy
+
 
 ### Let's look at what makes "munis" in abfm_grouped_panel next! ###
-
 # df has 9000 obs.
 
 munis <- df_pg_types %>%
   # filter schools - 6621 obs.
   filter(major_type != "SCHOOL") |>
   # filter townships - 4996 obs.
-  filter(str_sub(agency_num, 1,2) != "02") |>
+ filter(str_sub(agency_num, 1,2) != "02" & minor_type  != "TOWN") |>
   mutate(first6 = as.character(first6), # make character
     home_rule_ind = as.character(home_rule_ind),
     first6 = str_pad(first6, 6, "left", "0"), # add leading zeros
     lim_rate = ifelse(is.na(lim_rate), "NA", lim_rate)) |>
 
-  # filter(major_type == "MUNICIPALITY/TOWNSHIP" | minor_type %in% c("LIBRARY", "PARK")) %>%
+   filter(major_type == "MUNICIPALITY/TOWNSHIP" | minor_type %in% c("LIBRARY", "PARK")) %>%
   # filters in lines 141 and 143 render this filter wrong.
 
   group_by(year, grouped_label) %>%
   arrange(agency_num) %>%
+  
+  # will use home rule status in 2006 for munis. 
   mutate(muni_hri = first(home_rule_ind)) |>
-  ungroup() |>
+ # ungroup() |>
   # Filter out NHR agencies previously grouped with HR Munis
   # 4996 obs.
   filter(home_rule_ind == muni_hri) |>
-  group_by(year, grouped_label) |>
+#  group_by(year, grouped_label) |>
   # 2381 obs.
   summarize(#home_rule_ind = mean(as.numeric(home_rule_ind), na.rm=TRUE),
             agency_name = first(agency_name),
@@ -193,8 +203,8 @@ munis <- df_pg_types %>%
     first2_dig = str_sub(agency_num, 1,2),
     town = ifelse(first2_dig == "03", "Muni",
                   ifelse(first2_dig == "02", "Township", "Other")),
-    town = ifelse( agency_name == c("TOWN EVANSTON", "GENERAL ASSISTANCE EVANSTON",                                  "TOWN CICERO", "GENERAL ASSISTANCE CICERO"), "Muni", town),
-  ) %>%
+    town = ifelse( agency_name %in% c("TOWN EVANSTON", "GENERAL ASSISTANCE EVANSTON", 
+                                    "TOWN CICERO", "GENERAL ASSISTANCE CICERO"), "Muni", town),) %>%
   # Filter zero-levy agencies. Should do nothing.
   filter(total_final_levy > 0) %>%
   # Filter out "non-munis" (e.g., unbundled park districts)
