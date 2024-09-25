@@ -380,44 +380,44 @@ munis %>%
 ```
 
 ```{r}
-grouped_bind <- rbind(munis, schools, townships#, grouped_manual
-                      ) %>%
-  filter(grouped_label != "drop") %>%
-      mutate(#home_rule_ind = ifelse(home_rule_ind > 0, 1, 0),
-             uniqueid = str_c(grouped_label, "_", home_rule_ind, "_", bundled)) %>%
-  arrange(uniqueid, year) %>%
-   group_by(year, town, grouped_label) %>% 
-  arrange(agency_num) %>%
-  summarize(home_rule_ind = mean(as.numeric(home_rule_ind), na.rm=TRUE),
-    agency_name = first(agency_name),
-            types = paste(list(unique(types)), sep = ", "),
-            agency_num = first(agency_num),
-            total_final_levy = sum(total_final_levy, na.rm=TRUE),
-            min_group_eav = min(cty_cook_eav),
-            max_group_eav = max(cty_cook_eav),
-            cty_cook_eav = first(cty_cook_eav),
-            cty_total_eav = first(cty_total_eav), 
-            av = first(av), ## mistake fixed: was sum, now is first()
-            Triad = first(Triad), 
-            agency_count = sum(agency_count),  # Agencies in Grouped
-            reassess_year = first(reassess_year),
-            home_rule_ind = first(home_rule_ind),
-            rate = sum(rate, na.rm=TRUE),
-            connected_count = sum(agency_count),
-            lim_rate = mean(as.numeric(lim_rate), na.rm=TRUE),
-            clean_name = first(clean_name),
-                   min_group_eav = min(cty_cook_eav),
-            max_group_eav = max(cty_cook_eav)
-  ) %>%
-  mutate(
-        dif_group_eav = max_group_eav - min_group_eav,
-    conn_agency_flag = ifelse(connected_count > 1, 1, 0),
-    log_eav = log(cty_total_eav),
-    log_levy = log(total_final_levy),
-    log_av =  log(av),
-    bundled = ifelse(agency_count > 1, 1, 0))%>% 
-  mutate(uniqueid = str_c(grouped_label, "_", home_rule_ind, "_", bundled)) %>%
-  select(year, uniqueid, everything()) %>% ungroup()
+grouped_bind <- rbind(munis, schools, townships)#, grouped_manual
+  #                     ) %>%
+  # filter(grouped_label != "drop") %>%
+  #     mutate(#home_rule_ind = ifelse(home_rule_ind > 0, 1, 0),
+  #            uniqueid = str_c(grouped_label, "_", home_rule_ind, "_", bundled)) %>%
+  # arrange(uniqueid, year) %>%
+  #  group_by(year, town, grouped_label) %>% 
+  # arrange(agency_num) %>%
+  # summarize(home_rule_ind = mean(as.numeric(home_rule_ind), na.rm=TRUE),
+  #   agency_name = first(agency_name),
+  #           types = paste(list(unique(types)), sep = ", "),
+  #           agency_num = first(agency_num),
+  #           total_final_levy = sum(total_final_levy, na.rm=TRUE),
+  #           min_group_eav = min(cty_cook_eav),
+  #           max_group_eav = max(cty_cook_eav),
+  #           cty_cook_eav = first(cty_cook_eav),
+  #           cty_total_eav = first(cty_total_eav), 
+  #           av = first(av), ## mistake fixed: was sum, now is first()
+  #           Triad = first(Triad), 
+  #           agency_count = sum(agency_count),  # Agencies in Grouped
+  #           reassess_year = first(reassess_year),
+  #           home_rule_ind = first(home_rule_ind),
+  #           rate = sum(rate, na.rm=TRUE),
+  #           connected_count = sum(agency_count),
+  #           lim_rate = mean(as.numeric(lim_rate), na.rm=TRUE),
+  #           clean_name = first(clean_name),
+  #                  min_group_eav = min(cty_cook_eav),
+  #           max_group_eav = max(cty_cook_eav)
+  # ) %>%
+  # mutate(
+  #       dif_group_eav = max_group_eav - min_group_eav,
+  #   conn_agency_flag = ifelse(connected_count > 1, 1, 0),
+  #   log_eav = log(cty_total_eav),
+  #   log_levy = log(total_final_levy),
+  #   log_av =  log(av),
+  #   bundled = ifelse(agency_count > 1, 1, 0))%>% 
+  # mutate(uniqueid = str_c(grouped_label, "_", home_rule_ind, "_", bundled)) %>%
+  # select(year, uniqueid, everything()) %>% ungroup()
 
 
 grouped_bind %>%  
