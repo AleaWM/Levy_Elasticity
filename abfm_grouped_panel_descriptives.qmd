@@ -10,14 +10,14 @@ format:
     toc-location: left
 ---
 
-# Questions/Comments so I don't forget them.
+# Questions/Comments
 
-- Did we want to filter out total_final_levy > 1 as late as line ~135?
 
-- I think ~line 146 has the filter messing things up. I comment more on that _infra_.
 - The obs we want to drop for the models would be filtered from the "munis" df with the filter: filter(!grouped_label %in% munis$grouped_label)
 
--- I don't know exactly how to apply that to df_panel
+- If the panel isn't balanced, then we don't really care about keeping observations in and for all years and there is much less of a reason to group things.   
+
+
 
 # Data Prep
 
@@ -120,10 +120,235 @@ datasummary_crosstab(minor_type~home_rule_ind, data = df %>%filter(year==2022), 
 
 # Descriptive Stats
 
-```{r eval=FALSE}
+```{r eval=FALSE, include=FALSE}
 datasummary_skim(df)
 datasummary_skim(df, type  = "categorical")
 ```
+
+# Taxing Agency Level Models
+```{r}
+library(fixest)
+
+models <- list(
+  "Plain TWFE" = feols(log(total_final_levy) ~ log(av)  | agency_name + year,  data = df, vcov = "newey_west", panel.id = c("agency_name", "year")),
+  
+      "Homerule TWFE" = feols(log(total_final_levy) ~ log(av)  | agency_name + year,  data = df %>% filter(home_rule_ind == 1), vcov = "newey_west", panel.id = c("agency_name", "year")),
+      
+  "Nonhomerule" = feols(log(total_final_levy)~ log(av)  | agency_name + year, vcov = "newey_west", panel.id = c("agency_name", "year"), data = df %>% filter(home_rule_ind == 0)),
+  
+    "Nonhomerule - noschools" = feols(log(total_final_levy)~ log(av)  | agency_name + year, vcov = "newey_west", panel.id = c("agency_name", "year"), data = df %>% filter(home_rule_ind == 0 & major_type != "SCHOOL")),
+  
+  "TWFE w/ AV Lags" = feols(log(total_final_levy)~ log(av) + l(log(av), 1) + l(log(av), 2 ) | agency_name + year, vcov = "newey_west", panel.id = c("agency_name", "year"), data = df),
+  
+  "Homerule TWFE" = feols(log(total_final_levy) ~ log(av) + l(log(av), 1) + l(log(av), 2 ) | agency_name + year,  data = df %>% filter(home_rule_ind == 1), vcov = "newey_west", panel.id = c("agency_name", "year")),
+      
+  "Nonhomerule" = feols(log(total_final_levy)~ log(av) + l(log(av), 1) + l(log(av), 2 ) | agency_name + year, vcov = "newey_west", panel.id = c("agency_name", "year"), data = df %>% filter(home_rule_ind == 0))
+  
+  )
+
+
+modelsummary(
+  models,
+  output = "flextable",
+              stars = TRUE
+)
+```
+
+```{r}
+df_formodels <- df %>%
+ungroup() %>%
+  group_by(agency_name) %>% 
+  arrange(year)%>% 
+  mutate(
+    assess_year_av = ifelse(reassess_year == 1, av, NA)) %>%
+  
+  fill(assess_year_av, .direction = "down") %>%
+  
+  mutate(
+    # rate of growth in assessment year is 0
+
+    # rate of growth from point A to point B = 3-year CAGR 
+    
+    # Alea's math: Do year after the assessment:
+    rate_smooth_2 = if_else(lag(reassess_year) == 1 | lead(reassess_year, n=2) == 1, (lead(av, 3) / av)^(1/4) - 1, 0),
+    av_stair_2 = if_else(lag(reassess_year, n=1) == 1 | lead(reassess_year, n = 2) == 1, assess_year_av*(1+rate_smooth_2), assess_year_av),
+    
+    # Alea's math: Do 2 years afer the assessment using previous predicted value:
+    rate_smooth_2 = if_else(lag(reassess_year) == 1 | lead(reassess_year, n=2) ==1, ((lead(av, 2) / av_stair_2)^(1/3)) - 1, rate_smooth_2),
+    av_stair_2 = ifelse(lead(reassess_year) == 1 | lag(reassess_year, n = 2) == 1, lag(av_stair_2)*(1+lag(rate_smooth_2)), av_stair_2),
+   # rate_smooth_2 = if_else(lag(reassess_year, n=2) == 1, ((lead(av, 1) / av_stair_2)^(1/2)) - 1, rate_smooth_2),
+   av_smooth_2 = av_stair_2 * (1+rate_smooth_2),
+ av_true = av_stair_2,
+    
+    # Merriman's math
+    # 1 year after assessment:
+    rate_smooth = if_else(lag(reassess_year, n=1) == 1 | lead(reassess_year, n=2) == 1, ((lead(av, 2) / assess_year_av)^(1/3)) - 1, 0),
+    
+     # 2 years after assessment:  
+   rate_smooth = if_else(lag(reassess_year, n=2) == 1 | lead(reassess_year, n=1) == 1, (lead(assess_year_av, 1) / assess_year_av)^(1/2) - 1, rate_smooth),
+
+  rate_smooth = if_else(reassess_year == 1, 0, rate_smooth),
+  av_stair = assess_year_av*(1+rate_smooth),
+ ) %>%
+  
+  select(year, reassess_year, agency_name, av, cty_cook_eav, rate_smooth, everything()) %>% 
+  arrange(agency_name, year) %>%
+  select(year, av, assess_year_av, #av_true, 
+         av_stair, rate_smooth, everything()) %>%
+  ungroup()
+
+```
+
+```{r}
+#| label: tbl-merriman_models
+#| tbl-cap: "Includes log(av) and av_true in model. Uses September 21st 2024 csv file."
+
+mods_1 <- list(
+  
+  "1" = feols(log(total_final_levy) ~ log(av) + log(av_true) | agency_name + year,
+               data = df_formodels,
+               vcov = "newey_west",
+               panel.id = c("agency_name", "year")
+                ),
+  
+  "Interact" = feols(log(total_final_levy) ~ log(av) + log(av_true) + log(av)*log(av_true) | agency_name + year,
+               data = df_formodels,
+               vcov = "newey_west",
+               panel.id = c("agency_name", "year")
+                ),
+  
+  "EAV" = feols(log(total_final_levy) ~ log(cty_cook_eav) + log(av_true) | agency_name + year,
+               data = df_formodels,
+               vcov = "newey_west",
+               panel.id = c("agency_name", "year")
+                ),
+  
+    "EAV Interact" = feols(log(total_final_levy) ~ log(cty_cook_eav) + log(av_true) + log(cty_cook_eav)*log(av_true) | agency_name + year,
+               data = df_formodels,
+               vcov = "newey_west",
+               panel.id = c("agency_name", "year")
+                )
+  )
+
+modelsummary::modelsummary(
+  mods_1,
+  output = "flextable",
+ gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
+              stars = TRUE
+)
+
+mods_iid <- list(
+  
+  "1" = feols(log(total_final_levy) ~ log(av) + log(av_true) | uniqueid + year,
+               data = df_mmm,
+               vcov = "iid",
+               panel.id = c("uniqueid", "year")
+                ),
+  
+  "Interact" = feols(log(total_final_levy) ~ log(av) + av_true + log(av)*av_true | uniqueid + year,
+               data = df_mmm,
+               vcov = "iid",
+               panel.id = c("uniqueid", "year")
+                ),
+  
+  "EAV" = feols(log(total_final_levy) ~ log_eav + av_true | uniqueid + year,
+               data = df_mmm,
+               vcov = "iid",
+               panel.id = c("uniqueid", "year")
+                ),
+  
+    "EAV Interact" = feols(log(total_final_levy) ~ log_eav + av_true + log_eav*av_true | uniqueid + year,
+               data = df_mmm,
+               vcov = "iid",
+               panel.id = c("uniqueid", "year")
+                )
+  )
+
+
+modelsummary::modelsummary(
+  mods_iid,
+  output = "flextable",
+ gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
+              stars = TRUE
+)
+
+```
+
+```{r}
+#| label: tbl-merriman_models
+#| tbl-cap: "Includes log(av) and av_true in model. Uses September 21st 2024 csv file."
+
+mods_1 <- list(
+  
+  "1" = feols(log(total_final_levy) ~ log(av) + av_true | uniqueid + year,
+               data = df_mmm,
+               vcov = "newey_west",
+               panel.id = c("uniqueid", "year")
+                ),
+  
+  "Interact" = feols(log(total_final_levy) ~ log(av) + av_true + log(av)*av_true | uniqueid + year,
+               data = df_mmm,
+               vcov = "newey_west",
+               panel.id = c("uniqueid", "year")
+                ),
+  
+  "EAV" = feols(log(total_final_levy) ~ log_eav + av_true | uniqueid + year,
+               data = df_mmm,
+               vcov = "newey_west",
+               panel.id = c("uniqueid", "year")
+                ),
+  
+    "EAV Interact" = feols(log(total_final_levy) ~ log_eav + av_true + log_eav*av_true | uniqueid + year,
+               data = df_mmm,
+               vcov = "newey_west",
+               panel.id = c("uniqueid", "year")
+                )
+  )
+
+modelsummary::modelsummary(
+  mods_1,
+  output = "flextable",
+ gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
+              stars = TRUE
+)
+
+mods_iid <- list(
+  
+  "1" = feols(log(total_final_levy) ~ log(av) + av_true | uniqueid + year,
+               data = df_mmm,
+               vcov = "iid",
+               panel.id = c("uniqueid", "year")
+                ),
+  
+  "Interact" = feols(log(total_final_levy) ~ log(av) + av_true + log(av)*av_true | uniqueid + year,
+               data = df_mmm,
+               vcov = "iid",
+               panel.id = c("uniqueid", "year")
+                ),
+  
+  "EAV" = feols(log(total_final_levy) ~ log_eav + av_true | uniqueid + year,
+               data = df_mmm,
+               vcov = "iid",
+               panel.id = c("uniqueid", "year")
+                ),
+  
+    "EAV Interact" = feols(log(total_final_levy) ~ log_eav + av_true + log_eav*av_true | uniqueid + year,
+               data = df_mmm,
+               vcov = "iid",
+               panel.id = c("uniqueid", "year")
+                )
+  )
+
+
+modelsummary::modelsummary(
+  mods_iid,
+  output = "flextable",
+ gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
+              stars = TRUE
+)
+
+```
+
 
 ## Grouping Values 
 
@@ -1111,20 +1336,24 @@ df_temp <- read_csv("model_data_Sept242024.csv") %>%
   mutate(
     # rate of growth in assessment year is 0
 
-    # rate of growth from point A to point B
-    # 3-year CAGR 
-    rate_smooth_2 = if_else(lag(reassess_year) == 1 | lead(reassess_year, n=2) == 1, ((lead(av, 3) / av)^(1/4)) - 1, 0),
-    av_stair_2 = ifelse(lag(reassess_year, n=1) ==1 | lead(reassess_year, n = 2) == 1, assess_year_av*(1+rate_smooth_2), assess_year_av),
+    # rate of growth from point A to point B = 3-year CAGR 
     
+    # Alea's math: Do year after the assessment:
+    rate_smooth_2 = if_else(lag(reassess_year) == 1 | lead(reassess_year, n=2) == 1, (lead(av, 3) / av)^(1/4) - 1, 0),
+    av_stair_2 = if_else(lag(reassess_year, n=1) == 1 | lead(reassess_year, n = 2) == 1, assess_year_av*(1+rate_smooth_2), assess_year_av),
+    
+    # Alea's math: Do 2 years afer the assessment using previous predicted value:
     rate_smooth_2 = if_else(lag(reassess_year) == 1 | lead(reassess_year, n=2) ==1, ((lead(av, 2) / av_stair_2)^(1/3)) - 1, rate_smooth_2),
     av_stair_2 = ifelse(lead(reassess_year) == 1 | lag(reassess_year, n = 2) == 1, lag(av_stair_2)*(1+lag(rate_smooth_2)), av_stair_2),
    # rate_smooth_2 = if_else(lag(reassess_year, n=2) == 1, ((lead(av, 1) / av_stair_2)^(1/2)) - 1, rate_smooth_2),
    av_smooth_2 = av_stair_2 * (1+rate_smooth_2),
  av_true = av_stair_2,
     
-    
+    # Merriman's math
+    # 1 year after assessment:
     rate_smooth = if_else(lag(reassess_year, n=1) == 1 | lead(reassess_year, n=2) == 1, ((lead(av, 2) / assess_year_av)^(1/3)) - 1, 0),
     
+     # 2 years after assessment:  
    rate_smooth = if_else(lag(reassess_year, n=2) == 1 | lead(reassess_year, n=1) == 1, (lead(assess_year_av, 1) / assess_year_av)^(1/2) - 1, rate_smooth),
 
   rate_smooth = if_else(reassess_year == 1, 0, rate_smooth),
@@ -1139,21 +1368,51 @@ df_temp <- read_csv("model_data_Sept242024.csv") %>%
   
 
 df_temp %>%
+  mutate(across(.cols = c(av_stair, av_stair_2, av_smooth_2, av_true, av, assess_year_av), ~.x/1000000) ) %>%
   filter(year>2010) %>%
   filter(uniqueid == "Arlington Heights_1_1") %>%
   ggplot() +
-    geom_line(aes(x=year, y = av_stair, color = "AV-Stair"))+
-      geom_point(aes(x=year, y = av_stair, color = "AV-Stair"))+
+    geom_line(aes(x=year, y = av_stair), lty = 2,  label = "AV-Merriman\nEquation", color = "green")+
+      geom_point(aes(x=year, y = av_stair), label = "AV-Merriman\nEquation", color = "green")+
 
-   geom_line(aes(x=year, y = av_stair_2, color = "AV-Stair2"))+
-     geom_point(aes(x=year, y = av_stair_2, color = "AV-Stair2"))+
+   geom_line(aes(x=year, y = av_stair_2), label = "AV-Alea\nEquation", color = "darkgreen", lty = 3)+
+     geom_point(aes(x=year, y = av_stair_2), label = "AV-Alea\nEquation", color = "darkgreen")+
 
-    geom_line(aes(x=year, y = assess_year_av, color = "AV-No appeals"))+
+    geom_line(aes(x=year, y = assess_year_av), alpha = .5, color = "gray50", label = "AV-No appeals")+
+    geom_point(aes(x=year, y = assess_year_av),# color = "AV-No appeals", 
+                 fill  = "gray50", alpha = .5) +
 
-  geom_line(aes(x=year, y = av, color = "Taxed AV")) + 
+  geom_line(aes(x=year, y = av), color = "black", label  = "Taxed AV") + 
+  geom_point(aes(x=year, y = av),# color = "AV-No appeals", 
+                 fill  = "black", alpha = .5) +
   scale_x_continuous(breaks = seq(ceiling(min(2006)), floor(max(2022)), by = 2)) +
   scale_y_continuous(labels = scales::dollar_format())
+```
 
+```{r}
+df_temp %>%
+  mutate(across(.cols = c(av_stair, av_stair_2, av_smooth_2, av_true, av, assess_year_av), ~.x/1000000) ) %>%
+  filter(year>2010) %>%
+  filter(uniqueid == "Chicago_1_1") %>%
+  ggplot() +
+    geom_line(aes(x=year, y = av_stair), lty = 2,  label = "AV-Merriman\nEquation", color = "green")+
+      geom_point(aes(x=year, y = av_stair), label = "AV-Merriman\nEquation", color = "green")+
+
+   geom_line(aes(x=year, y = av_stair_2), label = "AV-Alea\nEquation", color = "darkgreen", lty = 3)+
+     geom_point(aes(x=year, y = av_stair_2), label = "AV-Alea\nEquation", color = "darkgreen")+
+
+    geom_line(aes(x=year, y = assess_year_av), alpha = .5, color = "gray50", label = "AV-No appeals")+
+    geom_point(aes(x=year, y = assess_year_av),# color = "AV-No appeals", 
+                 fill  = "gray50", alpha = .5) +
+
+  geom_line(aes(x=year, y = av), color = "black", label  = "Taxed AV") + 
+  geom_point(aes(x=year, y = av),# color = "AV-No appeals", 
+                 fill  = "black", alpha = .5) +
+  scale_x_continuous(breaks = seq(ceiling(min(2006)), floor(max(2022)), by = 2)) +
+  scale_y_continuous(labels = scales::dollar_format())
+```
+
+```{r }
 df_temp %>%
   filter(year>2010) %>%
   filter(grouped_label == "Chicago") %>%
@@ -1161,8 +1420,8 @@ df_temp %>%
    # geom_line(aes(x=year, y = av_stair, color = "AV-Stair"))+
    #   geom_point(aes(x=year, y = av_stair, color = "AV-Stair"))+
 
-   geom_line(aes(x=year, y = av_stair_2, color = "AV-Stair2"))+
-     geom_point(aes(x=year, y = av_stair_2, color = "AV-Stair2"))+
+   geom_line(aes(x=year, y = av_stair_2, color = "AV-Stair2", alpha = .5) )+
+     geom_point(aes(x=year, y = av_stair_2, color = "AV-Stair2" , alpha = .5))+
 
     geom_line(aes(x=year, y = assess_year_av, color = "AV-No appeals"))+
      geom_point(aes(x=year, y = av_stair_2, color = "AV-Stair2"))+
