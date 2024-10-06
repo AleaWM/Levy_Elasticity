@@ -1,0 +1,141 @@
+---
+title: "Pre-Data Processing Descriptives"
+subtitle: "now with more context from other stuff we've learned!"
+format: html
+---
+
+```{r setup}
+
+# Load packages
+
+library(tidyverse)
+library(DBI)
+library(RSQLite)
+library(gt)
+library(gtsummary)
+
+# Set some defaults
+
+```
+
+Open the fun DB connection (don't forget to close it!)
+
+```{r}
+
+db <- dbConnect(RSQLite::SQLite(), "./ptaxsim.db/ptaxsim-2023.0.0.db")
+
+```
+
+First, let's poke at the ptaxsim.db SQLite DB.
+
+```{r}
+#| label: "PTAXSIM Contents"
+
+dbListTables(db) |>
+  # enframe(name = NULL, value = "Tables") |>
+  # gt()
+
+agency_fund <- "agency_fund"
+
+agency_fund_info <- "agency_fund_info"
+
+```
+
+First, let's go take a look at the agency funds table!
+
+```{r}
+
+pragma_at_query <- paste0("PRAGMA table_info(", agency_fund, ")")
+
+af_tbl_info <- dbGetQuery(db, pragma_at_query)
+
+af_tbl_info |>
+  gt()
+
+```
+
+```{r}
+
+# This doesn't work as I hoped.
+
+random_select <- paste0("SELECT * FROM ", "agency_fund", " WHERE year >= 2010 AND YEAR <= 2023 AND RANDOM() LIMIT 10")
+
+dbGetQuery(db, random_select) |>
+  group_by(agency_num) |>
+  summarize(n = n()) |>
+  gt()
+
+```
+
+Let's see how this works across years.
+
+```{r}
+
+fund_counts <- paste0("SELECT * FROM ", "agency_fund", " WHERE year = 2023")
+
+# Summary statistics on number of funds per agency
+
+dbGetQuery(db, fund_counts) |>
+  group_by(year, agency_num) |>
+  mutate(n = n()) |>
+  summarize(mean(n), median(n), max(n), min(n), sd(n)) 
+
+# |>
+#   gt()
+
+dbGetQuery(db, fund_counts) |>
+  group_by(year, agency_num) |>
+  mutate(n = n()) |>
+  ggplot(aes(n)) +
+  geom_bar() +
+  theme_classic()
+
+```
+
+Onward to the fund_info table!
+
+```{r}
+
+pragma_ati_query <- paste0("PRAGMA table_info(", agency_fund_info, ")")
+
+af_tbl_info <- dbGetQuery(db, pragma_ati_query)
+
+af_tbl_info |>
+  gt()
+```
+
+Obviously we need to merge these.
+
+I guess we need to hit up the agency table, too.
+
+```{r}
+
+agency_info <- "agency_info"
+
+agency_info_query <- paste0("PRAGMA table_info(", agency_info, ")")
+
+dbGetQuery(db, agency_info_query) |>
+  gt()
+
+agency_names <- paste0("SELECT DISTINCT agency_num, agency_name
+                      FROM agency_info")
+
+agency_name_table <- dbGetQuery(db, agency_names)
+
+```
+
+```{r}
+
+funds_2023 <- paste0("SELECT * FROM ", "agency_fund", " WHERE year = 2023")
+
+fund_info_2023 <- paste0("SELECT * FROM ", "agency_fund_info")
+
+fund_info_2023_query <- dbGetQuery(db, funds_2023)
+
+fund_table_2023 <- dbGetQuery(db, fund_counts)
+
+fund_table_2023 <- left_join(fund_table_2023, agency_name_table, by = "agency_num")
+
+agency_fund_table_2023
+
+```
