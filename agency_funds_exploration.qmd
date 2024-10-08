@@ -3,14 +3,6 @@ title: "Agency Funds"
 format: html
 ---
 
-## Quarto
-
-Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
-
-## Running Code
-
-When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
-
 ```{r}
 knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 
@@ -19,13 +11,11 @@ library(ptaxsim)
 library(DBI)
 ```
 
-You can add options to executable code like this 
-
 ```{r}
 #| eval: false
-#| 
+
 ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), 
-  "C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/ptaxsim.db/ptaxsim-2022.0.0.db")
+  "C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/ptaxsim.db/ptaxsim-2023.0.0.db")
 
 agency_fund <- DBI::dbGetQuery(
   ptaxsim_db_conn,
@@ -33,6 +23,7 @@ agency_fund <- DBI::dbGetQuery(
   FROM agency_fund
   "
   )
+
 
 agency_names <- DBI::dbGetQuery(
   ptaxsim_db_conn,
@@ -63,7 +54,7 @@ table(agency_funds$fund_name, agency_funds$year)
 
 agency_funds %>% 
   filter(major_type != "COOK COUNTY" & minor_type != "SSA") %>%
-  filter(year == 2022) %>%
+  filter(year == 2022 & levy > 0) %>%
   group_by(fund_name, capped_ind) %>%
   summarize(n = n()) %>% arrange(desc(n)) %>%
   pivot_wider(names_from = capped_ind, values_from = n)
@@ -71,22 +62,46 @@ agency_funds %>%
 
 agency_funds %>% 
   filter(major_type != "COOK COUNTY" & minor_type != "SSA") %>%
-  filter(year == 2022) %>%
+  filter(year == 2022 & levy > 0) %>%
   group_by(major_type, fund_name) %>%
   summarize(n = n())
 
 agency_funds %>% 
   filter(major_type != "COOK COUNTY" & minor_type != "SSA") %>%
-  filter(year == 2022) %>%
+  filter(year == 2022 & levy > 0) %>%
   group_by(minor_type, fund_name) %>%
   summarize(n = n())
+
+agency_funds %>% 
+  filter(fund_name == "I.M.R.F.") %>%
+  filter(levy > 0 & year == 2022) %>%
+  group_by(minor_type, fund_name) %>%
+  summarize(n = n(),
+            amount = sum(levy, na.rm = TRUE))
 ```
 Inspect Library funds - are they library agencies or muni agencies?
 
 ```{r}
 agency_funds %>% 
-  filter(year == 2022) %>%
+ # filter(year == 2022) %>%
   filter(fund_name == "LIBRARY BUILDING AND SITES" & levy > 0) %>%
+  select(agency_name, everything()) %>% arrange(agency_name)
+```
+
+
+```{r}
+agency_funds %>% 
+  group_by(year, agency_name, agency_num, major_type, minor_type, capped_ind) %>%
+  summarize(fundcount = n(),
+            levy=sum(levy, na.rm=TRUE) ) %>%
+  select(agency_name, everything()) %>% 
+  arrange(agency_name)
+```
+
+
+```{r}
+agency_funds %>% 
+  filter(agenc_name == "VILLAGE ") %>%
   select(agency_name, everything()) %>% arrange(agency_name)
 ```
 
