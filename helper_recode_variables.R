@@ -4,12 +4,13 @@ library(plm)
 
 # 16,354 obs in 2021
 # 17,294  with 2022 data
+# 18,233 with 2023 data
 raw_data_joined <- read_csv("agency_raw_joined.csv")
 
 ## Fill in missing data for taxable EAV variables
 ## uses logic that EAV = levy / tax rate = EAV
 raw_data_joined <- raw_data_joined %>% 
-  filter(minor_type != "SSA") %>% # drops 5332 taxing agencies (agency-year combos)
+  filter(minor_type != "SSA" & major_type != "COOK") %>% 
   
  # filter(total_final_levy > 0) %>%
   mutate(cty_cook_eav = ifelse(is.na(cty_cook_eav) & total_final_levy > 0, total_final_levy / (total_final_rate/100), cty_cook_eav),
@@ -17,6 +18,12 @@ raw_data_joined <- raw_data_joined %>%
   filter(cty_total_eav > 0 )
 ## 11,281 obs after removing SSAs
 ## 11533 obs - AWM 3/31/2024
+# 12,211 - AWM Oct7 2024 with 2023 data update.
+
+raw_data_joined <- raw_data_joined %>% 
+  mutate(pct_inCook = cty_cook_eav / cty_total_eav) %>%
+  filter(pct_inCook > 0.95)
+# 10,895
 
 # Tables from PTAXSIM
 cpi <- read_csv("./Necessary_Files/cpi.csv") #%>%
@@ -24,13 +31,13 @@ cpi <- read_csv("./Necessary_Files/cpi.csv") #%>%
 eq_factor <- read_csv("./Necessary_Files/eq_factor.csv") %>% 
   select(-eq_factor_tentative)
 
-# Remove taxing agnecies that had a levy of $0 for any year. 
+### CHANGE IN PROCEDURE: DROP LATER IN DATA AGGREGATION PROCESS ###
+# Remove taxing agencies that had a levy of $0 for any year. 
 # drop all occurances of the taxing agency
 # Countryside, Deer Park, Homer Glen, Norridge, Oak Brook, Schaumburg, Dixmoor (2011 only) are dropped using `dropped_munis 
-dropped_munis <- c("030250000", "030270000", "030300000", "030585000", "030840000", "030890000", "031150000", "031230000")
+# dropped_munis <- c("030250000", "030270000", "030300000", "030585000", "030840000", "030890000", "031150000", "031230000")
 
-
-exclude_hr_change <- c("030770000", "030800000","030880000", "031070000", "031190000", "031250000" )
+# exclude_hr_change <- c("030770000", "030800000","030880000", "031070000", "031190000", "031250000" )
 
 
 recoded_data <- raw_data_joined %>% 
@@ -66,6 +73,8 @@ recoded_data <- raw_data_joined %>%
  # ungroup()
 
 
+# only used if taxing agencies are not aggregated at all. 
+# logs are recreated after summing agencies in grouped data
 recoded_data <- recoded_data %>% 
   
   filter(pct_in_Cook > 0.9) %>% #keep only agencies greater than 90% in Cook
@@ -89,6 +98,10 @@ recoded_data <- recoded_data %>%
 
 # 10,223 after fixing missing cty_cook_eav, cty_total_eav on Jan. 31
 # 10,374 after data update - 3/31/2024 and re-fixing those variables mentioned in line above
+# 10,895 after 2023 data update - AWM Oct 7 2024
+write_csv(recoded_data, "panel_data.csv")
+
+
 # drop_me <- recoded_data %>% 
 #   group_by(agency_name, agency_num) %>%
 #   mutate(has_levy = ifelse(total_final_levy > 0, 1, 0)) %>%
@@ -184,4 +197,4 @@ governments_panel <- as.data.frame(governments_panel)
 schools_panel <- as.data.frame(schools_panel)
 all_agencies <- as.data.frame(panel_data)
 
-write_csv(all_agencies, "panel_data.csv")
+#write_csv(all_agencies, "panel_data.csv")
