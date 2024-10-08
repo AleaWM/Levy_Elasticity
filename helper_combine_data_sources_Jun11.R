@@ -7,8 +7,8 @@ library(dplyr)
 ## Change database file path to match your computer's location 
 ## of the PTAXSIM database!
 ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), 
-#  "C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/ptaxsim.db/ptaxsim-2022.0.0.db")
-"./ptaxsim.db/ptaxsim-2022.0.0.db")
+  "C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/ptaxsim.db/ptaxsim-2023.0.0.db")
+# "./ptaxsim.db/ptaxsim-2023.0.0.db")
 
 muni_agency_names <- DBI::dbGetQuery(
   ptaxsim_db_conn,
@@ -46,7 +46,7 @@ reassessment_years <- read_csv("./Necessary_Files/Triad_reassessment_years.csv")
 
 
 reassessments_long <- reassessment_years %>% 
-  pivot_longer(cols = c(`2006`:`2022`), names_to = "year", values_to = "reassess_year")
+  pivot_longer(cols = c(`2006`:`2023`), names_to = "year", values_to = "reassess_year")
 
 
 nicknames <- readxl::read_xlsx("./Necessary_Files/muni_shortnames.xlsx") %>% 
