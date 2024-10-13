@@ -1,6 +1,7 @@
 ---
 title: "Replication Code for NTA Panel Data"
 author: "AWM & MVH"
+date: "October 13, 2024"
 format: 
   html:
     code-line-numbers: true
@@ -54,7 +55,6 @@ format:
 
 -   Create variable `pct_in_Cook` = cty_cook_eav / cty_total_eav. Keep all taxing agencies that are 95% or more in Cook County. Use cty_total_eav in the models since we are using the full levy amount in the models
 
-<!--Drop agencies w/ little prop tax rev. a. Create variable to measure property tax dependence. should be (total_rev - total_final_levy)/total_rev (or similar)-->
 
 ```{r warning = FALSE, message=FALSE}
 #| code-fold: true
@@ -71,57 +71,41 @@ library(modelsummary)
 ```{r}
 ## Change database file path to match your computer's location 
 ## of the PTAXSIM database!
-ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), 
-  "C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/ptaxsim.db/ptaxsim-2023.0.0.db")
-#"./ptaxsim.db/ptaxsim-2023.0.0.db")
 
 
+ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "./ptaxsim.db/ptaxsim-2023.0.0.db")
 
 agency_dt <- DBI::dbGetQuery(
   ptaxsim_db_conn,
   "SELECT *
   FROM agency
   "
-) %>%
+) |>
   mutate(first6 = str_sub(agency_num,1,6)) 
-
-
-is.integer64 <- function(x){
-  class(x)=="integer64"
-}
-
-agency_dt <- agency_dt %>%
-  mutate_if(is.integer64, as.integer)
 
 all_taxing_agencies <- DBI::dbGetQuery(
   ptaxsim_db_conn,
   "SELECT agency_num, agency_name, major_type, minor_type
   FROM agency_info
   "
-  ) %>%
-  mutate(first6 = str_sub(agency_num, 1, 6)  )
+  ) |>
+  mutate(first6 = str_sub(agency_num, 1, 6))
+
+DBI::dbDisconnect(ptaxsim_db_conn)
+
 ```
 
-
 ```{r load_necessary_files}
-# has binary variable for if it was a reassessment year or not. 
-# Manually created based on the 3 year rotation used for reassessments.
-# reassessment_years <- read_csv("./Necessary_Files/Triad_reassessment_years.csv")
-# rm(reassessment_years)
-# 
-# reassessments_long <- reassessment_years %>% 
-#   pivot_longer(cols = c(`2006`:`2023`), names_to = "year", values_to = "reassess_year")
-# 
-# rm(reassessments_long)
+#| message: false
 
-nicknames <- readxl::read_xlsx("./Necessary_Files/muni_shortnames.xlsx") %>% 
+nicknames <- readxl::read_xlsx("./Necessary_Files/muni_shortnames.xlsx") |> 
   select(-c(agency_number, short_name, `Column1`, `Most recent reassessed`))
 
 # pulls in additional tables that exist in PTAXSIM database
 # for calculating taxable AV: Taxable EAV / 
 cpi <- read_csv("./Necessary_Files/cpi.csv") 
 
-eq_factor <- read_csv("./Necessary_Files/eq_factor.csv") %>% 
+eq_factor <- read_csv("./Necessary_Files/eq_factor.csv") |> 
   select(-eq_factor_tentative)
 
 agency_triads <- read_csv("./Necessary_Files/agency_reassessmentyears.csv") 
@@ -130,63 +114,61 @@ agency_triads <- read_csv("./Necessary_Files/agency_reassessmentyears.csv")
 
 
 ```{r}
-raw_data_joined <- left_join(agency_dt, agency_triads) |> select(-c(cty_dupage_eav:cty_livingston_eav)) 
-# missing triad names but all are agencies that barely existed 
-# raw_data_joined |> filter(is.na(triad_name)) |> distinct(agency_num, agency_name)
+#| message: false
+
+# Remove variables with data on EAV in other jurisdictions
+
+raw_data_joined <- left_join(agency_dt, agency_triads) |> select(-c(cty_dupage_eav:cty_livingston_eav))
 
 ```
 
 
-## Clean variables from joined data
+## Clean variables and filter observations from joined data
 
 
 ```{r}
-#raw_data_joined <- read_csv("agency_raw_joined.csv")    # 18,649 obs w/ 2023 update
 
-## Fill in missing data for taxable EAV variables
-## uses logic that EAV = levy / tax rate = EAV
-raw_data_joined <- raw_data_joined %>%
+# Start with 18649 obs.
+
+raw_data_joined <- raw_data_joined |>
   rename(minor_type = agency_minor_type,
          major_type = agency_major_type) |>
   
-  # drops 5332 taxing agencies (agency-year combos)
-  filter(minor_type != "SSA") %>% 
+  # Filter out SSAs
+  # drops 5916 agency-year combos (updated for 2023 db)
+  filter(minor_type != "SSA") |> 
   
   # fills in missing cty_cook_eav variables. 
+  # uses logic that EAV = levy / tax rate = EAV
   mutate(cty_cook_eav = ifelse(is.na(cty_cook_eav) & total_final_levy > 0, 
                                total_final_levy / (total_final_rate/100), cty_cook_eav),
          cty_total_eav = ifelse(is.na(cty_total_eav) & total_final_levy > 0 , 
                                 total_final_levy / (total_final_rate/100), cty_total_eav))
 
-## 11,533 obs - AWM 3/31/2024
+## 12733 obs. (MVH w/ 2023 db)
 
-
-
-
-
-# Remove taxing agencies that had a levy of $0 for any year. 
-# drop all occurrences of the taxing agency
-# Countryside, Deer Park, Homer Glen, Norridge, Oak Brook, Schaumburg, Dixmoor (2011 only) are dropped using `dropped_munis 
-
-#dropped_munis <- c("030250000", "030270000", "030300000", "030585000", "030840000", "030890000", "031150000", "031230000")
 
 
 exclude_hr_change <- c("030770000", "030800000","030880000", "031070000", "031190000", "031250000" )
 
 
-recoded_data <- raw_data_joined %>% 
-  left_join(cpi, by = c("year" = "levy_year")) %>%
-  left_join(eq_factor) %>%
-  filter(!agency_num %in% exclude_hr_change) %>%
+recoded_data <- raw_data_joined |> 
+  left_join(cpi, by = c("year" = "levy_year")) |>
+  left_join(eq_factor) |>
+  # Excluding munis that change HR status removes 144 agency-year pairs.
+  filter(!agency_num %in% exclude_hr_change) |>
+  # 12589 obs.
+  
+  # Clean up data types
   mutate(
     agency_num = as.character(agency_num),            # change variable type
     agency_num = str_pad(agency_num, 9, "left", "0"), # add missing leading zeros
     first6 = str_pad(first6, 6, "left", "0"),
     home_rule_ind = as.character(home_rule_ind),      # change reference category
-  #  minor_type = as.factor(minor_type),
     reassess_year = as.character(reassess_year)       # change variable type
-    ) %>%
+    ) |>
   
+  # Calculate AV as a function of EAV and the EQ factor
   mutate(cty_total_eav = as.numeric(cty_total_eav),    # taxable eav in cook and neighboring counties
          cty_cook_eav = as.numeric(cty_cook_eav),      # taxable EAV in cook county only
          pct_in_Cook = cty_cook_eav / cty_total_eav,   # to identify taxing agencies that cross county lines
@@ -194,21 +176,27 @@ recoded_data <- raw_data_joined %>%
          av = cty_cook_eav / eq_factor_final,          # backed out taxable Assessed Value of properties
          first6_w_hr = str_c(first6, "_", home_rule_ind),
          agency_w_hr = str_c(agency_num, "_", home_rule_ind)
-         ) %>% 
+         ) |> 
   
-  #keep only agencies greater than 95% in Cook
+  # Keep only agencies greater than 95% in Cook
+  # Drops 1608 obs.
   filter(pct_in_Cook > 0.95) 
+
+# 10891 obs. in recoded_data
+
 ```
 
-## Add grouping labels for taxing agencies
+## Import grouping labels
 
 ```{r}
+
+ # Read in grouped labels
+
 groupies <- readxl::read_xlsx("panel_data_blindcoding.xlsx", sheet = "TFL manual code") |>
-  select(first6, agency_num, agency_group, flag_drop, agency_name)
-```
-
-```{r}
-groupies <- groupies %>%          
+  select(first6, agency_num, agency_group, flag_drop, agency_name) |>
+  
+ # Change object types to facilitate merging.
+  
   mutate(agency_num = str_pad(agency_num, 9, "left", "0"),
          agency_num = as.character(agency_num), 
          first6 = as.character(first6), # make character
@@ -216,20 +204,29 @@ groupies <- groupies %>%
         )
 ```
 
-### Merge Grouped Labels and Recoded Data & Summarize to Grouped Taxing Agency Level
+
+### Merge Grouped Labelsm, Recode Data & Summarize to Grouped Taxing Agency Level
 
 ```{r}
-grouped_manual <- recoded_data %>% 
+
+
+grouped_manual <- recoded_data |> 
+  # 10981 obs.
   left_join(groupies,
             by = c("agency_name", "agency_num")
-            ) %>% 
+            ) |> 
+  # Filter post-grouped agencies to munis, townships, schools and miscellaneous agencies such as TIFs.
+  # Drops 345 obs.
     filter(major_type == "MUNICIPALITY/TOWNSHIP" | major_type == "SCHOOL" |   major_type == "MISCELLANEOUS"
       & minor_type != "SANITARY"
-           ) %>%
-  group_by(year, agency_group) %>% 
-  summarize(agency_name = first(agency_name),
+           ) |>
+  # 10546 obs.
+  group_by(year, agency_group) |> 
+  # Change dataframe to reflect grouped agencies
+  # Consolidates 10546 obs. pre-grouping into 7679 obs.
+  reframe(agency_name = first(agency_name), # changed to reframe to make grouping more conspicuous
             agency_num = first(agency_num),
-            total_final_levy = sum(total_final_levy, na.rm=TRUE)+1,
+            total_final_levy = sum(total_final_levy, na.rm=TRUE) + 1, # Add 1 to avoid ln(0)
             cty_total_eav = first(cty_total_eav), 
             av = first(av),   # should be first() not sum() --- AWM 3/30/24
             triad_name = first(triad_name), 
@@ -237,42 +234,49 @@ grouped_manual <- recoded_data %>%
             reassess_year = first(reassess_year),
             home_rule_ind = first(home_rule_ind),
             flag_drop = first(flag_drop)
-            ) %>% 
-    mutate(
+            ) |> 
+  # Create variables to indicate bundling  
+  mutate(
       bundled = ifelse(agency_count > 1, 1, 0),
       uniqueid = str_c(agency_group, "_", home_rule_ind, "_", bundled),
-    first2_dig = str_sub(agency_num, 1, 2),
+     first2_dig = str_sub(agency_num, 1, 2),
+    
+    # Fix ptaxsim.db misclassification of Cicero, Evanston, and Chicago
     type = case_when(
       first2_dig == "02"  ~ "Township", 
       first2_dig == "03" | agency_group == "Evanston" | 
         agency_group == "Cicero" | agency_group == "Chicago" ~ "Muni",
       first2_dig == "04" ~ "School",
       TRUE ~ "Other"
-      )) %>% 
- # filter(total_final_levy > 1) %>%
-  select(year, uniqueid, everything())
+      )) |>
+  select(year, uniqueid, everything()) # puts variables in useful order.
 
 
-# ones that will be dropped
-dropped_agencies <- grouped_manual %>% 
- # filter(flag_drop != 1) %>%
-  group_by(agency_group) %>% 
-  summarize(n=n()) %>%
+# Identify grouped agencies that do not exist across entire panel
+# 9 agency groups will be dropped.
+dropped_agencies <- grouped_manual |>
+  group_by(agency_group) |> 
+  summarize(n=n()) |>
   filter(n!=18)
 
-grouped_manual <- grouped_manual %>%
-  filter(!agency_group %in% dropped_agencies$agency_group )
-# group_by(agency_group) %>% 
-  #   summarize(n=n()) %>%
-  #   filter(n!=18)
+# Filter out observations from 9 agencies (65 agency_group-year obs.)
+# 7614 remaining obs.
+
+grouped_manual <- grouped_manual |>
+  filter(!agency_group %in% dropped_agencies$agency_group)
+
+```
+
+```{r year_type_table}
 
 table(grouped_manual$year, grouped_manual$type)
+
 ```
 
 ```{r}
 grouped_manual |> 
   group_by(year, agency_group, triad_name)  |> 
-  summarize(total_final_levy = sum(total_final_levy, na.rm = TRUE)) %>% 
+  summarize(total_final_levy = sum(total_final_levy, na.rm = TRUE)) |> 
   filter(agency_group != "Chicago") |> 
   ggplot() + 
   theme_classic() + 
@@ -281,7 +285,7 @@ grouped_manual |>
 
 grouped_manual |> 
   group_by(year, agency_group, triad_name, home_rule_ind)  |> 
-  summarize(total_final_levy = sum(total_final_levy, na.rm = TRUE)) %>% 
+  summarize(total_final_levy = sum(total_final_levy, na.rm = TRUE)) |> 
   filter(agency_group != "Chicago") |> 
   ggplot() + 
   theme_classic() + 
@@ -300,17 +304,17 @@ df <- grouped_manual
 models <- list(
   "Plain TWFE" = feols(log(total_final_levy) ~ log(av)  | agency_group + year,  data = df, vcov = "newey_west", panel.id = c("agency_group", "year")),
   
-      "Homerule TWFE" = feols(log(total_final_levy) ~ log(av)  | agency_group + year,  data = df %>% filter(home_rule_ind == "1"), vcov = "newey_west", panel.id = c("agency_group", "year")),
+      "Homerule TWFE" = feols(log(total_final_levy) ~ log(av)  | agency_group + year,  data = df |> filter(home_rule_ind == "1"), vcov = "newey_west", panel.id = c("agency_group", "year")),
       
-  "Nonhomerule" = feols(log(total_final_levy)~ log(av)  | agency_group + year, vcov = "newey_west", panel.id = c("agency_group", "year"), data = df %>% filter(home_rule_ind == "0")),
+  "Nonhomerule" = feols(log(total_final_levy)~ log(av)  | agency_group + year, vcov = "newey_west", panel.id = c("agency_group", "year"), data = df |> filter(home_rule_ind == "0")),
   
-    "Nonhomerule - noschools" = feols(log(total_final_levy)~ log(av)  | agency_group + year, vcov = "newey_west", panel.id = c("agency_group", "year"), data = df %>% filter(home_rule_ind == "0" & type != "School")),
+    "Nonhomerule - noschools" = feols(log(total_final_levy)~ log(av)  | agency_group + year, vcov = "newey_west", panel.id = c("agency_group", "year"), data = df |> filter(home_rule_ind == "0" & type != "School")),
   
   "TWFE w/ AV Lags" = feols(log(total_final_levy)~ log(av) + l(log(av), 1) + l(log(av), 2 ) | agency_name + year, vcov = "newey_west", panel.id = c("agency_name", "year"), data = df),
   
-  "Homerule TWFE" = feols(log(total_final_levy) ~ log(av) + l(log(av), 1) + l(log(av), 2 ) | agency_name + year,  data = df %>% filter(home_rule_ind == "1"), vcov = "newey_west", panel.id = c("agency_name", "year")),
+  "Homerule TWFE" = feols(log(total_final_levy) ~ log(av) + l(log(av), 1) + l(log(av), 2 ) | agency_name + year,  data = df |> filter(home_rule_ind == "1"), vcov = "newey_west", panel.id = c("agency_name", "year")),
       
-  "Nonhomerule" = feols(log(total_final_levy)~ log(av) + l(log(av), 1) + l(log(av), 2 ) | agency_name + year, vcov = "newey_west", panel.id = c("agency_name", "year"), data = df %>% filter(home_rule_ind == "0"))
+  "Nonhomerule" = feols(log(total_final_levy)~ log(av) + l(log(av), 1) + l(log(av), 2 ) | agency_name + year, vcov = "newey_west", panel.id = c("agency_name", "year"), data = df |> filter(home_rule_ind == "0"))
   
   )
 
@@ -325,16 +329,16 @@ modelsummary(
 
 
 ```{r}
-df_formodels <- df %>%
-  ungroup() %>%
-  group_by(agency_group) %>% 
+df_formodels <- df |>
+  ungroup() |>
+  group_by(agency_group) |> 
   
-  arrange(year)%>% 
+  arrange(year)|> 
   mutate(
     #reassess_year=as.numeric(reassess_year),
-    assess_year_av = ifelse(reassess_year == 1, av, NA)) %>%
+    assess_year_av = ifelse(reassess_year == 1, av, NA)) |>
   
-  fill(assess_year_av, .direction = "down") %>%
+  fill(assess_year_av, .direction = "down") |>
   
   mutate(
     # rate of growth in assessment year is 0
@@ -362,12 +366,12 @@ df_formodels <- df %>%
   rate_smooth = if_else(reassess_year == 1, 0, rate_smooth),
   av_stair = assess_year_av*(1+rate_smooth),
   av_true = av_stair
- ) %>%
+ ) |>
   
-  select(year, reassess_year, agency_name, av, rate_smooth, everything()) %>% 
-  arrange(agency_name, year) %>%
+  select(year, reassess_year, agency_name, av, rate_smooth, everything()) |> 
+  arrange(agency_name, year) |>
   select(agency_group, year, av, assess_year_av, av_true, 
-         av_stair, rate_smooth, everything()) %>%
+         av_stair, rate_smooth, everything()) |>
   ungroup()
 
 ```
