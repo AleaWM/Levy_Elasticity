@@ -22,13 +22,11 @@ format:
 -   muni_shortnames.xlsx
 -   cpi.csv
 -   eq_factor.csv
--   agency_groups.csv
+-   panel_data_blindcoded.xlsx
 
 ## Code Cleaning Steps
 
-**After the tables from PTAXSIM are joined together (saved as “agency_raw_joined.csv”) observations are filtered out based on our desired sample criteria.** 
-
--   90% within Cook County 
+-   95% within Cook County 
 -   Does not change home rule status during sample years 
 
 ### Slightly more detail on cleaning process:
@@ -43,13 +41,15 @@ format:
 
 -   Countryside, Deer Park, Homer Glen, ~~Norridge~~, Oak Brook, Schaumburg, Dixmoor (2011 only) are dropped using \`dropped_munis \<- c("030250000", "030270000", "030300000", "030585000", "030840000", "030890000", "031150000")\` 
 
+  - Manually imputed Norridge Levy amounts from Norridge CAGR.
+
 **Remove Municipalities that change home rule status:**
 
 -   Midlothian, Northfield, River Grove became home rule in 2010.
 -   Melrose Park became home rule in 2011.
 -   South Chicago Heights became home rule in 2019.
 -   Summit became home rule in 2016.
--   exclude_hr_change \<- c("030770000", "030800000","030880000", "031070000", "031190000", "031250000"
+-   exclude_hr_change \<- c("030770000", "030800000","030880000", "031070000", "031190000", "031250000")
 
 **Keep taxing agencies that are within Cook County**
 
@@ -73,7 +73,9 @@ library(modelsummary)
 ## of the PTAXSIM database!
 
 
-ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "./ptaxsim.db/ptaxsim-2023.0.0.db")
+# ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "./ptaxsim.db/ptaxsim-2023.0.0.db")
+ 
+ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/ptaxsim.db/ptaxsim-2023.0.0.db")
 
 agency_dt <- DBI::dbGetQuery(
   ptaxsim_db_conn,
@@ -102,7 +104,7 @@ nicknames <- readxl::read_xlsx("./Necessary_Files/muni_shortnames.xlsx") |>
   select(-c(agency_number, short_name, `Column1`, `Most recent reassessed`))
 
 # pulls in additional tables that exist in PTAXSIM database
-# for calculating taxable AV: Taxable EAV / 
+# for calculating taxable AV: Taxable EAV / eq_factor for each year
 cpi <- read_csv("./Necessary_Files/cpi.csv") 
 
 eq_factor <- read_csv("./Necessary_Files/eq_factor.csv") |> 
@@ -215,41 +217,41 @@ grouped_manual <- recoded_data |>
   left_join(groupies,
             by = c("agency_name", "agency_num")
             ) |> 
-  # Filter post-grouped agencies to munis, townships, schools and miscellaneous agencies such as TIFs.
+  # Filter post-grouped agencies to munis, townships, schools and miscellaneous agencies such as Parks or Library Special Districts
   # Drops 345 obs.
-    filter(major_type == "MUNICIPALITY/TOWNSHIP" | major_type == "SCHOOL" |   major_type == "MISCELLANEOUS"
-      & minor_type != "SANITARY"
-           ) |>
-  # 10546 obs.
+    filter(major_type == "MUNICIPALITY/TOWNSHIP" | major_type == "SCHOOL" |   major_type == "MISCELLANEOUS"   & minor_type != "SANITARY" ) |>
+
+    # 10546 obs.
   group_by(year, agency_group) |> 
   # Change dataframe to reflect grouped agencies
   # Consolidates 10546 obs. pre-grouping into 7679 obs.
-  reframe(agency_name = first(agency_name), # changed to reframe to make grouping more conspicuous
+  summarize(agency_name = first(agency_name),
             agency_num = first(agency_num),
-            total_final_levy = sum(total_final_levy, na.rm=TRUE) + 1, # Add 1 to avoid ln(0)
+            total_final_levy = sum(total_final_levy, na.rm=TRUE),
+          total_final_levy = ifelse(total_final_levy == 0, NA, total_final_levy), # change 0's to NAs so ln() doesn't break it
             cty_total_eav = first(cty_total_eav), 
-            av = first(av),   # should be first() not sum() --- AWM 3/30/24
+            av = first(av),   
             triad_name = first(triad_name), 
             agency_count = n(),
             reassess_year = first(reassess_year),
             home_rule_ind = first(home_rule_ind),
-            flag_drop = first(flag_drop)
+           # flag_drop = first(flag_drop)
             ) |> 
-  # Create variables to indicate bundling  
+  # Create variables to indicate bundling after grouping
   mutate(
       bundled = ifelse(agency_count > 1, 1, 0),
       uniqueid = str_c(agency_group, "_", home_rule_ind, "_", bundled),
      first2_dig = str_sub(agency_num, 1, 2),
     
-    # Fix ptaxsim.db misclassification of Cicero, Evanston, and Chicago
+    # Fix misclassification of Cicero, Evanston, and Chicago
     type = case_when(
-      first2_dig == "02"  ~ "Township", 
       first2_dig == "03" ~ "Muni",
-      #agency_group == "Evanston" | agency_group == "Cicero" | agency_group == "Chicago" ~ "Muni",
+      agency_group == "Evanston" | agency_group == "Cicero" | agency_group == "Chicago" ~ "Muni",
       first2_dig == "04" ~ "School",
+      first2_dig == "02"  ~ "Township", 
       TRUE ~ "Other"
       )) |>
-  mutate(type = ifelse(agency_group %in% c("Evanston", "Cicero"), "Muni", type)) |>
+
   select(year, uniqueid, everything()) # puts variables in useful order.
 
 
@@ -298,6 +300,7 @@ grouped_manual |>
 ## Models
 
 Create "true" AV variable
+Assumes that taxed AV is accurate during assessment years and stays mostly flat until the next assessment year. The true market value is then smoothed between the assessment years.
 
 ```{r merriman_model_variable}
 
@@ -319,14 +322,12 @@ df <- grouped_manual |>
    rate_smooth = if_else(lag(reassess_year, n=2) == 1 | lead(reassess_year, n=1) == 1, (lead(assess_year_av, 1) / assess_year_av)^(1/2) - 1, rate_smooth),
 
   rate_smooth = if_else(reassess_year == 1, 0, rate_smooth),
-  av_stair = assess_year_av*(1+rate_smooth),
-  av_true = av_stair
+  av_true = assess_year_av*(1+rate_smooth),
  ) |>
   
   select(year, reassess_year, agency_name, av, rate_smooth, everything()) |> 
   arrange(agency_name, year) |>
-  select(agency_group, year, av, assess_year_av, av_true, 
-         av_stair, rate_smooth, everything()) |>
+  select(agency_group, year, av, assess_year_av, av_true, rate_smooth, everything()) |>
   ungroup()
 
 ```
@@ -335,12 +336,18 @@ df <- grouped_manual |>
 
 ```{r}
 #| label: tbl-merriman_models-agency_group
-#| tbl-cap: "agency_group fixed effects and sums. Includes log(av) and log(av_true in model). Uses October 13, 2024 csv file."
+#| tbl-cap: "agency_group fixed effects. Uses grouped and summed taxing agencies. Includes log(av) and log(av_true) in model. Uses Ptaxsim 2023.0.0. and necessary files edited last on Oct. 12th. Newey-West stand errors. "
 
 library(fixest)
 mods_1 <- list(
   
-  "1" = feols(log(total_final_levy) ~ log(av) + log(av_true) | agency_group + year,
+  "1" = feols(log(total_final_levy) ~ log(av) | agency_group + year,
+               data = df,
+               vcov = "newey_west",
+               panel.id = c("agency_group", "year")
+                ),
+  
+    "2" = feols(log(total_final_levy) ~ log(av) + log(av_true) | agency_group + year,
                data = df,
                vcov = "newey_west",
                panel.id = c("agency_group", "year")
@@ -364,47 +371,45 @@ modelsummary::modelsummary(
 ```
 
 
+Model comparison to check work. Agency Group fixed effects is what we want.
 
 
 ```{r}
-#| label: tbl-merriman_models
-#| tbl-cap: "Includes log(av) and log(av_true in model). Uses October 13, 2024 csv file."
-
-library(fixest)
-mods_1 <- list(
-  
-  "1" = feols(log(total_final_levy) ~ log(av) + log(av_true) | agency_name + year,
-               data = df,
-               vcov = "newey_west",
-               panel.id = c("agency_name", "year")
-                ),
-  
-  "Interact" = feols(log(total_final_levy) ~ log(av) + log(av_true) + log(av)*log(av_true) | agency_name + year,
-               data = df,
-               vcov = "newey_west",
-               panel.id = c("agency_name", "year")
-                )
-  )
-
-modelsummary::modelsummary(
-  mods_1,
-  output = "flextable",
- gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
-              stars = TRUE
-)
-
+#| label: tbl-merriman_models-iid
+#| tbl-cap: "Model comparison using agency_name and then agency group fixed effects. Includes log(av) and log(av_true) in model. iid standard errors."
 mods_iid <- list(
   
-  "1" = feols(log(total_final_levy) ~ log(av) + log(av_true) | agency_name + year,
+  "Agency Name 1" = feols(log(total_final_levy) ~ log(av) | agency_name + year,
+               data = df,
+               vcov = "iid",
+               panel.id = c("agency_name", "year")
+                ),
+    "Agency Name 2" = feols(log(total_final_levy) ~ log(av) + log(av_true) | agency_name + year,
                data = df,
                vcov = "iid",
                panel.id = c("agency_name", "year")
                 ),
   
-  "Interact" = feols(log(total_final_levy) ~ log(av) + av_true + log(av)*av_true | agency_name + year,
+  "Agency Name Interact" = feols(log(total_final_levy) ~ log(av) + log(av_true) + log(av)*log(av_true)| agency_name + year,
                data = df,
                vcov = "iid",
                panel.id = c("agency_name", "year")
+                ),
+    "Agency Group - 1" = feols(log(total_final_levy) ~ log(av) | agency_group + year,
+               data = df,
+               vcov = "iid",
+               panel.id = c("agency_group", "year")
+                ),
+    "Agency Group 2" = feols(log(total_final_levy) ~ log(av) + log(av_true) | agency_group + year,
+               data = df,
+               vcov = "iid",
+               panel.id = c("agency_group", "year")
+                ),
+  
+  "Agency Group Interact" = feols(log(total_final_levy) ~ log(av) + log(av_true) + log(av)*log(av_true) | agency_group + year,
+               data = df,
+               vcov = "iid",
+               panel.id = c("agency_group", "year")
                 )
   )
 
