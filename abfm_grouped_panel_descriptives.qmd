@@ -43,26 +43,28 @@ northtriad <- c("Barrington", "Elk Grove","Evanston", "Hanover", "Leyden",
                 "Palatine", "Schaumburg", "Wheeling")
 
 df <- read_csv("panel_data.csv")   ## 10,374
+## 10,895 with 2023 data update
 
 df <- df |> filter(!minor_type %in% c("BOND", "UNIFIED", "COMM COLL", 
                                       "COOK", "MISC", "SANITARY", "FIRE",
                                       "MOSQUITO", "WATER") ) # 9,051 obs
 # MVH & AWM obs match
 
+# 
+# df <- df |> 
+# #  filter(year > 2009)  |>   ## 6922 obs MVH: 6922
+# 
+#   # Change infinite values from tfl % delta to 0
+#                    0, tfl_pct_change))
+#   mutate(tfl_pct_change = if_else(is.na(tfl_pct_change) |
+#                                     is.infinite(tfl_pct_change),
+               
 
 df <- df |> 
-#  filter(year > 2009)  |>   ## 6922 obs MVH: 6922
-
-  # Change infinite values from tfl % delta to 0
-  mutate(tfl_pct_change = if_else(is.na(tfl_pct_change) |
-                                    is.infinite(tfl_pct_change),
-                                  0, tfl_pct_change))
-
-
-df <- df |> 
-  select(-c(muni_name, muni_num, agency_w_hr, first6_w_hr, 
-            log_eav:reassess_lag2, 
-            lag_eav_pct_change1:lag_av_pct_change2)) %>%
+ # select(-c(muni_name, muni_num, agency_w_hr, first6_w_hr, 
+           # log_eav:reassess_lag2, 
+          #  lag_eav_pct_change1:lag_av_pct_change2
+         #  )) %>%
   mutate_at(c("home_rule_ind"), as.character)  %>%
   # Code Cicero as a Municipality and not a township.
   mutate(minor_type = ifelse(agency_name == "TOWN CICERO", "MUNI", minor_type)) %>%
@@ -73,8 +75,8 @@ df <- df |>
 ```
 
 
-```{r}
-df %>%  filter( year == 2022) %>% summarize(levy = sum(total_final_levy))
+```{r include = FALSE}
+df %>%  filter( year == 2023) %>% summarize(levy = sum(total_final_levy))
 ```
 
 ```{r}
@@ -106,6 +108,8 @@ df %>% ungroup () |>
 
 
 datasummary_crosstab(major_type ~home_rule_ind, statistic = 1~1+N, data = df %>% filter(year==2022), output = "flextable")
+
+datasummary_crosstab(major_type ~home_rule_ind, statistic = 1~1+N, data = df %>% filter(year==2023), output = "flextable")
 ```
 
 
@@ -114,6 +118,7 @@ datasummary_crosstab(major_type ~home_rule_ind, statistic = 1~1+N, data = df %>%
 #| tbl-cap: "2022 snapshot of agencies that existed. Not from balanced panel data. Agencies such as park, library, etc will be combined with their larger municipality taxing agency."
 
 datasummary_crosstab(minor_type~home_rule_ind, data = df %>%filter(year==2022),  statistic = 1~1+N, output = "flextable")
+datasummary_crosstab(minor_type~home_rule_ind, data = df %>%filter(year==2023),  statistic = 1~1+N, output = "flextable")
 
 ```
 
@@ -201,7 +206,7 @@ ungroup() %>%
 
 ```{r}
 #| label: tbl-merriman_models
-#| tbl-cap: "Includes log(av) and av_true in model. Uses September 21st 2024 csv file."
+#| tbl-cap: "Includes log(av) and log(av_true in model). Uses September 21st 2024 csv file."
 
 mods_1 <- list(
   
@@ -239,28 +244,28 @@ modelsummary::modelsummary(
 
 mods_iid <- list(
   
-  "1" = feols(log(total_final_levy) ~ log(av) + log(av_true) | uniqueid + year,
-               data = df_mmm,
+  "1" = feols(log(total_final_levy) ~ log(av) + log(av_true) | agency_name + year,
+               data = df_formodels,
                vcov = "iid",
-               panel.id = c("uniqueid", "year")
+               panel.id = c("agency_name", "year")
                 ),
   
-  "Interact" = feols(log(total_final_levy) ~ log(av) + av_true + log(av)*av_true | uniqueid + year,
-               data = df_mmm,
+  "Interact" = feols(log(total_final_levy) ~ log(av) + av_true + log(av)*av_true | agency_name + year,
+               data = df_formodels,
                vcov = "iid",
-               panel.id = c("uniqueid", "year")
+               panel.id = c("agency_name", "year")
                 ),
   
-  "EAV" = feols(log(total_final_levy) ~ log_eav + av_true | uniqueid + year,
-               data = df_mmm,
+  "EAV" = feols(log(total_final_levy) ~ log_eav + av_true | agency_name + year,
+               data = df_formodels,
                vcov = "iid",
-               panel.id = c("uniqueid", "year")
+               panel.id = c("agency_name", "year")
                 ),
   
-    "EAV Interact" = feols(log(total_final_levy) ~ log_eav + av_true + log_eav*av_true | uniqueid + year,
-               data = df_mmm,
+    "EAV Interact" = feols(log(total_final_levy) ~ log_eav + av_true + log_eav*av_true | agency_name + year,
+               data = df_formodels,
                vcov = "iid",
-               panel.id = c("uniqueid", "year")
+               panel.id = c("agency_name", "year")
                 )
   )
 
@@ -274,80 +279,6 @@ modelsummary::modelsummary(
 
 ```
 
-```{r}
-#| label: tbl-merriman_models
-#| tbl-cap: "Includes log(av) and av_true in model. Uses September 21st 2024 csv file."
-
-mods_1 <- list(
-  
-  "1" = feols(log(total_final_levy) ~ log(av) + av_true | uniqueid + year,
-               data = df_mmm,
-               vcov = "newey_west",
-               panel.id = c("uniqueid", "year")
-                ),
-  
-  "Interact" = feols(log(total_final_levy) ~ log(av) + av_true + log(av)*av_true | uniqueid + year,
-               data = df_mmm,
-               vcov = "newey_west",
-               panel.id = c("uniqueid", "year")
-                ),
-  
-  "EAV" = feols(log(total_final_levy) ~ log_eav + av_true | uniqueid + year,
-               data = df_mmm,
-               vcov = "newey_west",
-               panel.id = c("uniqueid", "year")
-                ),
-  
-    "EAV Interact" = feols(log(total_final_levy) ~ log_eav + av_true + log_eav*av_true | uniqueid + year,
-               data = df_mmm,
-               vcov = "newey_west",
-               panel.id = c("uniqueid", "year")
-                )
-  )
-
-modelsummary::modelsummary(
-  mods_1,
-  output = "flextable",
- gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
-              stars = TRUE
-)
-
-mods_iid <- list(
-  
-  "1" = feols(log(total_final_levy) ~ log(av) + av_true | uniqueid + year,
-               data = df_mmm,
-               vcov = "iid",
-               panel.id = c("uniqueid", "year")
-                ),
-  
-  "Interact" = feols(log(total_final_levy) ~ log(av) + av_true + log(av)*av_true | uniqueid + year,
-               data = df_mmm,
-               vcov = "iid",
-               panel.id = c("uniqueid", "year")
-                ),
-  
-  "EAV" = feols(log(total_final_levy) ~ log_eav + av_true | uniqueid + year,
-               data = df_mmm,
-               vcov = "iid",
-               panel.id = c("uniqueid", "year")
-                ),
-  
-    "EAV Interact" = feols(log(total_final_levy) ~ log_eav + av_true + log_eav*av_true | uniqueid + year,
-               data = df_mmm,
-               vcov = "iid",
-               panel.id = c("uniqueid", "year")
-                )
-  )
-
-
-modelsummary::modelsummary(
-  mods_iid,
-  output = "flextable",
- gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
-              stars = TRUE
-)
-
-```
 
 
 ## Grouping Values 
@@ -1555,7 +1486,7 @@ modelsummary::modelsummary(
 ```
 
 ```{r}
-#| label: tbl-merriman_models
+#| label: tbl-merriman_models-later
 #| tbl-cap: "Includes log(av) and av_true in model. Uses September 21st 2024 csv file."
 
 mods_1 <- list(
