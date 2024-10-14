@@ -52,7 +52,7 @@ format:
 
 **Keep taxing agencies that are within Cook County**
 
--   Create variable `pct_in_Cook` = cty_cook_eav / cty_total_eav. Keep all taxing agencies that are 95% or more in Cook County. Use cty_total_eav in the models since we are using the full levy amount in the models
+-   Create variable `pct_in_Cook` = cty_cook_eav / cty_total_eav. Keep all taxing agencies that are 90% or more in Cook County. Use cty_total_eav in the models since we are using the full levy amount in the models
 
 
 ```{r warning = FALSE, message=FALSE}
@@ -72,9 +72,9 @@ library(modelsummary)
 ## of the PTAXSIM database!
 
 
-# ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "./ptaxsim.db/ptaxsim-2023.0.0.db")
+ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "./ptaxsim.db/ptaxsim-2023.0.0.db")
  
-ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/ptaxsim.db/ptaxsim-2023.0.0.db")
+#ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/ptaxsim.db/ptaxsim-2023.0.0.db")
 
 agency_dt <- DBI::dbGetQuery(
   ptaxsim_db_conn,
@@ -138,6 +138,9 @@ raw_data_joined <- raw_data_joined |>
   
   # fills in missing cty_cook_eav variables. 
   # uses logic that EAV = levy / tax rate = EAV
+  mutate(total_final_levy = as.numeric(total_final_levy),
+         cty_cook_eav = as.numeric(cty_cook_eav),
+         cty_total_eav = as.numeric(cty_total_eav)) |>
   mutate(cty_cook_eav = ifelse(is.na(cty_cook_eav) & total_final_levy > 0, 
                                total_final_levy / (total_final_rate/100), cty_cook_eav),
          cty_total_eav = ifelse(is.na(cty_total_eav) & total_final_levy > 0 , 
@@ -285,11 +288,6 @@ table(grouped_manual$year, grouped_manual$type)
 
 ```
 
-#### Export CSV
-```{r}
-grouped_manual |> write_csv("NTA_data.csv")
-```
-
 
 ```{r}
 grouped_manual |> 
@@ -342,6 +340,29 @@ df <- grouped_manual |>
   arrange(agency_name, year) |>
   select(agency_group, year, av, assess_year_av, av_true, rate_smooth, everything()) |>
   ungroup()
+
+```
+
+```{r av_check}
+#| eval: false
+
+df |>
+  filter(!(year %in% c("2006", "2007", "2022", "2023"))) |>
+  select(av_true, av) |>
+  ggplot() +
+  geom_density(aes(log(av_true), color = "blue")) +
+  geom_density(aes(log(av), color = "red")) +
+  theme_classic()
+
+df |>
+  filter(!(year %in% c("2006", "2007", "2022", "2023"))) |>
+  filter(is.na(av_true)) |>
+  summarize(n = n())
+
+df |>
+  filter(!(year %in% c("2006", "2007", "2022", "2023"))) |>
+  filter(is.na(av)) |>
+  summarize(n = n())
 
 ```
 
