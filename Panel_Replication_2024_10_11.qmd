@@ -207,7 +207,6 @@ groupies <- readxl::read_xlsx("panel_data_blindcoding.xlsx", sheet = "TFL manual
 
 ```{r}
 table(recoded_data$year, recoded_data$minor_type)
-table(recoded_data$year, recoded_data$minor_type)
 
   
 grouped_manual <- recoded_data |> 
@@ -216,25 +215,27 @@ grouped_manual <- recoded_data |>
             by = c("agency_name", "agency_num")
   ) |> 
   # Filter post-grouped agencies to munis, townships, schools and miscellaneous agencies such as Parks or Library Special Districts
-  # Drops 345 obs.
-  filter(major_type == "MUNICIPALITY/TOWNSHIP" | minor_type == "ELEMENTARY" |   minor_type == "SECONDARY" | major_type == "MISCELLANEOUS"   & !minor_type %in% c("SANITARY", "WATER", "MOSQUITO" )) 
-table(grouped_manual$year, grouped_manual$minor_type)
+  # 10,261 obs after filtering
+  filter(
+  (  (major_type == "MUNICIPALITY/TOWNSHIP" |  major_type == "MISCELLANEOUS" ) | (minor_type == "ELEMENTARY" |   minor_type == "SECONDARY") ) & 
+      !minor_type %in% c("SANITARY", "WATER", "MOSQUITO", "COOK" )) 
+
 table(grouped_manual$year, grouped_manual$minor_type)
 
 grouped_manual <- grouped_manual |>
   
   arrange(agency_num, year) |>
-  # 10546 obs.
-  group_by(year, agency_group) |> 
+
+    group_by(year, agency_group) |> 
   # Change dataframe to reflect grouped agencies
-  # Consolidates 10546 obs. pre-grouping into 7679 obs.
+  # Consolidates 10261 obs. pre-grouping into 7614 obs.
   summarize(
     agency_name = first(agency_name),
     agency_num = first(agency_num),
     total_final_levy = sum(total_final_levy, na.rm=TRUE),
     total_final_levy = ifelse(total_final_levy == 0, NA, total_final_levy), # change 0's to NAs so ln() doesn't break it
-    major_type = paste(list(major_type), sep = ", "),   
-    minor_type = paste(list(minor_type), sep = ", "),
+    major_type = paste(list(unique(major_type)), sep = ", "),   
+    minor_type = paste(list(unique(minor_type)), sep = ", "),
 
     cty_total_eav = mean(cty_total_eav, na.rm=TRUE), 
     av = first(av),   
@@ -259,7 +260,7 @@ grouped_manual <- grouped_manual |>
       TRUE ~ "Other"
       )) |>
 
-  select(year, uniqueid, everything()) # puts variables in useful order.
+  select(year, agency_group, everything()) # puts variables in useful order.
 
 
 # Identify grouped agencies that do not exist across entire panel
@@ -268,7 +269,7 @@ dropped_agencies <- grouped_manual |>
   group_by(agency_group) |> 
   summarize(n=n(),
             flag_drop = sum(flag_drop, na.rm=TRUE)) |>
-  filter(n!=18 )
+  filter(n!=18 | flag_drop > 0)
 
 dropped_agencies  # check what will be dropped
 
@@ -288,7 +289,7 @@ table(grouped_manual$year, grouped_manual$type)
 grouped_manual |> 
   group_by(year, agency_group, triad_name)  |> 
   summarize(total_final_levy = sum(total_final_levy, na.rm = TRUE)) |> 
-  filter(agency_group != "Chicago") |> 
+  filter(agency_group != "Chicago" & agency_group != "Chicago Park District") |> 
   ggplot() + 
   theme_classic() + 
   geom_line(aes(x=year, y = total_final_levy, group=agency_group) ) +
@@ -297,7 +298,7 @@ grouped_manual |>
 grouped_manual |> 
   group_by(year, agency_group, triad_name, home_rule_ind)  |> 
   summarize(total_final_levy = sum(total_final_levy, na.rm = TRUE)) |> 
-  filter(agency_group != "Chicago") |> 
+  filter(agency_group != "Chicago" & agency_group != "Chicago Park District") |> 
   ggplot() + 
   theme_classic() + 
   geom_line(aes(x=year, y = total_final_levy, group=agency_group) ) +
