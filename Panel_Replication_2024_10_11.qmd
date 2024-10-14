@@ -206,34 +206,43 @@ groupies <- readxl::read_xlsx("panel_data_blindcoding.xlsx", sheet = "TFL manual
 ### Merge Grouped Labels, Recode Data & Summarize to Grouped Taxing Agency Level
 
 ```{r}
-# majorminor_types <- recoded_data |> 
-#   arrange(agency_num, desc(year)) |> 
+table(recoded_data$year, recoded_data$minor_type)
+table(recoded_data$year, recoded_data$minor_type)
+
   
-  grouped_manual <- recoded_data |> 
+grouped_manual <- recoded_data |> 
   # 10981 obs.
   left_join(groupies,
             by = c("agency_name", "agency_num")
   ) |> 
   # Filter post-grouped agencies to munis, townships, schools and miscellaneous agencies such as Parks or Library Special Districts
   # Drops 345 obs.
-  filter(major_type == "MUNICIPALITY/TOWNSHIP" | major_type == "SCHOOL" |   major_type == "MISCELLANEOUS"   & minor_type != "SANITARY" ) |>
+  filter(major_type == "MUNICIPALITY/TOWNSHIP" | minor_type == "ELEMENTARY" |   minor_type == "SECONDARY" | major_type == "MISCELLANEOUS"   & !minor_type %in% c("SANITARY", "WATER", "MOSQUITO" )) 
+table(grouped_manual$year, grouped_manual$minor_type)
+table(grouped_manual$year, grouped_manual$minor_type)
+
+grouped_manual <- grouped_manual |>
   
   arrange(agency_num, year) |>
   # 10546 obs.
   group_by(year, agency_group) |> 
   # Change dataframe to reflect grouped agencies
   # Consolidates 10546 obs. pre-grouping into 7679 obs.
-  summarize(agency_name = first(agency_name),
-            agency_num = first(agency_num),
-            total_final_levy = sum(total_final_levy, na.rm=TRUE),
-            total_final_levy = ifelse(total_final_levy == 0, NA, total_final_levy), # change 0's to NAs so ln() doesn't break it
-            cty_total_eav = mean(cty_total_eav, na.rm=TRUE), 
-            av = first(av),   
-            triad_name = first(triad_name), 
-            agency_count = n(),
-            reassess_year = first(reassess_year),
-            home_rule_ind = first(home_rule_ind),
-            flag_drop = first(flag_drop)
+  summarize(
+    agency_name = first(agency_name),
+    agency_num = first(agency_num),
+    total_final_levy = sum(total_final_levy, na.rm=TRUE),
+    total_final_levy = ifelse(total_final_levy == 0, NA, total_final_levy), # change 0's to NAs so ln() doesn't break it
+    major_type = paste(list(major_type), sep = ", "),   
+    minor_type = paste(list(minor_type), sep = ", "),
+
+    cty_total_eav = mean(cty_total_eav, na.rm=TRUE), 
+    av = first(av),   
+    triad_name = first(triad_name), 
+    agency_count = n(),
+    reassess_year = first(reassess_year),
+    home_rule_ind = first(home_rule_ind),
+    flag_drop = first(flag_drop)
   ) |> 
   # Create variables to indicate bundling after grouping
   mutate(
@@ -352,6 +361,12 @@ mods_1 <- list(
                panel.id = c("agency_group", "year")
                 ),
   
+     "3" = feols(log(total_final_levy) ~ log(av) + log(av_true)*reassess_year | agency_group + year,
+               data = df,
+               vcov = "newey_west",
+               panel.id = c("agency_group", "year")
+                ),
+  
   "Interact" = feols(log(total_final_levy) ~ log(av) + log(av_true) + log(av)*log(av_true) | agency_group + year,
                data = df,
                vcov = "newey_west",
@@ -437,11 +452,11 @@ models <- list(
   
     "Nonhomerule - noschools" = feols(log(total_final_levy)~ log(av)  | agency_group + year, vcov = "newey_west", panel.id = c("agency_group", "year"), data = grouped_manual |> filter(home_rule_ind == "0" & type != "School")),
   
-  "TWFE w/ AV Lags" = feols(log(total_final_levy)~ log(av) + l(log(av), 1) + l(log(av), 2 ) | agency_name + year, vcov = "newey_west", panel.id = c("agency_name", "year"), data = grouped_manual),
+  "TWFE w/ AV Lags" = feols(log(total_final_levy)~ log(av) + l(log(av), 1) + l(log(av), 2 ) | agency_group + year, vcov = "newey_west", panel.id = c("agency_group", "year"), data = grouped_manual),
   
-  "Homerule TWFE" = feols(log(total_final_levy) ~ log(av) + l(log(av), 1) + l(log(av), 2 ) | agency_name + year,  data = grouped_manual |> filter(home_rule_ind == "1"), vcov = "newey_west", panel.id = c("agency_name", "year")),
+  "Homerule TWFE" = feols(log(total_final_levy) ~ log(av) + l(log(av), 1) + l(log(av), 2 ) | agency_group + year,  data = grouped_manual |> filter(home_rule_ind == "1"), vcov = "newey_west", panel.id = c("agency_group", "year")),
       
-  "Nonhomerule" = feols(log(total_final_levy)~ log(av) + l(log(av), 1) + l(log(av), 2 ) | agency_name + year, vcov = "newey_west", panel.id = c("agency_name", "year"), data = grouped_manual |> filter(home_rule_ind == "0"))
+  "Nonhomerule" = feols(log(total_final_levy)~ log(av) + l(log(av), 1) + l(log(av), 2 ) | agency_group + year, vcov = "newey_west", panel.id = c("agency_group", "year"), data = grouped_manual |> filter(home_rule_ind == "0"))
   
   )
 
