@@ -285,6 +285,12 @@ table(grouped_manual$year, grouped_manual$type)
 
 ```
 
+#### Export CSV
+```{r}
+grouped_manual |> write_csv("NTA_data.csv")
+```
+
+
 ```{r}
 grouped_manual |> 
   group_by(year, agency_group, triad_name)  |> 
@@ -333,13 +339,14 @@ df <- grouped_manual |>
   rate_smooth = if_else(reassess_year == 1, 0, rate_smooth),
   av_true = assess_year_av*(1+rate_smooth),
  ) |>
-  
-  select(year, reassess_year, agency_name, av, rate_smooth, everything()) |> 
   arrange(agency_name, year) |>
   select(agency_group, year, av, assess_year_av, av_true, rate_smooth, everything()) |>
   ungroup()
 
 ```
+
+
+> av_true is NOT fully checked. It is missing for some years in the beginning and the end depending on when their reassessment year was. Not all agencies are missing the same years of data. Different number of observations for av vs av_true variables.
 
 ### Models with "True AV"
 
@@ -362,7 +369,13 @@ mods_1 <- list(
                panel.id = c("agency_group", "year")
                 ),
   
-     "3" = feols(log(total_final_levy) ~ log(av) + log(av_true)*reassess_year | agency_group + year,
+     "3" = feols(log(total_final_levy) ~ log(av)*reassess_year + log(av_true)*reassess_year | agency_group + year,
+               data = df,
+               vcov = "newey_west",
+               panel.id = c("agency_group", "year")
+                ),
+  
+    "4" = feols(log(total_final_levy) ~ log(av_true) | agency_group + year,
                data = df,
                vcov = "newey_west",
                panel.id = c("agency_group", "year")
@@ -385,6 +398,7 @@ modelsummary::modelsummary(
 
 ```
 
+> Reassessment year interaction does not do what it was originally meant to do! av_true*reassess_year means means that when it is the reeassess_year, that it would use the av_true value, but av_true is the same as av at reassessment years.
 
 Model comparison to check work. Agency Group fixed effects is what we want.
 
@@ -392,6 +406,7 @@ Model comparison to check work. Agency Group fixed effects is what we want.
 ```{r}
 #| label: tbl-merriman_models-iid
 #| tbl-cap: "Model comparison using agency_name and then agency group fixed effects. Includes log(av) and log(av_true) in model. iid standard errors."
+
 mods_iid <- list(
   
   "Agency Name 1" = feols(log(total_final_levy) ~ log(av) | agency_name + year,
