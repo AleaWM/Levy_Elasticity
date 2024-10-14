@@ -18,15 +18,14 @@ format:
 
 **Files needed for panel creation replication:**
 
--   Triad_reassessment_years.csv
--   muni_shortnames.xlsx
+-   agency_reassessmentyears.csv
 -   cpi.csv
 -   eq_factor.csv
 -   panel_data_blindcoded.xlsx
 
 ## Code Cleaning Steps
 
--   95% within Cook County 
+-   90% within Cook County 
 -   Does not change home rule status during sample years 
 
 ### Slightly more detail on cleaning process:
@@ -59,14 +58,14 @@ format:
 ```{r warning = FALSE, message=FALSE}
 #| code-fold: true
 
-knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+#knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 
 library(tidyverse)
 library(stars)
 library(modelsummary)
 ```
 
-## Join initial data from CSVs
+## Join initial data from CCAO package
 
 ```{r}
 ## Change database file path to match your computer's location 
@@ -99,9 +98,6 @@ DBI::dbDisconnect(ptaxsim_db_conn)
 
 ```{r load_necessary_files}
 #| message: false
-
-nicknames <- readxl::read_xlsx("./Necessary_Files/muni_shortnames.xlsx") |> 
-  select(-c(agency_number, short_name, `Column1`, `Most recent reassessed`))
 
 # pulls in additional tables that exist in PTAXSIM database
 # for calculating taxable AV: Taxable EAV / eq_factor for each year
@@ -182,7 +178,7 @@ recoded_data <- raw_data_joined |>
   
   # Keep only agencies greater than 95% in Cook
   # Drops 1608 obs.
-  filter(pct_in_Cook > 0.95) 
+  filter(pct_in_Cook > 0.90) 
 
 # 10891 obs. in recoded_data
 
@@ -197,51 +193,53 @@ recoded_data <- raw_data_joined |>
 groupies <- readxl::read_xlsx("panel_data_blindcoding.xlsx", sheet = "TFL manual code") |>
   select(first6, agency_num, agency_group, flag_drop, agency_name) |>
   
- # Change object types to facilitate merging.
+  # Change object types to facilitate merging.
   
   mutate(agency_num = str_pad(agency_num, 9, "left", "0"),
          agency_num = as.character(agency_num), 
          first6 = as.character(first6), # make character
          first6 = str_pad(first6, 6, "left", "0"), # add leading zeros
-        )
+  )
 ```
 
 
-### Merge Grouped Labelsm, Recode Data & Summarize to Grouped Taxing Agency Level
+### Merge Grouped Labels, Recode Data & Summarize to Grouped Taxing Agency Level
 
 ```{r}
-
-
-grouped_manual <- recoded_data |> 
+# majorminor_types <- recoded_data |> 
+#   arrange(agency_num, desc(year)) |> 
+  
+  grouped_manual <- recoded_data |> 
   # 10981 obs.
   left_join(groupies,
             by = c("agency_name", "agency_num")
-            ) |> 
+  ) |> 
   # Filter post-grouped agencies to munis, townships, schools and miscellaneous agencies such as Parks or Library Special Districts
   # Drops 345 obs.
-    filter(major_type == "MUNICIPALITY/TOWNSHIP" | major_type == "SCHOOL" |   major_type == "MISCELLANEOUS"   & minor_type != "SANITARY" ) |>
-
-    # 10546 obs.
+  filter(major_type == "MUNICIPALITY/TOWNSHIP" | major_type == "SCHOOL" |   major_type == "MISCELLANEOUS"   & minor_type != "SANITARY" ) |>
+  
+  arrange(agency_num, year) |>
+  # 10546 obs.
   group_by(year, agency_group) |> 
   # Change dataframe to reflect grouped agencies
   # Consolidates 10546 obs. pre-grouping into 7679 obs.
   summarize(agency_name = first(agency_name),
             agency_num = first(agency_num),
             total_final_levy = sum(total_final_levy, na.rm=TRUE),
-          total_final_levy = ifelse(total_final_levy == 0, NA, total_final_levy), # change 0's to NAs so ln() doesn't break it
-            cty_total_eav = first(cty_total_eav), 
+            total_final_levy = ifelse(total_final_levy == 0, NA, total_final_levy), # change 0's to NAs so ln() doesn't break it
+            cty_total_eav = mean(cty_total_eav, na.rm=TRUE), 
             av = first(av),   
             triad_name = first(triad_name), 
             agency_count = n(),
             reassess_year = first(reassess_year),
             home_rule_ind = first(home_rule_ind),
-           # flag_drop = first(flag_drop)
-            ) |> 
+            flag_drop = first(flag_drop)
+  ) |> 
   # Create variables to indicate bundling after grouping
   mutate(
-      bundled = ifelse(agency_count > 1, 1, 0),
-      uniqueid = str_c(agency_group, "_", home_rule_ind, "_", bundled),
-     first2_dig = str_sub(agency_num, 1, 2),
+    bundled = ifelse(agency_count > 1, 1, 0),
+    uniqueid = str_c(agency_group, "_", home_rule_ind, "_", bundled),
+    first2_dig = str_sub(agency_num, 1, 2),
     
     # Fix misclassification of Cicero, Evanston, and Chicago
     type = case_when(
@@ -256,15 +254,16 @@ grouped_manual <- recoded_data |>
 
 
 # Identify grouped agencies that do not exist across entire panel
-# 9 agency groups will be dropped.
+# 7 agency groups will be dropped.
 dropped_agencies <- grouped_manual |>
   group_by(agency_group) |> 
-  summarize(n=n()) |>
-  filter(n!=18)
+  summarize(n=n(),
+            flag_drop = sum(flag_drop, na.rm=TRUE)) |>
+  filter(n!=18 )
 
-# Filter out observations from 9 agencies (65 agency_group-year obs.)
-# 7614 remaining obs.
+dropped_agencies  # check what will be dropped
 
+# Filter out observations from 7 agencies 
 grouped_manual <- grouped_manual |>
   filter(!agency_group %in% dropped_agencies$agency_group)
 
