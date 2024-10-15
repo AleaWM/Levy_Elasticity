@@ -259,7 +259,7 @@ grouped_manual <- grouped_manual |>
       first2_dig == "02"  ~ "Township", 
       TRUE ~ "Other"
       )) |>
-
+ungroup() |>
   select(year, agency_group, everything()) # puts variables in useful order.
 
 
@@ -287,7 +287,7 @@ table(grouped_manual$year, grouped_manual$type)
 
 #### Export CSV
 ```{r}
-grouped_manual |> write_csv("NTA_data.csv")
+# grouped_manual |> write_csv("NTA_data.csv")
 ```
 
 
@@ -295,7 +295,7 @@ grouped_manual |> write_csv("NTA_data.csv")
 grouped_manual |> 
   group_by(year, agency_group, triad_name)  |> 
   summarize(total_final_levy = sum(total_final_levy, na.rm = TRUE)) |> 
-  filter(agency_group != "Chicago" & agency_group != "Chicago Park District") |> 
+ # filter(agency_group != "Chicago" & agency_group != "Chicago Park District") |> 
   ggplot() + 
   theme_classic() + 
   geom_line(aes(x=year, y = total_final_levy, group=agency_group) ) +
@@ -304,7 +304,7 @@ grouped_manual |>
 grouped_manual |> 
   group_by(year, agency_group, triad_name, home_rule_ind)  |> 
   summarize(total_final_levy = sum(total_final_levy, na.rm = TRUE)) |> 
-  filter(agency_group != "Chicago" & agency_group != "Chicago Park District") |> 
+#  filter(agency_group != "Chicago" & agency_group != "Chicago Park District") |> 
   ggplot() + 
   theme_classic() + 
   geom_line(aes(x=year, y = total_final_levy, group=agency_group) ) +
@@ -331,7 +331,7 @@ df <- grouped_manual |>
   
   mutate(
     # 1 year after assessment:
-    rate_smooth = if_else(lag(reassess_year, n=1) == 1 | lead(reassess_year, n=2) == 1, ((lead(av, 2) / assess_year_av)^(1/3)) - 1, 0),
+    rate_smooth = if_else(lag(reassess_year, n=1) == 1 | lead(reassess_year, n=2) == 1, ((lead(av, 2) / assess_year_av)^(1/4)) - 1, 0),
     
      # 2 years after assessment:  
    rate_smooth = if_else(lag(reassess_year, n=2) == 1 | lead(reassess_year, n=1) == 1, (lead(assess_year_av, 1) / assess_year_av)^(1/2) - 1, rate_smooth),
@@ -347,6 +347,30 @@ df <- grouped_manual |>
 
 
 > av_true is NOT fully checked. It is missing for some years in the beginning and the end depending on when their reassessment year was. Not all agencies are missing the same years of data. Different number of observations for av vs av_true variables.
+
+
+```{r}
+df %>%
+  mutate(across(.cols = c( av_true, av, assess_year_av), ~.x/1000000) ) %>%
+  filter(year>2010) %>%
+  filter(agency_group == "Arlington Heights") %>%
+  ggplot() +
+
+    geom_line(aes(x=year, y = assess_year_av), alpha = .5, color = "gray50", label = "AV-No appeals")+
+    geom_point(aes(x=year, y = assess_year_av),# color = "AV-No appeals", 
+                 fill  = "gray50", alpha = .5) +
+
+  geom_line(aes(x=year, y = av), color = "black", label  = "Taxed AV") + 
+  geom_point(aes(x=year, y = av),# color = "AV-No appeals", 
+                 fill  = "black", alpha = .5) +
+  
+      geom_line(aes(x=year, y = av_true), alpha = .5, color = "green", label = "AV-No appeals")+
+    geom_point(aes(x=year, y = av_true),# color = "AV-No appeals", 
+                 fill  = "green", alpha = .5) +
+  scale_x_continuous(breaks = seq(ceiling(min(2006)), floor(max(2022)), by = 2)) +
+  scale_y_continuous(labels = scales::dollar_format())
+```
+
 
 ### Models with "True AV"
 
