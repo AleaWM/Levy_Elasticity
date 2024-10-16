@@ -138,9 +138,9 @@ raw_data_joined <- raw_data_joined |>
   
   # fills in missing cty_cook_eav variables. 
   # uses logic that EAV = levy / tax rate = EAV
-  mutate(total_final_levy = as.numeric(total_final_levy),
-         cty_cook_eav = as.numeric(cty_cook_eav),
-         cty_total_eav = as.numeric(cty_total_eav)) |>
+  mutate(total_final_levy = as.integer(total_final_levy),
+         cty_cook_eav = as.integer(cty_cook_eav),
+         cty_total_eav = as.integer(cty_total_eav)) |>
   mutate(cty_cook_eav = ifelse(is.na(cty_cook_eav) & total_final_levy > 0, 
                                total_final_levy / (total_final_rate/100), cty_cook_eav),
          cty_total_eav = ifelse(is.na(cty_total_eav) & total_final_levy > 0 , 
@@ -377,7 +377,7 @@ df |>
 ```{r}
 df %>%
   mutate(across(.cols = c( est_value, av, assess_year_av), ~.x/1000000) ) %>%
-  filter(year>2010) %>%
+ # filter(year>2010) %>%
   filter(agency_group == "Arlington Heights") %>%
   ggplot() +
 
@@ -385,21 +385,21 @@ df %>%
     geom_point(aes(x=year, y = assess_year_av),# color = "AV-No appeals", 
                  fill  = "gray50", alpha = .5) +
 
-  geom_line(aes(x=year, y = av), color = "black", label  = "Taxed AV") + 
+  geom_line(aes(x=year, y = av), color = "black", label  = "Taxed AV", lty = 3) + 
   geom_point(aes(x=year, y = av),# color = "AV-No appeals", 
                  fill  = "black", alpha = .5) +
   
-      geom_line(aes(x=year, y = est_value), alpha = .5, color = "green", label = "AV-No appeals")+
+      geom_line(aes(x=year, y = est_value), alpha = .5, color = "red", lty = 2,  label = "Estimated Value")+
     geom_point(aes(x=year, y = est_value),# color = "AV-No appeals", 
-                 fill  = "green", alpha = .5) +
+                 fill  = "red", alpha = .5) +
   scale_x_continuous(breaks = seq(ceiling(min(2006)), floor(max(2022)), by = 2)) +
-  scale_y_continuous(labels = scales::dollar_format())
+  scale_y_continuous(labels = scales::dollar_format()) + labs(title = "Arlington Heights", y= "Value ($1000)", x = "")
 ```
 
 ```{r}
 df %>%
   mutate(across(.cols = c( est_value, av, assess_year_av), ~.x/1000000) ) %>%
-  filter(year>2010) %>%
+  #filter(year>2010) %>%
   filter(agency_group == "Alsip") %>%
   ggplot() +
 
@@ -407,15 +407,15 @@ df %>%
     geom_point(aes(x=year, y = assess_year_av),# color = "AV-No appeals", 
                  fill  = "gray50", alpha = .5) +
 
-  geom_line(aes(x=year, y = av), color = "black", label  = "Taxed AV") + 
+  geom_line(aes(x=year, y = av), color = "black",  lty = 3, label  = "Taxed AV") + 
   geom_point(aes(x=year, y = av),# color = "AV-No appeals", 
                  fill  = "black", alpha = .5) +
   
-      geom_line(aes(x=year, y = est_value), alpha = .5, color = "green", label = "AV-No appeals")+
+      geom_line(aes(x=year, y = est_value), alpha = .5, color = "red", lty=2, label = "Estimated Value")+
     geom_point(aes(x=year, y = est_value),# color = "AV-No appeals", 
-                 fill  = "green", alpha = .5) +
+                 fill  = "red", alpha = .5) +
   scale_x_continuous(breaks = seq(ceiling(min(2006)), floor(max(2022)), by = 2)) +
-  scale_y_continuous(labels = scales::dollar_format())
+  scale_y_continuous(labels = scales::dollar_format()) + labs(title = "Alsip", y = "Value ($1000)", x = "")
 ```
 
 ```{r}
@@ -429,16 +429,17 @@ df %>%ungroup() |>
   ggplot() +
 
     geom_line(aes(x=year, y = assess_year_av, group = triad_name))+
-  #  geom_point(aes(x=year, y = assess_year_av), fill  = "gray50", alpha = .5) +
 
   geom_line(aes(x=year, y = av, group = triad_name)) + 
-  # geom_point(aes(x=year, y = av), fill  = "black", alpha = .5) +
-  
+
       geom_line(aes(x=year, y = est_value, group = triad_name, color = triad_name), alpha = .5)+
-   # geom_point(aes(x=year, y = est_value), fill  = "green", alpha = .5) +
+    geom_point(aes(x=year, y = est_value, fill = triad_name, group = triad_name), alpha = .5) +
   scale_x_continuous(breaks = seq(ceiling(min(2006)), floor(max(2022)), by = 2)) +
   scale_y_continuous(labels = scales::dollar_format()) + 
   labs(title = "Summed Value by Triad", y = "Value ($1000)", x = "")
+```
+```{r flip_assessmentyear}
+df <- df %>% mutate(flip_assess = ifelse(reassess_year == 1, 0, 1))
 ```
 
 
@@ -463,13 +464,13 @@ mods_1 <- list(
                panel.id = c("agency_group", "year")
                 ),
   
-     "3" = feols(log(total_final_levy) ~ log(av)*reassess_year + log(est_value)*reassess_year | agency_group + year,
+     "3" = feols(log(total_final_levy) ~ log(av) + log(est_value)*flip_assess | agency_group + year,
                data = df,
                vcov = "newey_west",
                panel.id = c("agency_group", "year")
                 ),
   
-    "4" = feols(log(total_final_levy) ~ log(est_value) | agency_group + year,
+    "4" = feols(log(total_final_levy) ~ log(est_value) + log(av) | agency_group + year,
                data = df,
                vcov = "newey_west",
                panel.id = c("agency_group", "year")
@@ -492,7 +493,56 @@ modelsummary::modelsummary(
 
 ```
 
-> Reassessment year interaction does not do what it was originally meant to do! est_value*reassess_year means means that when it is the reeassess_year, that it would use the est_value value, but est_value is the same as av at reassessment years.
+```{r}
+#| label: tbl-homerule-agency_group
+#| tbl-cap: "agency_group fixed effects. Uses grouped and summed taxing agencies. Includes log(av) and log(est_value) in model. Uses Ptaxsim 2023.0.0. and necessary files edited last on Oct. 12th. Newey-West stand errors. "
+
+library(fixest)
+
+hr_df = df %>% filter(home_rule_ind == 1)
+mods_1 <- list(
+  
+  "1" = feols(log(total_final_levy) ~ log(av) | agency_group + year,
+               data = hr_df,
+               vcov = "newey_west",
+               panel.id = c("agency_group", "year")
+                ),
+  
+    "2" = feols(log(total_final_levy) ~ log(av) + log(est_value) | agency_group + year,
+               data = hr_df,
+               vcov = "newey_west",
+               panel.id = c("agency_group", "year")
+                ),
+  
+     "3" = feols(log(total_final_levy) ~ log(av) + log(est_value)*flip_assess | agency_group + year,
+               data = hr_df,
+               vcov = "newey_west",
+               panel.id = c("agency_group", "year")
+                ),
+  
+    "4" = feols(log(total_final_levy) ~ log(est_value) + log(av) | agency_group + year,
+               data = hr_df,
+               vcov = "newey_west",
+               panel.id = c("agency_group", "year")
+                ),
+  
+  "Interact" = feols(log(total_final_levy) ~ log(av) + log(est_value) + log(est_value)*flip_assess | agency_group + year,
+               data = hr_df,
+               vcov = "newey_west",
+               panel.id = c("agency_group", "year")
+                )
+  )
+
+
+modelsummary::modelsummary(
+  mods_1,
+  output = "flextable",
+ gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
+              stars = TRUE
+)
+
+```
+
 
 Model comparison to check work. Agency Group fixed effects is what we want.
 
