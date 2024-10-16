@@ -72,9 +72,9 @@ library(modelsummary)
 ## of the PTAXSIM database!
 
 
-#ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "./ptaxsim.db/ptaxsim-2023.0.0.db")
+ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "./ptaxsim.db/ptaxsim-2023.0.0.db")
  
-ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/ptaxsim.db/ptaxsim-2023.0.0.db")
+# ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/ptaxsim.db/ptaxsim-2023.0.0.db")
 
 agency_dt <- DBI::dbGetQuery(
   ptaxsim_db_conn,
@@ -392,10 +392,10 @@ df <- grouped_manual |>
     
     # estimated value for 2 years after reassessment
     est_value = if_else(lag(reassess_year, n=2) == 1 | lead(reassess_year, n=1) == 1, lag(est_value)*(1+rate_smooth), est_value),
-  
-   rate_smooth = if_else(reassess_year == 1, 0, rate_smooth),
-   est_value = ifelse(reassess_year == 1, assess_year_av, est_value),
-   type = as.factor(type)
+
+    rate_smooth = if_else(reassess_year == 1, lead(rate_smooth, n = 1), rate_smooth),
+    est_value = ifelse(reassess_year == 1, assess_year_av, est_value),
+    type = as.factor(type)
  ) |>
   arrange(agency_name, year) |>
   select(agency_group, year, av, assess_year_av, est_value, rate_smooth, everything()) |>
