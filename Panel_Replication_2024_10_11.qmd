@@ -679,7 +679,7 @@ mods_1 <- list(
                 ),
   
      "NonHR" = feols(log(total_final_levy) ~ log(av) + log(est_value)*flip_assess | agency_group + year,
-               data = df |> filter(home_rule_ind == 1 & type != "School"),
+               data = df |> filter(home_rule_ind == 0 & type != "School"),
                vcov = "newey_west",
                panel.id = c("agency_group", "year")
                 ),
