@@ -403,33 +403,181 @@ df <- grouped_manual |>
 
 ```
 
+```{r}
+df %>%
+  mutate(across(.cols = c( est_value, av, assess_year_av), ~.x/1000000) ) %>%
+ # filter(year>2010) %>%
+  filter(agency_group == "Arlington Heights") %>%
+  ggplot() +
+
+    geom_line(aes(x=year, y = assess_year_av), alpha = .5, color = "gray50", label = "AV-No appeals")+
+    geom_point(aes(x=year, y = assess_year_av),# color = "AV-No appeals", 
+                 fill  = "gray50", alpha = .5) +
+
+  geom_line(aes(x=year, y = av), color = "black", label  = "Taxed AV", lty = 3) + 
+  geom_point(aes(x=year, y = av),# color = "AV-No appeals", 
+                 fill  = "black", alpha = .5) +
+  
+      geom_line(aes(x=year, y = est_value), alpha = .5, color = "red", lty = 2,  label = "Estimated Value")+
+    geom_point(aes(x=year, y = est_value),# color = "AV-No appeals", 
+                 fill  = "red", alpha = .5) +
+  scale_x_continuous(breaks = seq(ceiling(min(2006)), floor(max(2022)), by = 2)) +
+  scale_y_continuous(labels = scales::dollar_format()) + labs(title = "Arlington Heights", y= "Value ($1000)", x = "")
+```
+
+```{r}
+df %>%
+  mutate(across(.cols = c( est_value, av, assess_year_av), ~.x/1000000) ) %>%
+  #filter(year>2010) %>%
+  filter(agency_group == "Alsip") %>%
+  ggplot() +
+
+    geom_line(aes(x=year, y = assess_year_av), alpha = .5, color = "gray50", label = "AV-No appeals")+
+    geom_point(aes(x=year, y = assess_year_av),# color = "AV-No appeals", 
+                 fill  = "gray50", alpha = .5) +
+
+  geom_line(aes(x=year, y = av), color = "black",  lty = 3, label  = "Taxed AV") + 
+  geom_point(aes(x=year, y = av),# color = "AV-No appeals", 
+                 fill  = "black", alpha = .5) +
+  
+      geom_line(aes(x=year, y = est_value), alpha = .5, color = "red", lty=2, label = "Estimated Value")+
+    geom_point(aes(x=year, y = est_value),# color = "AV-No appeals", 
+                 fill  = "red", alpha = .5) +
+  scale_x_continuous(breaks = seq(ceiling(min(2006)), floor(max(2022)), by = 2)) +
+  scale_y_continuous(labels = scales::dollar_format()) + labs(title = "Alsip", y = "Value ($1000)", x = "")
+```
+
+```{r}
+df %>%ungroup() |>
+  mutate(across(.cols = c( est_value, av, assess_year_av), ~.x/1000000) ) %>%
+  group_by(year, triad_name) %>%
+  summarize(assess_year_av = sum(assess_year_av, na.rm=TRUE),
+            av =sum(av, na.rm=TRUE),
+            est_value = sum(est_value, na.rm=TRUE)) %>%
+  filter(year > 2008 & year < 2022) %>%
+  ggplot() +
+
+    geom_line(aes(x=year, y = assess_year_av, group = triad_name))+
+
+  geom_line(aes(x=year, y = av, group = triad_name)) + 
+
+      geom_line(aes(x=year, y = est_value, group = triad_name, color = triad_name), alpha = .5)+
+    geom_point(aes(x=year, y = est_value, fill = triad_name, group = triad_name), alpha = .5) +
+  scale_x_continuous(breaks = seq(ceiling(min(2006)), floor(max(2022)), by = 2)) +
+  scale_y_continuous(labels = scales::dollar_format()) + 
+  labs(title = "Summed Value by Triad", y = "Value ($1000)", x = "")
+```
+```{r estimate-smoothed-value-altmath}
+
+df <- grouped_manual |>
+  ungroup() |>
+  group_by(agency_group) |> 
+  
+  arrange(year)|> 
+  # Assessment Year
+  mutate(assess_year_av = ifelse(reassess_year == 1, av, NA)) |>
+  
+  fill(assess_year_av, .direction = "down") |>
+  
+  mutate(
+    
+    # rate of growth from point A to point B = 4-year CAGR 
+   
+    # Alea's math: Calculate rate to get from assessment year to 1 year after assessment year 
+    # this rate will be changed to zero later
+    rate_smooth = if_else(lag(reassess_year, n=1) == 1 | lead(reassess_year, n=2) ==1, (lead(av, n=2) / lag(av))^(1/3) - 1, NA),
+   
+     # estimated value for 1 year after reassessment:
+    est_value = if_else(lag(reassess_year, n=1) == 1, assess_year_av*(1+rate_smooth), assess_year_av),
+     
+    # Alea's math: Calculate rate for est_value 1 year to 2 years after the assessment:
+    rate_smooth = if_else(lag(reassess_year) == 2 | lead(reassess_year, n=1) ==1, (lead(av, n=1) / lag(est_value))^(1/2) - 1, rate_smooth),
+    
+    # estimated value for 2 years after reassessment
+    est_value = if_else(lag(reassess_year, n=2) == 1 | lead(reassess_year, n=1) == 1, lag(est_value)*(1+rate_smooth), est_value),
+  
+   rate_smooth = if_else(reassess_year == 1, 0, rate_smooth),
+   est_value = ifelse(reassess_year == 1, assess_year_av, est_value),
+   type = as.factor(type)
+ ) |>
+  arrange(agency_name, year) |>
+  select(agency_group, year, av, assess_year_av, est_value, rate_smooth, everything()) |>
+  ungroup()
+
+```
+
+
+```{r}
+df %>%
+  mutate(across(.cols = c( est_value, av, assess_year_av), ~.x/1000000) ) %>%
+ # filter(year>2010) %>%
+  filter(agency_group == "Arlington Heights") %>%
+  ggplot() +
+
+    geom_line(aes(x=year, y = assess_year_av), alpha = .5, color = "gray50", label = "AV-No appeals")+
+    geom_point(aes(x=year, y = assess_year_av),# color = "AV-No appeals", 
+                 fill  = "gray50", alpha = .5) +
+
+  geom_line(aes(x=year, y = av), color = "black", label  = "Taxed AV", lty = 3) + 
+  geom_point(aes(x=year, y = av),# color = "AV-No appeals", 
+                 fill  = "black", alpha = .5) +
+  
+      geom_line(aes(x=year, y = est_value), alpha = .5, color = "red", lty = 2,  label = "Estimated Value")+
+    geom_point(aes(x=year, y = est_value),# color = "AV-No appeals", 
+                 fill  = "red", alpha = .5) +
+  scale_x_continuous(breaks = seq(ceiling(min(2006)), floor(max(2022)), by = 2)) +
+  scale_y_continuous(labels = scales::dollar_format()) + labs(title = "Arlington Heights", y= "Value ($1000)", x = "")
+```
+
+```{r}
+df %>%
+  mutate(across(.cols = c( est_value, av, assess_year_av), ~.x/1000000) ) %>%
+  #filter(year>2010) %>%
+  filter(agency_group == "Alsip") %>%
+  ggplot() +
+
+    geom_line(aes(x=year, y = assess_year_av), alpha = .5, color = "gray50", label = "AV-No appeals")+
+    geom_point(aes(x=year, y = assess_year_av),# color = "AV-No appeals", 
+                 fill  = "gray50", alpha = .5) +
+
+  geom_line(aes(x=year, y = av), color = "black",  lty = 3, label  = "Taxed AV") + 
+  geom_point(aes(x=year, y = av),# color = "AV-No appeals", 
+                 fill  = "black", alpha = .5) +
+  
+      geom_line(aes(x=year, y = est_value), alpha = .5, color = "red", lty=2, label = "Estimated Value")+
+    geom_point(aes(x=year, y = est_value),# color = "AV-No appeals", 
+                 fill  = "red", alpha = .5) +
+  scale_x_continuous(breaks = seq(ceiling(min(2006)), floor(max(2022)), by = 2)) +
+  scale_y_continuous(labels = scales::dollar_format()) + labs(title = "Alsip", y = "Value ($1000)", x = "")
+```
+
+```{r}
+df %>%ungroup() |>
+  mutate(across(.cols = c( est_value, av, assess_year_av), ~.x/1000000) ) %>%
+  group_by(year, triad_name) %>%
+  summarize(assess_year_av = sum(assess_year_av, na.rm=TRUE),
+            av =sum(av, na.rm=TRUE),
+            est_value = sum(est_value, na.rm=TRUE)) %>%
+  filter(year > 2008 & year < 2022) %>%
+  ggplot() +
+
+    geom_line(aes(x=year, y = assess_year_av, group = triad_name))+
+
+  geom_line(aes(x=year, y = av, group = triad_name)) + 
+
+      geom_line(aes(x=year, y = est_value, group = triad_name, color = triad_name), alpha = .5)+
+    geom_point(aes(x=year, y = est_value, fill = triad_name, group = triad_name), alpha = .5) +
+  scale_x_continuous(breaks = seq(ceiling(min(2006)), floor(max(2022)), by = 2)) +
+  scale_y_continuous(labels = scales::dollar_format()) + 
+  labs(title = "Summed Value by Triad", y = "Value ($1000)", x = "")
+```
+
 #### Export CSV
+
 ```{r exportCSV}
 df |> write_csv("NTA_data_2024_10_16.csv")
 ```
 
-```{r av_check}
-#| eval: false
-
-df |>
-  filter(!(year %in% c("2006", "2007", "2022", "2023"))) |>
-  select(est_value, av) |>
-  ggplot() +
-  geom_density(aes(log(est_value), color = "blue")) +
-  geom_density(aes(log(av), color = "red")) +
-  theme_classic()
-
-df |>
-  filter(!(year %in% c("2006", "2007", "2022", "2023"))) |>
-  filter(is.na(est_value)) |>
-  summarize(n = n())
-
-df |>
-  filter(!(year %in% c("2006", "2007", "2022", "2023"))) |>
-  filter(is.na(av)) |>
-  summarize(n = n())
-
-```
 
 
 > est_value is NOT fully checked. It is missing for some years in the beginning and the end depending on when their reassessment year was. Not all agencies are missing the same years of data. Different number of observations for av vs est_value variables.
