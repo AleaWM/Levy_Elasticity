@@ -577,7 +577,7 @@ mods_1 <- list(
                panel.id = c("agency_group", "year")
                 ),
   
-     "3" = feols(log(total_final_levy) ~ log(av) + log(est_value)*flip_assess | agency_group + year,
+     "3" = feols(log(total_final_levy) ~ log(av) + log(est_value) + flip_assess | agency_group + year,
                data = hr_df,
                vcov = "newey_west",
                panel.id = c("agency_group", "year")
