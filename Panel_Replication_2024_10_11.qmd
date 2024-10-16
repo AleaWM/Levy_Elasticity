@@ -72,9 +72,9 @@ library(modelsummary)
 ## of the PTAXSIM database!
 
 
-ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "./ptaxsim.db/ptaxsim-2023.0.0.db")
+#ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "./ptaxsim.db/ptaxsim-2023.0.0.db")
  
-#ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/ptaxsim.db/ptaxsim-2023.0.0.db")
+ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/ptaxsim.db/ptaxsim-2023.0.0.db")
 
 agency_dt <- DBI::dbGetQuery(
   ptaxsim_db_conn,
@@ -339,10 +339,10 @@ df <- grouped_manual |>
    rate_smooth = if_else(lag(reassess_year, n=2) == 1 | lead(reassess_year, n=1) == 1, (lead(assess_year_av, 1) / assess_year_av)^(1/2) - 1, rate_smooth),
 
   rate_smooth = if_else(reassess_year == 1, 0, rate_smooth),
-  av_true = assess_year_av*(1+rate_smooth),
+  est_value = assess_year_av*(1+rate_smooth),
  ) |>
   arrange(agency_name, year) |>
-  select(agency_group, year, av, assess_year_av, av_true, rate_smooth, everything()) |>
+  select(agency_group, year, av, assess_year_av, est_value, rate_smooth, everything()) |>
   ungroup()
 
 ```
@@ -352,15 +352,15 @@ df <- grouped_manual |>
 
 df |>
   filter(!(year %in% c("2006", "2007", "2022", "2023"))) |>
-  select(av_true, av) |>
+  select(est_value, av) |>
   ggplot() +
-  geom_density(aes(log(av_true), color = "blue")) +
+  geom_density(aes(log(est_value), color = "blue")) +
   geom_density(aes(log(av), color = "red")) +
   theme_classic()
 
 df |>
   filter(!(year %in% c("2006", "2007", "2022", "2023"))) |>
-  filter(is.na(av_true)) |>
+  filter(is.na(est_value)) |>
   summarize(n = n())
 
 df |>
@@ -371,12 +371,12 @@ df |>
 ```
 
 
-> av_true is NOT fully checked. It is missing for some years in the beginning and the end depending on when their reassessment year was. Not all agencies are missing the same years of data. Different number of observations for av vs av_true variables.
+> est_value is NOT fully checked. It is missing for some years in the beginning and the end depending on when their reassessment year was. Not all agencies are missing the same years of data. Different number of observations for av vs est_value variables.
 
 
 ```{r}
 df %>%
-  mutate(across(.cols = c( av_true, av, assess_year_av), ~.x/1000000) ) %>%
+  mutate(across(.cols = c( est_value, av, assess_year_av), ~.x/1000000) ) %>%
   filter(year>2010) %>%
   filter(agency_group == "Arlington Heights") %>%
   ggplot() +
@@ -389,19 +389,64 @@ df %>%
   geom_point(aes(x=year, y = av),# color = "AV-No appeals", 
                  fill  = "black", alpha = .5) +
   
-      geom_line(aes(x=year, y = av_true), alpha = .5, color = "green", label = "AV-No appeals")+
-    geom_point(aes(x=year, y = av_true),# color = "AV-No appeals", 
+      geom_line(aes(x=year, y = est_value), alpha = .5, color = "green", label = "AV-No appeals")+
+    geom_point(aes(x=year, y = est_value),# color = "AV-No appeals", 
                  fill  = "green", alpha = .5) +
   scale_x_continuous(breaks = seq(ceiling(min(2006)), floor(max(2022)), by = 2)) +
   scale_y_continuous(labels = scales::dollar_format())
 ```
 
+```{r}
+df %>%
+  mutate(across(.cols = c( est_value, av, assess_year_av), ~.x/1000000) ) %>%
+  filter(year>2010) %>%
+  filter(agency_group == "Alsip") %>%
+  ggplot() +
 
-### Models with "True AV"
+    geom_line(aes(x=year, y = assess_year_av), alpha = .5, color = "gray50", label = "AV-No appeals")+
+    geom_point(aes(x=year, y = assess_year_av),# color = "AV-No appeals", 
+                 fill  = "gray50", alpha = .5) +
+
+  geom_line(aes(x=year, y = av), color = "black", label  = "Taxed AV") + 
+  geom_point(aes(x=year, y = av),# color = "AV-No appeals", 
+                 fill  = "black", alpha = .5) +
+  
+      geom_line(aes(x=year, y = est_value), alpha = .5, color = "green", label = "AV-No appeals")+
+    geom_point(aes(x=year, y = est_value),# color = "AV-No appeals", 
+                 fill  = "green", alpha = .5) +
+  scale_x_continuous(breaks = seq(ceiling(min(2006)), floor(max(2022)), by = 2)) +
+  scale_y_continuous(labels = scales::dollar_format())
+```
+
+```{r}
+df %>%ungroup() |>
+  mutate(across(.cols = c( est_value, av, assess_year_av), ~.x/1000000) ) %>%
+  group_by(year, triad_name) %>%
+  summarize(assess_year_av = sum(assess_year_av, na.rm=TRUE),
+            av =sum(av, na.rm=TRUE),
+            est_value = sum(est_value, na.rm=TRUE)) %>%
+  filter(year > 2008 & year < 2022) %>%
+  ggplot() +
+
+    geom_line(aes(x=year, y = assess_year_av, group = triad_name))+
+  #  geom_point(aes(x=year, y = assess_year_av), fill  = "gray50", alpha = .5) +
+
+  geom_line(aes(x=year, y = av, group = triad_name)) + 
+  # geom_point(aes(x=year, y = av), fill  = "black", alpha = .5) +
+  
+      geom_line(aes(x=year, y = est_value, group = triad_name, color = triad_name), alpha = .5)+
+   # geom_point(aes(x=year, y = est_value), fill  = "green", alpha = .5) +
+  scale_x_continuous(breaks = seq(ceiling(min(2006)), floor(max(2022)), by = 2)) +
+  scale_y_continuous(labels = scales::dollar_format()) + 
+  labs(title = "Summed Value by Triad", y = "Value ($1000)", x = "")
+```
+
+
+### Models with Estimated Value
 
 ```{r}
 #| label: tbl-merriman_models-agency_group
-#| tbl-cap: "agency_group fixed effects. Uses grouped and summed taxing agencies. Includes log(av) and log(av_true) in model. Uses Ptaxsim 2023.0.0. and necessary files edited last on Oct. 12th. Newey-West stand errors. "
+#| tbl-cap: "agency_group fixed effects. Uses grouped and summed taxing agencies. Includes log(av) and log(est_value) in model. Uses Ptaxsim 2023.0.0. and necessary files edited last on Oct. 12th. Newey-West stand errors. "
 
 library(fixest)
 mods_1 <- list(
@@ -412,25 +457,25 @@ mods_1 <- list(
                panel.id = c("agency_group", "year")
                 ),
   
-    "2" = feols(log(total_final_levy) ~ log(av) + log(av_true) | agency_group + year,
+    "2" = feols(log(total_final_levy) ~ log(av) + log(est_value) | agency_group + year,
                data = df,
                vcov = "newey_west",
                panel.id = c("agency_group", "year")
                 ),
   
-     "3" = feols(log(total_final_levy) ~ log(av)*reassess_year + log(av_true)*reassess_year | agency_group + year,
+     "3" = feols(log(total_final_levy) ~ log(av)*reassess_year + log(est_value)*reassess_year | agency_group + year,
                data = df,
                vcov = "newey_west",
                panel.id = c("agency_group", "year")
                 ),
   
-    "4" = feols(log(total_final_levy) ~ log(av_true) | agency_group + year,
+    "4" = feols(log(total_final_levy) ~ log(est_value) | agency_group + year,
                data = df,
                vcov = "newey_west",
                panel.id = c("agency_group", "year")
                 ),
   
-  "Interact" = feols(log(total_final_levy) ~ log(av) + log(av_true) + log(av)*log(av_true) | agency_group + year,
+  "Interact" = feols(log(total_final_levy) ~ log(av) + log(est_value) + log(av)*log(est_value) | agency_group + year,
                data = df,
                vcov = "newey_west",
                panel.id = c("agency_group", "year")
@@ -447,14 +492,14 @@ modelsummary::modelsummary(
 
 ```
 
-> Reassessment year interaction does not do what it was originally meant to do! av_true*reassess_year means means that when it is the reeassess_year, that it would use the av_true value, but av_true is the same as av at reassessment years.
+> Reassessment year interaction does not do what it was originally meant to do! est_value*reassess_year means means that when it is the reeassess_year, that it would use the est_value value, but est_value is the same as av at reassessment years.
 
 Model comparison to check work. Agency Group fixed effects is what we want.
 
 
 ```{r}
 #| label: tbl-merriman_models-iid
-#| tbl-cap: "Model comparison using agency_name and then agency group fixed effects. Includes log(av) and log(av_true) in model. iid standard errors."
+#| tbl-cap: "Model comparison using agency_name and then agency group fixed effects. Includes log(av) and log(est_value) in model. iid standard errors."
 
 mods_iid <- list(
   
@@ -463,13 +508,13 @@ mods_iid <- list(
                vcov = "iid",
                panel.id = c("agency_name", "year")
                 ),
-    "Agency Name 2" = feols(log(total_final_levy) ~ log(av) + log(av_true) | agency_name + year,
+    "Agency Name 2" = feols(log(total_final_levy) ~ log(av) + log(est_value) | agency_name + year,
                data = df,
                vcov = "iid",
                panel.id = c("agency_name", "year")
                 ),
   
-  "Agency Name Interact" = feols(log(total_final_levy) ~ log(av) + log(av_true) + log(av)*log(av_true)| agency_name + year,
+  "Agency Name Interact" = feols(log(total_final_levy) ~ log(av) + log(est_value) + log(av)*log(est_value)| agency_name + year,
                data = df,
                vcov = "iid",
                panel.id = c("agency_name", "year")
@@ -479,13 +524,13 @@ mods_iid <- list(
                vcov = "iid",
                panel.id = c("agency_group", "year")
                 ),
-    "Agency Group 2" = feols(log(total_final_levy) ~ log(av) + log(av_true) | agency_group + year,
+    "Agency Group 2" = feols(log(total_final_levy) ~ log(av) + log(est_value) | agency_group + year,
                data = df,
                vcov = "iid",
                panel.id = c("agency_group", "year")
                 ),
   
-  "Agency Group Interact" = feols(log(total_final_levy) ~ log(av) + log(av_true) + log(av)*log(av_true) | agency_group + year,
+  "Agency Group Interact" = feols(log(total_final_levy) ~ log(av) + log(est_value) + log(av)*log(est_value) | agency_group + year,
                data = df,
                vcov = "iid",
                panel.id = c("agency_group", "year")
@@ -502,7 +547,7 @@ modelsummary::modelsummary(
 
 ```
 
-### Old Models w/o "True AV"
+### Old Models w/o "Estimated Value"
 
 ```{r old_models}
 
