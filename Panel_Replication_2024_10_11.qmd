@@ -364,8 +364,10 @@ grouped_manual |>
 Create "true" AV variable
 Assumes that taxed AV is accurate during assessment years and stays mostly flat until the next assessment year. The true market value is then smoothed between the assessment years.
 
-```{r alt-attempt-estimate-smoothed-value}
-
+```{r}
+#| label: fig-alt-attempt-estimate-smoothed-value
+#| warning: false
+#| message: false
 df <- grouped_manual |>
   ungroup() |>
   group_by(agency_group) |> 
@@ -420,6 +422,8 @@ for(i in graphmunis){
 ```
 
 ```{r }
+#| warning: false
+#| message: false
 #| label: fig-linegraph-triads-avg-growth
 
 
