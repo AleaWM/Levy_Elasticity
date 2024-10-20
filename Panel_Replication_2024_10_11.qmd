@@ -368,6 +368,7 @@ Assumes that taxed AV is accurate during assessment years and stays mostly flat 
 #| label: fig-alt-attempt-estimate-smoothed-value
 #| warning: false
 #| message: false
+
 df <- grouped_manual |>
   ungroup() |>
   group_by(agency_group) |> 
@@ -448,32 +449,6 @@ df %>%ungroup() |>
 ```
 
 
-```{r }
-#| label: fig-linegraph-triads
-
-
-df %>% ungroup() |>
-  mutate(across(.cols = c( est_value, av, assess_year_av), ~.x/1000000) ) %>%
-  group_by(year, triad_name) %>%
-  summarize(assess_year_av = sum(assess_year_av, na.rm=TRUE),
-            av =sum(av, na.rm=TRUE),
-            est_value = sum(est_value, na.rm=TRUE)) %>%
-  filter(year > 2008 & year < 2022) %>%
-  ggplot() +
-
-    geom_line(aes(x=year, y = assess_year_av, group = triad_name))+
-
-  geom_line(aes(x=year, y = av, group = triad_name)) + 
-
-      geom_line(aes(x=year, y = est_value, group = triad_name, color = triad_name), alpha = .5)+
-    geom_point(aes(x=year, y = est_value, fill = triad_name, group = triad_name), alpha = .5) +
-  scale_x_continuous(breaks = seq(ceiling(min(2006)), floor(max(2022)), by = 2)) +
-  scale_y_continuous(labels = scales::dollar_format()) + 
-  labs(title = "Summed Value by Triad using Average", y = "Value ($1000)", x = "")
-```
-
-
-
 ```{r estimate-smoothed-value, eval=FALSE, include = FALSE}
 
 
@@ -542,70 +517,6 @@ df |> write_csv("NTA_data_2024_10_16.csv")
 ```
 
 
-```{r}
-df %>%
-  mutate(across(.cols = c( est_value, av, assess_year_av), ~.x/1000000) ) %>%
- # filter(year>2010) %>%
-  filter(agency_group == "Arlington Heights") %>%
-  ggplot() +
-
-    geom_line(aes(x=year, y = assess_year_av), alpha = .5, color = "gray50", label = "AV-No appeals")+
-    geom_point(aes(x=year, y = assess_year_av),# color = "AV-No appeals", 
-                 fill  = "gray50", alpha = .5) +
-
-  geom_line(aes(x=year, y = av), color = "black", label  = "Taxed AV", lty = 3) + 
-  geom_point(aes(x=year, y = av),# color = "AV-No appeals", 
-                 fill  = "black", alpha = .5) +
-  
-      geom_line(aes(x=year, y = est_value), alpha = .5, color = "red", lty = 2,  label = "Estimated Value")+
-    geom_point(aes(x=year, y = est_value),# color = "AV-No appeals", 
-                 fill  = "red", alpha = .5) +
-  scale_x_continuous(breaks = seq(ceiling(min(2006)), floor(max(2022)), by = 2)) +
-  scale_y_continuous(labels = scales::dollar_format()) + labs(title = "Arlington Heights", y= "Value ($1000)", x = "")
-```
-
-```{r}
-df %>%
-  mutate(across(.cols = c( est_value, av, assess_year_av), ~.x/1000000) ) %>%
-  #filter(year>2010) %>%
-  filter(agency_group == "Alsip") %>%
-  ggplot() +
-
-    geom_line(aes(x=year, y = assess_year_av), alpha = .5, color = "gray50", label = "AV-No appeals")+
-    geom_point(aes(x=year, y = assess_year_av),# color = "AV-No appeals", 
-                 fill  = "gray50", alpha = .5) +
-
-  geom_line(aes(x=year, y = av), color = "black",  lty = 3, label  = "Taxed AV") + 
-  geom_point(aes(x=year, y = av),# color = "AV-No appeals", 
-                 fill  = "black", alpha = .5) +
-  
-      geom_line(aes(x=year, y = est_value), alpha = .5, color = "red", lty=2, label = "Estimated Value")+
-    geom_point(aes(x=year, y = est_value),# color = "AV-No appeals", 
-                 fill  = "red", alpha = .5) +
-  scale_x_continuous(breaks = seq(ceiling(min(2006)), floor(max(2022)), by = 2)) +
-  scale_y_continuous(labels = scales::dollar_format()) + labs(title = "Alsip", y = "Value ($1000)", x = "")
-```
-
-```{r}
-df %>%ungroup() |>
-  mutate(across(.cols = c( est_value, av, assess_year_av), ~.x/1000000) ) %>%
-  group_by(year, triad_name) %>%
-  summarize(assess_year_av = sum(assess_year_av, na.rm=TRUE),
-            av =sum(av, na.rm=TRUE),
-            est_value = sum(est_value, na.rm=TRUE)) %>%
-  filter(year > 2008 & year < 2022) %>%
-  ggplot() +
-
-    geom_line(aes(x=year, y = assess_year_av, group = triad_name))+
-
-  geom_line(aes(x=year, y = av, group = triad_name)) + 
-
-      geom_line(aes(x=year, y = est_value, group = triad_name, color = triad_name), alpha = .5)+
-    geom_point(aes(x=year, y = est_value, fill = triad_name, group = triad_name), alpha = .5) +
-  scale_x_continuous(breaks = seq(ceiling(min(2006)), floor(max(2022)), by = 2)) +
-  scale_y_continuous(labels = scales::dollar_format()) + 
-  labs(title = "Summed Value by Triad", y = "Value ($1000)", x = "")
-```
 ```{r flip_assessmentyear}
 df <- df %>% mutate(flip_assess = ifelse(reassess_year == 1, 0, 1))
 ```
