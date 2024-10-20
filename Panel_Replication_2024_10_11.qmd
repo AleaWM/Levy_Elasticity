@@ -72,9 +72,9 @@ library(modelsummary)
 ## of the PTAXSIM database!
 
 
-ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "./ptaxsim.db/ptaxsim-2023.0.0.db")
+# ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "./ptaxsim.db/ptaxsim-2023.0.0.db")
  
-# ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/ptaxsim.db/ptaxsim-2023.0.0.db")
+ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/ptaxsim.db/ptaxsim-2023.0.0.db")
 
 agency_dt <- DBI::dbGetQuery(
   ptaxsim_db_conn,
@@ -364,6 +364,63 @@ grouped_manual |>
 Create "true" AV variable
 Assumes that taxed AV is accurate during assessment years and stays mostly flat until the next assessment year. The true market value is then smoothed between the assessment years.
 
+```{r alt-attempt-estimate-smoothed-value}
+
+df <- grouped_manual |>
+  ungroup() |>
+  group_by(agency_group) |> 
+  
+  arrange(agency_group, year)|> 
+  # Assessment Year
+  mutate(assess_year_av = ifelse(reassess_year == 1, av, NA)) |>
+  
+  fill(assess_year_av, .direction = "down") |>
+  
+  mutate(
+    
+    # rate of growth from point A to point B = 4-year CAGR 
+   EstV = if_else(reassess_year == 1, av, NA),
+   r = if_else(reassess_year == 1, (lead(av, 3)/av )^ (1/(4-1))-1, NA)
+  ) %>%
+    fill(r, .direction = "down") |>
+  mutate(EstV = if_else(is.na(EstV), lag(EstV, 1)*(1 + lag(r, 1)), EstV),
+         EstV = if_else(is.na(EstV), lag(EstV, 1)*(1 + lag(r, 1)), EstV))
+
+
+
+
+graphmunis<-c("Arlington Heights", "Alsip", "Dolton")
+
+for(i in graphmunis){
+
+ df %>%
+    mutate(i=i) %>%
+  mutate(across(.cols = c(EstV, av, assess_year_av), ~.x/1000000) ) %>%
+ # filter(year>2010) %>%
+  filter(agency_group == i) %>%
+  ggplot() +
+
+    geom_line(aes(x=year, y = assess_year_av), alpha = .5, color = "gray50")+
+    geom_point(aes(x=year, y = assess_year_av), 
+                 fill  = "gray50", alpha = .5) +
+
+  geom_line(aes(x=year, y = av), color = "black", lty = 3) + 
+  geom_point(aes(x=year, y = av), 
+                 fill  = "black", alpha = .5) +
+  
+      geom_line(aes(x=year, y = EstV), alpha = .5, color = "red", lty = 2)+
+    geom_point(aes(x=year, y = EstV), 
+                 fill  = "red", alpha = .5) +
+  scale_x_continuous(breaks = seq(ceiling(min(2006)), floor(max(2022)), by = 2)) +
+  scale_y_continuous(labels = scales::dollar_format()) + 
+    labs(title = paste(i), y= "Value ($1000)", x = "") -> graph
+
+  print(graph)
+}
+
+```
+
+
 ```{r estimate-smoothed-value}
 
 df <- grouped_manual |>
@@ -467,6 +524,7 @@ df %>%ungroup() |>
   scale_y_continuous(labels = scales::dollar_format()) + 
   labs(title = "Summed Value by Triad", y = "Value ($1000)", x = "")
 ```
+
 ```{r estimate-smoothed-value-altmath}
 
 df <- grouped_manual |>
