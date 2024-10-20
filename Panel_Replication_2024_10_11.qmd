@@ -361,7 +361,7 @@ grouped_manual |>
 
 ## Models
 
-Create "true" AV variable
+Create estimated or "true" AV variable
 Assumes that taxed AV is accurate during assessment years and stays mostly flat until the next assessment year. The true market value is then smoothed between the assessment years.
 
 ```{r}
@@ -380,8 +380,6 @@ df <- grouped_manual |>
   fill(assess_year_av, .direction = "down") |>
   
   mutate(
-    
-    # rate of growth from point A to point B = 4-year CAGR 
    est_value = if_else(reassess_year == 1, av, NA),
    r = if_else(reassess_year == 1, (lead(av, 3)/av )^ (1/(4-1))-1, NA)
   ) %>%
