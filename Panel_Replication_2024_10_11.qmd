@@ -512,14 +512,16 @@ df %>%ungroup() |>
 
 #### Export CSV
 
-```{r exportCSV}
-df |> write_csv("NTA_data_2024_10_16.csv")
-```
-
-
 ```{r flip_assessmentyear}
 df <- df %>% mutate(flip_assess = ifelse(reassess_year == 1, 0, 1))
 ```
+
+```{r exportCSV}
+df |> write_csv("NTA_data_2024_10_20.csv")
+```
+
+
+
 
 
 ### Models with Estimated Value
