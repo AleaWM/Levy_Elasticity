@@ -359,7 +359,7 @@ grouped_manual |>
 ```
 
 
-## Models
+
 
 Create estimated or "true" AV variable
 Assumes that taxed AV is accurate during assessment years and stays mostly flat until the next assessment year. The true market value is then smoothed between the assessment years.
@@ -390,7 +390,7 @@ df <- grouped_manual |>
 
 
 
-graphmunis<-c("Arlington Heights", "Alsip", "Dolton")
+graphmunis<-c("Arlington Heights", "Alsip", "Dolton", "Cicero", "Evanston", "Chicago")
 
 for(i in graphmunis){
 
@@ -426,7 +426,7 @@ for(i in graphmunis){
 #| label: fig-linegraph-triads-avg-growth
 
 
-df %>%ungroup() |>
+df %>% ungroup() |>
   mutate(across(.cols = c(est_value, av, assess_year_av), ~.x/1000000) ) %>%
   group_by(year, triad_name) %>%
   summarize(assess_year_av = sum(assess_year_av, na.rm=TRUE),
@@ -511,16 +511,46 @@ df %>%ungroup() |>
 #### Export CSV
 
 ```{r flip_assessmentyear}
-df <- df %>% mutate(flip_assess = ifelse(reassess_year == 1, 0, 1))
+df <- df %>% ungroup() %>%
+  mutate(flip_assess = ifelse(reassess_year == 1, 0, 1)) %>%
+  group_by(agency_group) %>%
+  arrange(agency_group, year) %>%
+  mutate(ln_av = log(av),
+         ln_levy = log(total_final_levy),
+         ln_est_v = log(est_value),
+         ln_lag_av = log(lag(av, 1))) %>% ungroup()
 ```
 
 ```{r exportCSV}
 df |> write_csv("NTA_data_2024_10_20.csv")
 ```
 
+```{r }
+#| warning: false
+#| message: false
+#| label: fig-linegraph-triads-loggedtaxbase
+
+
+df %>% ungroup() |>
+ # mutate(across(.cols = c(ln_av, ln_est_v), ~.x/1000000) ) %>%
+  group_by(year, triad_name) %>%
+  summarize(
+            av =sum(av, na.rm=TRUE),
+            est_value = sum(est_value, na.rm=TRUE)) %>%
+  filter(year > 2008 & year < 2021) %>%
+  ggplot() +
+
+  geom_line(aes(x=year, y = log(av), group = triad_name)) + 
+
+      geom_line(aes(x=year, y = log(est_value), group = triad_name, color = triad_name), alpha = .5)+
+    geom_point(aes(x=year, y = log(est_value), fill = triad_name, group = triad_name), alpha = .5) +
+  scale_x_continuous(breaks = seq(ceiling(min(2006)), floor(max(2022)), by = 2)) +
+  labs(title = "Summed Value by Triad", y = "Logged Value", x = "")
+```
 
 
 
+## Models
 
 ### Models with Estimated Value
 
@@ -529,38 +559,92 @@ df |> write_csv("NTA_data_2024_10_20.csv")
 #| tbl-cap: "agency_group fixed effects. Uses grouped and summed taxing agencies. Includes log(av) and log(est_value) in model. Uses Ptaxsim 2023.0.0. and necessary files edited last on Oct. 12th. Newey-West stand errors. "
 
 
-df <- df |> filter(year > 2008 & year < 2022)
+ df <- df |> filter(year >= 2010 & year <= 2020)
+
 library(fixest)
+mods_1 <- list(
+  
+  "1" = feols(log(total_final_levy) ~ ln_av | agency_group + year,
+               data = df,
+               vcov = "hc1",
+               panel.id = c("agency_group", "year")
+                ),
+  
+    "2" = feols(log(total_final_levy) ~ ln_est_v | agency_group + year,
+               data = df,
+               vcov = "hc1",
+               panel.id = c("agency_group", "year")
+                ),
+  
+      "3" = feols(log(total_final_levy) ~ ln_lag_av  | agency_group + year,
+               data = df,
+               vcov = "hc1",
+               panel.id = c("agency_group", "year")
+                ),
+  
+     "4" = feols(log(total_final_levy) ~ ln_lag_av + ln_est_v | agency_group + year,
+               data = df,
+               vcov = "hc1",
+               panel.id = c("agency_group", "year")
+                       ),
+  
+     "5" = feols(log(total_final_levy) ~ ln_lag_av + ln_est_v | agency_group + year,
+               data = df,
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                       )
+)
+
+modelsummary::modelsummary(
+  mods_1,
+  output = "flextable",
+# gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
+              stars = TRUE
+)
+
+```
+
+```{r}
 mods_1 <- list(
   
   "1" = feols(log(total_final_levy) ~ log(av) | agency_group + year,
                data = df,
-               vcov = "newey_west",
+               vcov = "twoway",
                panel.id = c("agency_group", "year")
                 ),
   
     "2" = feols(log(total_final_levy) ~ log(est_value) | agency_group + year,
                data = df,
-               vcov = "newey_west",
+               vcov = "twoway",
                panel.id = c("agency_group", "year")
                 ),
   
      "3" = feols(log(total_final_levy) ~ log(av) + log(est_value)*flip_assess | agency_group + year,
                data = df,
-               vcov = "newey_west",
+               vcov = "twoway",
                panel.id = c("agency_group", "year")
                 ),
   
     "4" = feols(log(total_final_levy) ~ log(est_value) + log(av) | agency_group + year,
                data = df,
-               vcov = "newey_west",
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                ),
+      "5" = feols(log(total_final_levy) ~ log(est_value) + log(av) | agency_group + year,
+               data = df,
+               vcov = "twoway",
                panel.id = c("agency_group", "year")
                 ),
   
     
-    "5" = feols(log(total_final_levy) ~ log(est_value) + log(av) | agency_group + year,
+    "DM Match AV" = feols(log(total_final_levy) ~ log(av) |  year,
                data = df,
-               vcov = "newey_west",
+               vcov = "standard",
+               panel.id = c("agency_group", "year")
+                ),
+     "DM Match est_value" = feols(log(total_final_levy) ~ log(est_value)  |  year,
+               data = df,
+               vcov = "standard",
                panel.id = c("agency_group", "year")
                 )
 )
@@ -568,11 +652,12 @@ mods_1 <- list(
 modelsummary::modelsummary(
   mods_1,
   output = "flextable",
- gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
+# gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
               stars = TRUE
 )
 
 ```
+
 
 ```{r}
 #| label: tbl-homerule-agency_group
@@ -622,6 +707,50 @@ modelsummary::modelsummary(
               stars = TRUE
 )
 
+```
+
+```{r}
+hr_df = df %>% filter(home_rule_ind == 1)
+mods_1 <- list(
+  
+  "1" = feols(log(total_final_levy) ~ log(av) | agency_group + year,
+               data = hr_df,
+               vcov = "hc1",
+               panel.id = c("agency_group", "year")
+                ),
+  
+    "2" = feols(log(total_final_levy) ~  log(est_value) | agency_group + year,
+               data = hr_df,
+               vcov = "hc1",
+               panel.id = c("agency_group", "year")
+                ),
+  
+     "3" = feols(log(total_final_levy) ~ log(av) + log(est_value) + flip_assess | agency_group + year,
+               data = hr_df,
+               vcov = "hc1",
+               panel.id = c("agency_group", "year")
+                ),
+  
+    "4" = feols(log(total_final_levy) ~ log(est_value) + log(av) | agency_group + year,
+               data = hr_df,
+               vcov = "hc1",
+               panel.id = c("agency_group", "year")
+                ),
+  
+  "Interact" = feols(log(total_final_levy) ~ log(av) + log(est_value) + log(est_value)*flip_assess | agency_group + year,
+               data = hr_df,
+               vcov = "hc1",
+               panel.id = c("agency_group", "year")
+                )
+  )
+
+
+modelsummary::modelsummary(
+  mods_1,
+  output = "flextable",
+ gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
+              stars = TRUE
+)
 ```
 
 
@@ -684,31 +813,31 @@ library(fixest)
 
 mods_1 <- list(
   
-  "All Types" = feols(log(total_final_levy) ~ log(av) + log(est_value)*flip_assess  | agency_group + year,
+  "All Types" = feols(log(total_final_levy) ~ log(av) + l(log(est_value),1)*flip_assess  | agency_group + year,
                data = df,
                vcov = "newey_west",
                panel.id = c("agency_group", "year")
                 ),
   
-    "Homerule" = feols(log(total_final_levy) ~ log(av) + log(est_value)*flip_assess  | agency_group + year,
+    "Homerule" = feols(log(total_final_levy) ~ log(av) + log(l(est_value, 1))*flip_assess  | agency_group + year,
                data = df |> filter(home_rule_ind == 1),
                vcov = "newey_west",
                panel.id = c("agency_group", "year")
                 ),
   
-     "NonHR" = feols(log(total_final_levy) ~ log(av) + log(est_value)*flip_assess | agency_group + year,
+     "NonHR" = feols(log(total_final_levy) ~ log(av) + log(l(est_value, 1))*flip_assess | agency_group + year,
                data = df |> filter(home_rule_ind == 0 & type != "School"),
                vcov = "newey_west",
                panel.id = c("agency_group", "year")
                 ),
   
-    "Schools" = feols(log(total_final_levy) ~ log(av) + log(est_value)*flip_assess  | agency_group + year,
+    "Schools" = feols(log(total_final_levy) ~ log(av) + log(l(est_value,1))*flip_assess  | agency_group + year,
                data = df |> filter(type == "School"),
                vcov = "newey_west",
                panel.id = c("agency_group", "year")
                 ),
   
-  "Interact" = feols(log(total_final_levy) ~ log(av) + log(est_value) + log(est_value)*flip_assess | agency_group + year,
+  "Interact" = feols(log(total_final_levy) ~ log(av) + log(l(est_value,1)) + log(est_value)*flip_assess | agency_group + year,
                data = df,
                vcov = "newey_west",
                panel.id = c("agency_group", "year")
@@ -720,6 +849,56 @@ modelsummary::modelsummary(
   mods_1,
   output = "flextable",
  gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
+              stars = TRUE
+)
+
+```
+
+
+```{r}
+#| label: tbl-modelsbytype2
+#| tbl-cap: "Uses agency_group fixed effects with grouped and summed taxing agencies. Includes log(av) and log(est_value) in model. Uses Ptaxsim 2023.0.0. and necessary files edited last on Oct. 12th. TwowayFE standard errors. "
+
+library(fixest)
+
+mods_1 <- list(
+  
+  "All Types" = feols(log(total_final_levy) ~ log(l(av,1)) + log(est_value)*flip_assess  | agency_group + year,
+               data = df,
+               vcov = "hc1",
+               panel.id = c("agency_group", "year")
+                ),
+  
+    "Homerule" = feols(log(total_final_levy) ~ log(l(av,1)) + log(est_value)*flip_assess  | agency_group + year,
+               data = df |> filter(home_rule_ind == 1),
+               vcov = "hc1",
+               panel.id = c("agency_group", "year")
+                ),
+  
+     "NonHR" = feols(log(total_final_levy) ~ log(l(av,1)) + log(est_value)*flip_assess | agency_group + year,
+               data = df |> filter(home_rule_ind == 0 & type != "School"),
+               vcov = "hc1",
+               panel.id = c("agency_group", "year")
+                ),
+  
+    "Schools" = feols(log(total_final_levy) ~ log(l(av,1)) + log(est_value)*flip_assess  | agency_group + year,
+               data = df |> filter(type == "School"),
+               vcov = "hc1",
+               panel.id = c("agency_group", "year")
+                ),
+  
+  "Interact" = feols(log(total_final_levy) ~ log(l(av,1)) + log(est_value) + log(est_value)*flip_assess | agency_group + year,
+               data = df,
+               vcov = "hc1",
+               panel.id = c("agency_group", "year")
+                )
+  )
+
+
+modelsummary::modelsummary(
+  mods_1,
+  output = "flextable",
+ ##gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
               stars = TRUE
 )
 
