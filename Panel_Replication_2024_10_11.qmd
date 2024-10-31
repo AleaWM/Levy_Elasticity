@@ -35,13 +35,13 @@ format:
 
 -   Using the logic that the tax rate = levy / taxable EAV, then we can back out the EAV by  using the total_final_levy and total_final_rate variables. 
 -   Taxable EAV = total_final_levy / (total_final_rate) / 100 
-- A Couple municipalities had missing levies and were manually entered by looking up the CAGR and historic levy amounts in the document
+-   A Couple municipalities had missing levies and were manually entered by looking up the CAGR and historic levy amounts in the document
 
 **Remove taxing agencies that had a levy = \$0 for any year. Drop values for all years.**  
 
 -   Countryside, Deer Park, Homer Glen, ~~Norridge~~, Oak Brook, Schaumburg, Dixmoor (2011 only) are dropped using \`dropped_munis \<- c("030250000", "030270000", "030300000", "030585000", "030840000", "030890000", "031150000")\` 
 
-  - Manually imputed Norridge Levy amounts from Norridge CAGR.
+-   Manually imputed Norridge Levy amounts from Norridge CAGR.
 
 **Remove Municipalities that change home rule status:**
 
@@ -54,7 +54,6 @@ format:
 **Keep taxing agencies that are within Cook County**
 
 -   Create variable `pct_in_Cook` = cty_cook_eav / cty_total_eav. Keep all taxing agencies that are 90% or more in Cook County. Use cty_total_eav in the models since we are using the full levy amount in the models
-
 
 ```{r warning = FALSE, message=FALSE}
 #| code-fold: true
@@ -113,7 +112,6 @@ agency_triads <- read_csv("./Necessary_Files/agency_reassessmentyears.csv")
 
 ```
 
-
 ```{r}
 #| message: false
 
@@ -123,9 +121,7 @@ raw_data_joined <- left_join(agency_dt, agency_triads) |> select(-c(cty_dupage_e
 
 ```
 
-
 ## Clean variables and filter observations from joined data
-
 
 ```{r}
 
@@ -207,7 +203,6 @@ groupies <- readxl::read_xlsx("panel_data_blindcoding.xlsx", sheet = "TFL manual
          first6 = str_pad(first6, 6, "left", "0"), # add leading zeros
   )
 ```
-
 
 ## Merge Grouped Labels, Recode Data & Summarize to Grouped Taxing Agency Level
 
@@ -340,7 +335,6 @@ datasummary_crosstab(minor_type~type, data = grouped_manual%>%filter(year==2022)
 
 ```
 
-
 ```{r}
 grouped_manual |> 
   group_by(year, agency_group, triad_name)  |> 
@@ -361,11 +355,7 @@ grouped_manual |>
   facet_wrap(~home_rule_ind)
 ```
 
-
-
-
-Create estimated or "true" AV variable
-Assumes that taxed AV is accurate during assessment years and stays mostly flat until the next assessment year. The true market value is then smoothed between the assessment years.
+Create estimated or "true" AV variable Assumes that taxed AV is accurate during assessment years and stays mostly flat until the next assessment year. The true market value is then smoothed between the assessment years.
 
 ```{r}
 #| label: fig-alt-attempt-estimate-smoothed-value
@@ -383,13 +373,13 @@ df <- grouped_manual |>
   # Assessment Year
   mutate(assess_year_av = ifelse(reassess_year == 1, av, NA)) |>
   
-  fill(assess_year_av, .direction = "down") |>
-  
+  fill(assess_year_av, .direction = "down") |> 
   mutate(
    est_value = if_else(reassess_year == 1, av, NA),
    r = if_else(reassess_year == 1, (lead(av, 3)/av )^ (1/(4-1))-1, NA)
   ) %>%
     fill(r, .direction = "down") |>
+  mutate(r = ifelse(reassess_year == 0 & (year == 2022 & year == 2023), NA, r)) |> 
   mutate(est_value = if_else(is.na(est_value), lag(est_value, 1)*(1 + lag(r, 1)), est_value),
          est_value = if_else(is.na(est_value), lag(est_value, 1)*(1 + lag(r, 1)), est_value))
 
@@ -451,7 +441,6 @@ df %>% ungroup() |>
   scale_y_continuous(labels = scales::dollar_format()) + 
   labs(title = "Summed Value by Triad", y = "Value ($1000)", x = "")
 ```
-
 
 ```{r estimate-smoothed-value, eval=FALSE, include = FALSE}
 
@@ -522,7 +511,8 @@ df <- df %>% ungroup() %>%
          ln_levy = log(total_final_levy),
          ln_est_v = log(est_value),
          ln_lag_av = log(lag(av, 1)),
-         ass = ifelse(lag(av,1) < av, "Up", "Down")) %>% 
+         ass = ifelse(lag(assess_year_av,1) < assess_year_av, "Up", "Down"),
+         ass2 = ifelse(lag(av,1) < av, "Up", "Down")) %>% 
   ungroup()
 ```
 
@@ -532,14 +522,26 @@ df <- df %>% ungroup() %>%
 df |> write_csv("NTA_data_2024_10_20.csv")
 ```
 
+```{r}
+
+df %>% 
+  filter(is.na(assess_year_av)) %>% 
+  group_by(year) %>%
+  summarize(count = n()) %>% arrange(desc(count))
+
+
+df <- df |> filter(year >= 2008 # & year < 2021
+                   )
+
+```
+
 # Graphs
 
 ```{r }
 #| warning: false
 #| message: false
 #| label: fig-linegraph-triads-loggedtaxbase
-
-
+  
 df %>% ungroup() |>
  # mutate(across(.cols = c(ln_av, ln_est_v), ~.x/1000000) ) %>%
   group_by(year, triad_name) %>%
@@ -556,8 +558,6 @@ df %>% ungroup() |>
   scale_x_continuous(breaks = seq(ceiling(min(2006)), floor(max(2022)), by = 2)) +
   labs(title = "Summed Value by Triad", y = "Logged Value", x = "")
 ```
-
-
 
 # Models
 
@@ -604,6 +604,13 @@ modelsummary::modelsummary(
 ```
 
 ```{r}
+# df %>% 
+#   group_by(home_rule_ind, ass) %>% 
+#   summarize(avg_change = avg(p
+#                                                                    )
+```
+
+```{r}
 #| label: tbl-updown
 #| tbl-cap: "Uses agency_group fixed effects with grouped and summed taxing agencies. Includes log(av) and log(est_value) in model. Uses Ptaxsim 2023.0.0. and necessary files edited last on Oct. 12th. Hc1 standard errors. "
 
@@ -644,7 +651,6 @@ modelsummary::modelsummary(
 ```
 
 ## Matching Merriman's Stata Output
-
 
 ```{r}
 #| label: tbl-merriman_models-agency_group
@@ -694,7 +700,6 @@ modelsummary::modelsummary(
 )
 
 ```
-
 
 ```{r}
 #| label: tbl-homerule-agency_group
@@ -747,8 +752,6 @@ modelsummary::modelsummary(
 )
 
 ```
-
-
 
 ```{r}
 #| label: tbl-NONhomerule-agency_group
@@ -804,7 +807,6 @@ modelsummary::modelsummary(
 
 ```
 
-
 ```{r}
 #| label: tbl-modelsbytype
 #| tbl-cap: "Uses agency_group fixed effects with grouped and summed taxing agencies. Includes log(av) and log(est_value) in model. Uses Ptaxsim 2023.0.0. and necessary files edited last on Oct. 12th. HC1 standard errors. "
@@ -851,10 +853,6 @@ modelsummary::modelsummary(
 )
 
 ```
-
-
-
-
 
 ## Old
 
