@@ -17,10 +17,101 @@ Using the NTA_data_2024_10_20.csv file made in Panel_Replication_2024_10_11.qmd.
 
 df <- read_csv("NTA_data_2024_10_20.csv")
 
+# Make up/down variable
+
+# OH SHIT ALEA ALREADY DID THAT
+
 ```
 
 
 # Find Evidence of Asymmetry
 
+Let's start with visual stuff.
+
+```{r}
+
+df |>
+  filter(year == 2014 | year == 2020) |>
+  filter(type == "Muni") |>
+  ggplot(aes(x = ln_av, y = ln_levy, colour = ass)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  facet_grid(~ year) +
+  labs(title = "Munis")
+
+df |>
+  filter(year == 2014 | year == 2020) |>
+  filter(type == "School") |>
+  ggplot(aes(x = ln_av, y = ln_levy, colour = ass)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  facet_grid(~ year) +
+  labs(title = "Schools")
+
+df |>
+  filter(year == 2014 | year == 2020) |>
+  filter(type == "Other") |>
+  ggplot(aes(x = ln_av, y = ln_levy, colour = ass)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  facet_grid(~ year) +
+  labs(title = "Other")
+
+df |>
+  filter(year == 2014 | year == 2020) |>
+  filter(type == "Township") |>
+  ggplot(aes(x = ln_av, y = ln_levy, colour = ass)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  facet_grid(~ year) +
+  labs(title = "Townships")
+  
+
+```
+
+```{r}
+
+df |>
+  filter(year == 2014 | year == 2020) |>
+  mutate(year = as_factor(year)) |>
+  filter(type == "Muni") |>
+  ggplot(aes(x = ln_av, y = ln_levy, colour = year)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  facet_grid(~ ass) +
+  labs(title = "Munis")
+
+df |>
+  filter(year == 2014 | year == 2020) |>
+  mutate(year = as_factor(year)) |>
+  filter(type == "School") |>
+  ggplot(aes(x = ln_av, y = ln_levy, colour = year)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  facet_grid(~ ass) +
+  labs(title = "Schools")
+
+df |>
+  filter(year == 2014 | year == 2020) |>
+  mutate(year = as_factor(year)) |>
+  filter(type == "Other") |>
+  ggplot(aes(x = ln_av, y = ln_levy, colour = year)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  facet_grid(~ ass) +
+  labs(title = "Other")
+
+df |>
+  filter(year == 2014 | year == 2020) |>
+  mutate(year = as_factor(year)) |>
+  filter(type == "Township") |>
+  ggplot(aes(x = ln_av, y = ln_levy, colour = year)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  facet_grid(~ ass) +
+  labs(title = "Townships")
+  
+
+```
 
 # Run model with asymmetric specifications.
