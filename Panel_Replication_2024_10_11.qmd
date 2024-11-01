@@ -380,13 +380,16 @@ df <- grouped_manual |>
   ) %>%
     fill(r, .direction = "down") |>
   mutate(r = ifelse(reassess_year == 0 & (year == 2022 & year == 2023), NA, r)) |> 
-  mutate(est_value = if_else(is.na(est_value), lag(est_value, 1)*(1 + lag(r, 1)), est_value),
-         est_value = if_else(is.na(est_value), lag(est_value, 1)*(1 + lag(r, 1)), est_value))
+  mutate(est_value = if_else(is.na(est_value), lag(est_value, 1)*(1 + r), est_value),
+         est_value = if_else(is.na(est_value), lag(est_value, 1)*(1 + r), est_value),
+         est_value = if_else(year==2023 & reassess_year == 0, NA, est_value),
+         est_value = if_else(year == 2022 & triad_name == "City", NA, est_value)
+         )
 
 
 
 
-graphmunis<-c("Arlington Heights", "Alsip", "Dolton", "Cicero", "Evanston", "Chicago")
+graphmunis <- c("Arlington Heights", "Alsip", "Dolton", "Cicero", "Evanston", "Chicago")
 
 for(i in graphmunis){
 
@@ -603,12 +606,7 @@ modelsummary::modelsummary(
 
 ```
 
-```{r}
-# df %>% 
-#   group_by(home_rule_ind, ass) %>% 
-#   summarize(avg_change = avg(p
-#                                                                    )
-```
+
 
 ```{r}
 #| label: tbl-updown
@@ -650,14 +648,192 @@ modelsummary::modelsummary(
 
 ```
 
+```{r}
+#| label: tbl-merriman_models_start2011
+#| tbl-cap: "**2011-2020. All Agencies (after Grouping and Cleaning)** Agency_group and year fixed effects. Uses grouped and summed taxing agencies. Includes lagged log(av) and log(est_value) in model. Uses Ptaxsim 2023.0.0. and necessary files edited last on Oct. 12th. HC1 standard errors as is the default for Stata. "
+
+
+df2011 <- df |> filter(year > 2010 & year <= 2020)
+
+mods_1 <- list(
+  
+  "1" = feols(log(total_final_levy) ~ ln_av | agency_group + year,
+               data = df2011,
+               vcov = "hc1",
+               panel.id = c("agency_group", "year")
+                ),
+  
+    "2" = feols(log(total_final_levy) ~ ln_est_v | agency_group + year,
+               data = df2011,
+               vcov = "hc1",
+               panel.id = c("agency_group", "year")
+                ),
+  
+      "3" = feols(log(total_final_levy) ~ ln_lag_av  | agency_group + year,
+               data = df2011,
+               vcov = "hc1",
+               panel.id = c("agency_group", "year")
+                ),
+  
+     "4A. HC1" = feols(log(total_final_levy) ~ ln_lag_av + ln_est_v | agency_group + year,
+               data = df2011,
+               vcov = "hc1",
+               panel.id = c("agency_group", "year")
+                       ),
+  
+     "4B. Twoway FE" = feols(log(total_final_levy) ~ ln_lag_av + ln_est_v | agency_group + year,
+               data = df2011,
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                       )
+)
+
+modelsummary::modelsummary(
+  mods_1,
+  output = "flextable",
+# gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
+              stars = TRUE
+)
+
+```
+```{r}
+#| label: tbl-merriman_models_start2014
+#| tbl-cap: "**2014-2020. All Agencies (after Grouping and Cleaning)** Agency_group and year fixed effects. Uses grouped and summed taxing agencies. Includes lagged log(av) and log(est_value) in model. Uses Ptaxsim 2023.0.0. and necessary files edited last on Oct. 12th. HC1 standard errors as is the default for Stata. "
+
+
+df2014 <- df |> filter(year > 2013 & year <= 2020)
+
+mods_1 <- list(
+  
+  "1" = feols(log(total_final_levy) ~ ln_av | agency_group + year,
+               data = df2014,
+               vcov = "hc1",
+               panel.id = c("agency_group", "year")
+                ),
+  
+    "2" = feols(log(total_final_levy) ~ ln_est_v | agency_group + year,
+               data = df2014,
+               vcov = "hc1",
+               panel.id = c("agency_group", "year")
+                ),
+  
+      "3" = feols(log(total_final_levy) ~ ln_lag_av  | agency_group + year,
+               data = df2014,
+               vcov = "hc1",
+               panel.id = c("agency_group", "year")
+                ),
+  
+     "4A. HC1" = feols(log(total_final_levy) ~ ln_lag_av + ln_est_v | agency_group + year,
+               data = df2014,
+               vcov = "hc1",
+               panel.id = c("agency_group", "year")
+                       ),
+  
+     "4B. Twoway FE" = feols(log(total_final_levy) ~ ln_lag_av + ln_est_v | agency_group + year,
+               data = df2014,
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                       )
+)
+
+modelsummary::modelsummary(
+  mods_1,
+  output = "flextable",
+# gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
+              stars = TRUE
+)
+
+```
+
+```{r}
+#| label: tbl-modelsbytype_start2011
+#| tbl-cap: "2011-2020. Uses agency_group fixed effects with grouped and summed taxing agencies. Includes log(av) and log(est_value) in model. Uses Ptaxsim 2023.0.0. and necessary files edited last on Oct. 12th. Hc1 standard errors. "
+
+mods_1 <- list(
+  
+  "All Types" = feols(log(total_final_levy) ~ ln_lag_av + log(est_value)*flip_assess  | agency_group + year,
+               data = df2011,
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                ),
+  
+    "Homerule" = feols(log(total_final_levy) ~ ln_lag_av + log(est_value)*flip_assess  | agency_group + year,
+               data = df2011 |> filter(home_rule_ind == 1 & type == "Muni"),
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                ),
+  
+     "NonHR" = feols(log(total_final_levy) ~ ln_lag_av + log(est_value)*flip_assess | agency_group + year,
+               data = df2011 |> filter(home_rule_ind == 0 & type == "Muni"),
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                ),
+  
+    "Schools" = feols(log(total_final_levy) ~ ln_lag_av + log(est_value)*flip_assess  | agency_group + year,
+               data = df2011 |> filter(type == "School"),
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                )        )
+
+
+modelsummary::modelsummary(
+  mods_1,
+  output = "flextable",
+ ##gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
+              stars = TRUE
+)
+
+```
+
+```{r}
+#| label: tbl-modelsbytype_start2014
+#| tbl-cap: "2014-2020. Uses agency_group fixed effects with grouped and summed taxing agencies. Includes log(av) and log(est_value) in model. Uses Ptaxsim 2023.0.0. and necessary files edited last on Oct. 12th. Hc1 standard errors. "
+
+mods_1 <- list(
+  
+  "All Types" = feols(log(total_final_levy) ~ ln_lag_av + log(est_value)*flip_assess  | agency_group + year,
+               data = df2014,
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                ),
+  
+    "Homerule" = feols(log(total_final_levy) ~ ln_lag_av + log(est_value)*flip_assess  | agency_group + year,
+               data = df2014 |> filter(home_rule_ind == 1 & type == "Muni"),
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                ),
+  
+     "NonHR" = feols(log(total_final_levy) ~ ln_lag_av + log(est_value)*flip_assess | agency_group + year,
+               data = df2014 |> filter(home_rule_ind == 0 & type == "Muni"),
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                ),
+  
+    "Schools" = feols(log(total_final_levy) ~ ln_lag_av + log(est_value)*flip_assess  | agency_group + year,
+               data = df2014 |> filter(type == "School"),
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                )        )
+
+
+modelsummary::modelsummary(
+  mods_1,
+  output = "flextable",
+ ##gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
+              stars = TRUE
+)
+
+```
+
+
 ## Matching Merriman's Stata Output
 
 ```{r}
 #| label: tbl-merriman_models-agency_group
-#| tbl-cap: "**All Agencies (after Grouping and Cleaning)** Agency_group and year fixed effects. Uses grouped and summed taxing agencies. Includes lagged log(av) and log(est_value) in model. Uses Ptaxsim 2023.0.0. and necessary files edited last on Oct. 12th. HC1 standard errors as is the default for Stata. "
+#| tbl-cap: "**2010 to 2020. All Agencies (after Grouping and Cleaning)** Agency_group and year fixed effects. Uses grouped and summed taxing agencies. Includes lagged log(av) and log(est_value) in model. Uses Ptaxsim 2023.0.0. and necessary files edited last on Oct. 12th. HC1 standard errors as is the default for Stata. "
 
 
- df <- df |> filter(year >= 2010 & year <= 2020)
+df <- df |> filter(year >= 2010 & year <= 2020)
 
 mods_1 <- list(
   
