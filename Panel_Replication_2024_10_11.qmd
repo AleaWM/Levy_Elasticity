@@ -338,17 +338,17 @@ before_table_pre_format <- before_table |>
                                 minor_type == "TOWNSHIP" ~ "Township",
                                 minor_type == "POLICE" ~ "Police District",
                                 TRUE ~ minor_type
-                                )) |>
-  rename("Agency Minor Type" = minor_type) |>
-  rename("Agency Major Type" = type) |>
-  mutate(type = case_when(type == "Muni" ~ "Municipality",
-                          type == "School" ~ "School District",
-                          TRUE ~ type))
+                                 )) #|>
+  # rename("Agency Minor Type" = minor_type) |>
+  # rename("Agency Major Type" = type) |>
+  # mutate(type = case_when(type == "Muni" ~ "Municipality",
+  #                         type == "School" ~ "School District",
+  #                         TRUE ~ type))
 
 datasummary_crosstab(minor_type~type,  
                      statistic = 1~1+N, 
                      data = before_table_pre_format |>
-                            filter(year %in% c(2012, 2022))
+                            filter(year == 2022))
                       )
 
 ```
