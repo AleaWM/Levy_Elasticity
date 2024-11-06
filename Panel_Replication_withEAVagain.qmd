@@ -1,0 +1,1441 @@
+---
+title: "Replication Code for NTA Panel Data"
+author: "AWM & MVH"
+date: "October 13, 2024"
+format: 
+  html:
+    code-line-numbers: true
+    code-overflow: wrap
+    toc: true
+    code-fold: true
+    toc-location: left
+    cap-location: margin
+    df-print: default
+    # grid:
+    #   sidebar-width: 200px
+    #   body-width: 900px
+    #   margin-width: 200px
+---
+
+**Files needed for panel creation replication:**
+
+-   agency_reassessmentyears.csv
+-   cpi.csv
+-   eq_factor.csv
+-   panel_data_blindcoded.xlsx
+
+# Code Cleaning Steps
+
+-   90% within Cook County 
+-   Does not change home rule status during sample years 
+
+### Slightly more detail on cleaning process:
+
+**Some taxing agencies are missing their cty_cook_eav & cty_total_eav even though they have a total_final_levy value** 
+
+-   Using the logic that the tax rate = levy / taxable EAV, then we can back out the EAV by  using the total_final_levy and total_final_rate variables. 
+-   Taxable EAV = total_final_levy / (total_final_rate) / 100 
+-   A Couple municipalities had missing levies and were manually entered by looking up the CAGR and historic levy amounts in the document
+
+**Remove taxing agencies that had a levy = \$0 for any year. Drop values for all years.**  
+
+-   Countryside, Deer Park, Homer Glen, ~~Norridge~~, Oak Brook, Schaumburg, Dixmoor (2011 only) are dropped using \`dropped_munis \<- c("030250000", "030270000", "030300000", "030585000", "030840000", "030890000", "031150000")\` 
+
+-   Manually imputed Norridge Levy amounts from Norridge CAGR.
+
+**Remove Municipalities that change home rule status:**
+
+-   Midlothian, Northfield, River Grove became home rule in 2010.
+-   Melrose Park became home rule in 2011.
+-   South Chicago Heights became home rule in 2019.
+-   Summit became home rule in 2016.
+-   exclude_hr_change \<- c("030770000", "030800000","030880000", "031070000", "031190000", "031250000")
+
+**Keep taxing agencies that are within Cook County**
+
+-   Create variable `pct_in_Cook` = cty_cook_eav / cty_total_eav. Keep all taxing agencies that are 90% or more in Cook County. Use cty_total_eav in the models since we are using the full levy amount in the models
+
+```{r warning = FALSE, message=FALSE}
+#| code-fold: true
+
+#knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+
+library(tidyverse)
+library(stars)
+library(modelsummary)
+library(fixest)
+library(tinytable)
+
+```
+
+## Join initial data from CCAO package
+
+```{r}
+## Change database file path to match your computer's location 
+## of the PTAXSIM database!
+
+
+#ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "./ptaxsim.db/ptaxsim-2023.0.0.db")
+ 
+ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/ptaxsim.db/ptaxsim-2023.0.0.db")
+
+agency_dt <- DBI::dbGetQuery(
+  ptaxsim_db_conn,
+  "SELECT *
+  FROM agency
+  "
+) |>
+  mutate(first6 = str_sub(agency_num,1,6)) 
+
+all_taxing_agencies <- DBI::dbGetQuery(
+  ptaxsim_db_conn,
+  "SELECT agency_num, agency_name, major_type, minor_type
+  FROM agency_info
+  "
+  ) |>
+  mutate(first6 = str_sub(agency_num, 1, 6))
+
+DBI::dbDisconnect(ptaxsim_db_conn)
+
+```
+
+```{r load_necessary_files}
+#| message: false
+
+# pulls in additional tables that exist in PTAXSIM database
+# for calculating taxable AV: Taxable EAV / eq_factor for each year
+cpi <- read_csv("./Necessary_Files/cpi.csv") 
+
+eq_factor <- read_csv("./Necessary_Files/eq_factor.csv") |> 
+  select(-eq_factor_tentative)
+
+agency_triads <- read_csv("./Necessary_Files/agency_reassessmentyears.csv") 
+
+```
+
+```{r}
+#| message: false
+
+# Remove variables with data on EAV in other jurisdictions
+
+raw_data_joined <- left_join(agency_dt, agency_triads) |> select(-c(cty_dupage_eav:cty_livingston_eav))
+
+```
+
+## Clean variables and filter observations from joined data
+
+```{r}
+
+# Start with 18649 obs.
+
+raw_data_joined <- raw_data_joined |>
+  rename(minor_type = agency_minor_type,
+         major_type = agency_major_type) |>
+  
+  # Filter out SSAs
+  # drops 5916 agency-year combos (updated for 2023 db)
+  filter(minor_type != "SSA") |> 
+  
+  # fills in missing cty_cook_eav variables. 
+  # uses logic that EAV = levy / tax rate = EAV
+  mutate(total_final_levy = as.integer(total_final_levy),
+         cty_cook_eav = as.integer(cty_cook_eav),
+         cty_total_eav = as.integer(cty_total_eav)) |>
+  mutate(cty_cook_eav = ifelse(is.na(cty_cook_eav) & total_final_levy > 0, 
+                               total_final_levy / (total_final_rate/100), cty_cook_eav),
+         cty_total_eav = ifelse(is.na(cty_total_eav) & total_final_levy > 0 , 
+                                total_final_levy / (total_final_rate/100), cty_total_eav))
+
+## 12733 obs. (MVH w/ 2023 db)
+
+
+
+exclude_hr_change <- c("030770000", "030800000","030880000", "031070000", "031190000", "031250000" )
+
+
+recoded_data <- raw_data_joined |> 
+  left_join(cpi, by = c("year" = "levy_year")) |>
+  left_join(eq_factor) |>
+  # Excluding munis that change HR status removes 144 agency-year pairs.
+  filter(!agency_num %in% exclude_hr_change) |>
+  # 12589 obs.
+  
+  # Clean up data types
+  mutate(
+    agency_num = as.character(agency_num),            # change variable type
+    agency_num = str_pad(agency_num, 9, "left", "0"), # add missing leading zeros
+    first6 = str_pad(first6, 6, "left", "0"),
+    home_rule_ind = as.character(home_rule_ind),      # change reference category
+    reassess_year = as.character(reassess_year)       # change variable type
+    ) |>
+  
+  # Calculate AV as a function of EAV and the EQ factor
+  mutate(cty_total_eav = as.numeric(cty_total_eav),    # taxable eav in cook and neighboring counties
+         cty_cook_eav = as.numeric(cty_cook_eav),      # taxable EAV in cook county only
+         pct_in_Cook = cty_cook_eav / cty_total_eav,   # to identify taxing agencies that cross county lines
+         total_final_levy = as.numeric(total_final_levy), 
+         av = cty_cook_eav / eq_factor_final,          # backed out taxable Assessed Value of properties
+         first6_w_hr = str_c(first6, "_", home_rule_ind),
+         agency_w_hr = str_c(agency_num, "_", home_rule_ind)
+         ) |> 
+  
+  # Keep only agencies greater than 95% in Cook
+  # Drops 1608 obs.
+  filter(pct_in_Cook > 0.90) 
+
+# 10891 obs. in recoded_data
+
+```
+
+## Import grouping labels
+
+```{r}
+
+ # Read in grouped labels
+
+groupies <- readxl::read_xlsx("panel_data_blindcoding.xlsx", sheet = "TFL manual code") |>
+  select(first6, agency_num, agency_group, flag_drop, agency_name) |>
+  
+  # Change object types to facilitate merging.
+  
+  mutate(agency_num = str_pad(agency_num, 9, "left", "0"),
+         agency_num = as.character(agency_num), 
+         first6 = as.character(first6), # make character
+         first6 = str_pad(first6, 6, "left", "0"), # add leading zeros
+  )
+```
+
+## Merge Grouped Labels, Recode Data & Summarize to Grouped Taxing Agency Level
+
+```{r}
+table(recoded_data$year, recoded_data$minor_type)
+
+  
+grouped_manual <- recoded_data |> 
+  # 10981 obs.
+  left_join(groupies,
+            by = c("agency_name", "agency_num")
+  ) |> 
+  # Filter post-grouped agencies to munis, townships, schools and miscellaneous agencies such as Parks or Library Special Districts
+  # 10,261 obs after filtering
+  filter(
+  (  (major_type == "MUNICIPALITY/TOWNSHIP" |  major_type == "MISCELLANEOUS" ) | (minor_type == "ELEMENTARY" |   minor_type == "SECONDARY") ) & 
+      !minor_type %in% c("SANITARY", "WATER", "MOSQUITO", "COOK" )) 
+
+table(grouped_manual$year, grouped_manual$minor_type)
+
+grouped_manual <- grouped_manual |>
+  
+  arrange(agency_num, year) |>
+
+    group_by(year, agency_group) |> 
+  # Change dataframe to reflect grouped agencies
+  # Consolidates 10261 obs. pre-grouping into 7614 obs.
+  summarize(
+    agency_name = first(agency_name),
+    agency_num = first(agency_num),
+    total_final_levy = sum(total_final_levy, na.rm=TRUE),
+    total_final_levy = ifelse(total_final_levy == 0, NA, total_final_levy), # change 0's to NAs so ln() doesn't break it
+    major_type = paste(list(unique(major_type)), sep = ", "),   
+    minor_type = paste(list(unique(minor_type)), sep = ", "),
+    cty_cook_eav = mean(cty_cook_eav, na.rm=TRUE),
+    cty_total_eav = mean(cty_total_eav, na.rm=TRUE), 
+    av = first(av),   
+    triad_name = first(triad_name), 
+    agency_count = n(),
+    reassess_year = first(reassess_year),
+    home_rule_ind = first(home_rule_ind),
+    flag_drop = first(flag_drop)
+  ) |> 
+  # Create variables to indicate bundling after grouping
+  mutate(
+    bundled = ifelse(agency_count > 1, 1, 0),
+    uniqueid = str_c(agency_group, "_", home_rule_ind, "_", bundled),
+    first2_dig = str_sub(agency_num, 1, 2),
+    
+    # Fix misclassification of Cicero, Evanston, and Chicago
+    type = case_when(
+      first2_dig == "03" ~ "Muni",
+      agency_group == "Evanston" | agency_group == "Cicero" | agency_group == "Chicago" ~ "Muni",
+      first2_dig == "04" ~ "School",
+      first2_dig == "02"  ~ "Township", 
+      TRUE ~ "Other"
+      )) |>
+ungroup() |>
+  select(year, agency_group, everything()) # puts variables in useful order.
+
+
+# Identify grouped agencies that do not exist across entire panel
+# 7 agency groups will be dropped.
+dropped_agencies <- grouped_manual |>
+  group_by(agency_group) |> 
+  summarize(n=n(),
+            flag_drop = sum(flag_drop, na.rm=TRUE)) |>
+  filter(n!=18 | flag_drop > 0)
+
+dropped_agencies  # check what will be dropped
+
+# Filter out observations from 7 agencies 
+grouped_manual <- grouped_manual |>
+  filter(!agency_group %in% dropped_agencies$agency_group)
+
+```
+
+```{r bundlecoded-not-summed}
+
+
+table(recoded_data$year, recoded_data$minor_type)
+
+  
+before_table <- recoded_data |>
+  left_join(groupies,
+            by = c("agency_name", "agency_num")
+  ) |> 
+  filter(
+  (  (major_type == "MUNICIPALITY/TOWNSHIP" |  major_type == "MISCELLANEOUS" ) | (minor_type == "ELEMENTARY" |   minor_type == "SECONDARY") ) & 
+      !minor_type %in% c("SANITARY", "WATER", "MOSQUITO", "COOK" )) |>
+  arrange(agency_num, year) |>
+
+    group_by(year, agency_group) |> 
+  mutate(
+    major_type = major_type,
+    minor_type = minor_type,
+    agency_group_name = first(agency_name),
+    agency_group_num = first(agency_num),
+
+    major_type_group = paste(list(unique(major_type)), sep = ", "),   
+    minor_type_group = paste(list(unique(minor_type)), sep = ", "),
+    agency_count = n(),
+  ) |> 
+  mutate(
+    first2_dig = str_sub(agency_num, 1, 2),
+    # Fix misclassification of Cicero, Evanston, and Chicago
+    type = case_when(
+      first2_dig == "03" ~ "Muni",
+      agency_group == "Evanston" | agency_group == "Cicero" | agency_group == "Chicago" ~ "Muni",
+      first2_dig == "04" ~ "School",
+      first2_dig == "02"  ~ "Township", 
+      TRUE ~ "Other"
+      )) |>
+ungroup() |>
+  select(year, agency_group, everything()) %>%
+  filter(!agency_group %in% dropped_agencies$agency_group)
+
+library(modelsummary)
+
+before_table_pre_format <- before_table |>
+  mutate(minor_type = case_when(minor_type == "BOND" ~ "Bond Fund",
+                                minor_type == "ELEMENTARY" ~ "Elementary School District",
+                                minor_type == "FIRE" ~ "Fire District",
+                                minor_type == "GEN ASST" ~ "General Assistance Fund",
+                                minor_type == "HEALTH" ~ "Health Services",
+                                minor_type == "INFRA" ~ "Infrastructure Fund",
+                                minor_type == "LIBRARY" ~ "Library District",
+                                minor_type == "MISC" ~ "Miscellaneous District (e.g., mosquito abatement)",
+                                minor_type == "MUNI" ~ "Municipality",
+                                minor_type == "PARK" ~ "Park District",
+                                minor_type == "SECONDARY" ~ "Secondary School District",
+                                minor_type == "TOWNSHIP" ~ "Township",
+                                minor_type == "POLICE" ~ "Police District",
+                                TRUE ~ minor_type
+                                 )) #|>
+  # rename("Agency Minor Type" = minor_type) |>
+  # rename("Agency Major Type" = type) |>
+  # mutate(type = case_when(type == "Muni" ~ "Municipality",
+  #                         type == "School" ~ "School District",
+  #                         TRUE ~ type))
+
+datasummary_crosstab(minor_type~type,  
+                     statistic = 1~1+N, 
+                     data = before_table_pre_format |>
+                            filter(year == 2022))
+                      
+
+```
+
+```{r year_type_table}
+
+table(grouped_manual$year, grouped_manual$type)
+
+
+datasummary_crosstab(minor_type~type, data = grouped_manual%>%filter(year==2022),  statistic = 1~1+N, output = "flextable")
+
+```
+
+```{r}
+grouped_manual |> 
+  group_by(year, agency_group, triad_name)  |> 
+  summarize(total_final_levy = sum(total_final_levy, na.rm = TRUE)) |> 
+ # filter(agency_group != "Chicago" & agency_group != "Chicago Park District") |> 
+  ggplot() + 
+  theme_classic() + 
+  geom_line(aes(x=year, y = total_final_levy, group=agency_group) ) +
+  facet_wrap(~triad_name)
+
+grouped_manual |> 
+  group_by(year, agency_group, triad_name, home_rule_ind)  |> 
+  summarize(total_final_levy = sum(total_final_levy, na.rm = TRUE)) |> 
+#  filter(agency_group != "Chicago" & agency_group != "Chicago Park District") |> 
+  ggplot() + 
+  theme_classic() + 
+  geom_line(aes(x=year, y = total_final_levy, group=agency_group) ) +
+  facet_wrap(~home_rule_ind)
+```
+
+Create estimated or "true" AV variable Assumes that taxed AV is accurate during assessment years and stays mostly flat until the next assessment year. The true market value is then smoothed between the assessment years.
+
+```{r}
+#| label: fig-alt-attempt-estimate-smoothed-value
+#| warning: false
+#| message: false
+#| layout-ncol: 2
+#| layout-nrow: 3
+
+
+df <- grouped_manual |>
+  ungroup() |>
+  group_by(agency_group) |> 
+  
+  arrange(agency_group, year)|> 
+  # Assessment Year
+  mutate(assess_year_av = ifelse(reassess_year == 1, av, NA)) |>
+  
+  fill(assess_year_av, .direction = "down") |> 
+  mutate(
+   est_value = if_else(reassess_year == 1, av, NA),
+   r = if_else(reassess_year == 1, (lead(av, 3)/av )^ (1/(4-1))-1, NA)
+  ) %>%
+    fill(r, .direction = "down") |>
+  mutate(r = ifelse(reassess_year == 0 & (year == 2022 & year == 2023), NA, r)) |> 
+  mutate(est_value = if_else(is.na(est_value), lag(est_value, 1)*(1 + r), est_value),
+         est_value = if_else(is.na(est_value), lag(est_value, 1)*(1 + r), est_value),
+         est_value = if_else(year==2023 & reassess_year == 0, NA, est_value),
+         est_value = if_else(year == 2022 & triad_name == "City", NA, est_value)
+         )
+
+
+
+
+graphmunis <- c("Arlington Heights", "Alsip", "Dolton", "Cicero", "Evanston", "Chicago")
+
+for(i in graphmunis){
+
+ df %>%
+    mutate(i=i) %>%
+  mutate(across(.cols = c(est_value, av, assess_year_av), ~.x/1000000) ) %>%
+ # filter(year>2010) %>%
+  filter(agency_group == i) %>%
+  ggplot() +
+
+    geom_line(aes(x=year, y = assess_year_av), alpha = .5, color = "gray50")+
+    geom_point(aes(x=year, y = assess_year_av), 
+                 fill  = "gray50", alpha = .5) +
+
+  geom_line(aes(x=year, y = av), color = "black", lty = 3) + 
+  geom_point(aes(x=year, y = av), 
+                 fill  = "black", alpha = .5) +
+  
+      geom_line(aes(x=year, y = est_value), alpha = .5, color = "red", lty = 2)+
+    geom_point(aes(x=year, y = est_value), 
+                 fill  = "red", alpha = .5) +
+  scale_x_continuous(breaks = seq(ceiling(min(2006)), floor(max(2022)), by = 2)) +
+  scale_y_continuous(labels = scales::dollar_format()) + 
+    labs(title = paste(i), y= "Value ($1000)", x = "") -> graph
+
+  print(graph)
+}
+```
+
+```{r }
+#| warning: false
+#| message: false
+#| label: fig-linegraph-triads-avg-growth
+
+
+df %>% ungroup() |>
+  mutate(across(.cols = c(est_value, av, assess_year_av), ~.x/1000000) ) %>%
+  group_by(year, triad_name) %>%
+  summarize(assess_year_av = sum(assess_year_av, na.rm=TRUE),
+            av =sum(av, na.rm=TRUE),
+            est_value = sum(est_value, na.rm=TRUE)) %>%
+  filter(year > 2008 & year < 2022) %>%
+  ggplot() +
+
+    geom_line(aes(x=year, y = assess_year_av, group = triad_name))+
+
+  geom_line(aes(x=year, y = av, group = triad_name)) + 
+
+      geom_line(aes(x=year, y = est_value, group = triad_name, color = triad_name), alpha = .5)+
+    geom_point(aes(x=year, y = est_value, fill = triad_name, group = triad_name), alpha = .5) +
+  scale_x_continuous(breaks = seq(ceiling(min(2006)), floor(max(2022)), by = 2)) +
+  scale_y_continuous(labels = scales::dollar_format()) + 
+  labs(title = "Summed Value by Triad", y = "Value ($1000)", x = "")
+```
+
+```{r estimate-smoothed-value, eval=FALSE, include = FALSE}
+
+
+## Incorrect creation of rate!! Keeping for reference. Delete later.
+
+df <- grouped_manual |>
+  ungroup() |>
+  group_by(agency_group) |> 
+  
+  arrange(year)|> 
+  # Assessment Year
+  mutate(assess_year_av = ifelse(reassess_year == 1, av, NA)) |>
+  
+  fill(assess_year_av, .direction = "down") |>
+  
+  mutate(
+    
+    # rate of growth from point A to point B = 4-year CAGR 
+   
+    # Alea's math: Calculate rate to get from assessment year to 1 year after assessment year 
+    # this rate will be changed to zero later
+    rate_smooth = if_else(lag(reassess_year, n=1) == 1 | lead(reassess_year, n=2) ==1, (lead(av, n=2) / lag(av))^(1/4) - 1, NA),
+   
+     # estimated value for 1 year after reassessment:
+    est_value = if_else(lag(reassess_year, n=1) == 1, assess_year_av*(1+rate_smooth), assess_year_av),
+     
+    # Alea's math: Calculate rate for est_value 1 year to 2 years after the assessment:
+    rate_smooth = if_else(lag(reassess_year) == 2 | lead(reassess_year, n=1) ==1, (lead(av, n=1) / lag(est_value))^(1/3) - 1, rate_smooth),
+    
+    # estimated value for 2 years after reassessment
+    est_value = if_else(lag(reassess_year, n=2) == 1 | lead(reassess_year, n=1) == 1, lag(est_value)*(1+rate_smooth), est_value),
+
+    rate_smooth = if_else(reassess_year == 1, lead(rate_smooth, n = 1), rate_smooth),
+    est_value = ifelse(reassess_year == 1, assess_year_av, est_value),
+    type = as.factor(type)
+ ) |>
+  arrange(agency_name, year) |>
+  select(agency_group, year, av, assess_year_av, est_value, rate_smooth, everything()) |>
+  ungroup()
+
+df %>%ungroup() |>
+  mutate(across(.cols = c( est_value, av, assess_year_av), ~.x/1000000) ) %>%
+  group_by(year, triad_name) %>%
+  summarize(assess_year_av = sum(assess_year_av, na.rm=TRUE),
+            av =sum(av, na.rm=TRUE),
+            est_value = sum(est_value, na.rm=TRUE)) %>%
+  filter(year > 2008 & year < 2022) %>%
+  ggplot() +
+
+    geom_line(aes(x=year, y = assess_year_av, group = triad_name))+
+
+  geom_line(aes(x=year, y = av, group = triad_name)) + 
+
+      geom_line(aes(x=year, y = est_value, group = triad_name, color = triad_name), alpha = .5)+
+    geom_point(aes(x=year, y = est_value, fill = triad_name, group = triad_name), alpha = .5) +
+  scale_x_continuous(breaks = seq(ceiling(min(2006)), floor(max(2022)), by = 2)) +
+  scale_y_continuous(labels = scales::dollar_format()) + 
+  labs(title = "Summed Value by Triad", y = "Value ($1000)", x = "")
+```
+
+```{r flip_assessmentyear}
+df <- df %>% ungroup() %>%
+  mutate(flip_assess = ifelse(reassess_year == 1, 0, 1)) %>%
+  group_by(agency_group) %>%
+  arrange(agency_group, year) %>%
+  mutate(eav = cty_cook_eav,
+    ln_av = log(av),
+         ln_eav = log(cty_cook_eav),
+         ln_levy = log(total_final_levy),
+         ln_est_v = log(est_value),
+         ln_lag_av = log(lag(av, 1)),
+         ln_lag_eav = log(lag(cty_cook_eav)),
+         eav_updown= ifelse(lag(cty_cook_eav, 1) < cty_cook_eav, "Up", "Down"),
+         ass = ifelse(lag(assess_year_av,1) < assess_year_av, "Up", "Down"),
+         ass2 = ifelse(lag(av,1) < av, "Up", "Down")) %>% 
+  ungroup()
+```
+
+#### Export CSV
+
+```{r exportCSV}
+df |> write_csv("NTA_data_2024_10_20.csv")
+```
+
+```{r}
+
+df %>% 
+  filter(is.na(assess_year_av)) %>% 
+  group_by(year) %>%
+  summarize(count = n()) %>% arrange(desc(count))
+
+
+df %>% 
+  filter(is.na(est_value)) %>% 
+  group_by(year) %>%
+  summarize(count = n()) %>% arrange(desc(count))
+
+
+df <- df |> filter(year >= 2008  & year < 2023 & triad_name != "City"
+                   )
+
+```
+
+If we drop Chicago, we get to keep another year of data for all of the other munis in North and South triads. 
+
+# NTA Descriptive Statistics
+
+## Tables
+
+
+```{r}
+#| label: model-vars-continuous-descr
+
+tt_cont_var <- df |>
+  select(type, ln_eav, ln_levy, ln_est_v, ln_lag_eav) |>
+  group_by(type) |>
+  reframe(n = n(), 
+          "min ln(eav)" = min(ln_eav, na.rm = T), 
+          "max ln(eav)" = max(ln_eav, na.rm = T), 
+          "mean ln(eav)" = mean(ln_eav, na.rm = T), 
+          "median ln(eav)" = median(ln_eav, na.rm = T),
+          "sd ln(eav)" = sd(ln_eav, na.rm = T),
+          "min ln(levy)" = min(ln_levy, na.rm = T), 
+          "max ln(levy)" = max(ln_levy, na.rm = T), 
+          "mean ln(levy)" = mean(ln_levy, na.rm = T), 
+          "median ln(levy)" = median(ln_levy, na.rm = T),
+          "sd ln(levy)" = sd(ln_levy, na.rm = T),
+          "min ln(lag eav)" = min(ln_lag_eav, na.rm = T), 
+          "max ln(lag eav)" = max(ln_lag_eav, na.rm = T), 
+          "mean ln(lag eav)" = mean(ln_lag_eav, na.rm = T), 
+          "median ln(lag eav)" = median(ln_lag_eav, na.rm = T),
+          "sd ln(lag eav)" = sd(ln_lag_eav, na.rm = T),
+          "min ln(estV)" = min(ln_est_v, na.rm = T), 
+          "max ln(estV)" = max(ln_est_v, na.rm = T), 
+          "mean ln(estV)" = mean(ln_est_v, na.rm = T), 
+          "median ln(estV)" = median(ln_est_v),
+          "sd ln(estV)" = sd(ln_est_v, na.rm = T)
+  ) |>
+  pivot_longer(
+    cols = -type, 
+    names_to = c("variable", "statistic"), 
+    names_sep = " " 
+  ) |>
+  unite(col = "var_stat", variable, statistic, sep = " ") |>
+  pivot_wider(
+    id_cols = var_stat, 
+    names_from = type, 
+    values_from = value,
+    values_fn = function(x) format(x, digits = 2, nsmall = 2)
+  ) |>
+  tt()
+          
+tt_cont_var |>
+  save_tt("cont_descr_stats_11_5_24.docx",
+          overwrite = TRUE)
+
+```
+
+```{r}
+#| label: model-vars-cat
+
+tt_cat_vars <- df |>
+  select(type, year) |>
+  group_by(type, year) |>
+  summarize(n = n()) |> 
+  pivot_wider(
+    names_from = type,  # Use 'type' as columns
+    values_from = n,     # Use 'n' as values
+    id_cols = year      # Use 'year' as rows 
+  ) |>
+  tt()
+
+tt_cat_vars |>
+  save_tt("cat_descr_stats_11_5_24.docx",
+          overwrite = TRUE)
+
+
+```
+
+## Visualizations
+
+```{r }
+#| warning: false
+#| message: false
+#| label: fig-linegraph-triads-loggedtaxbase
+  
+df %>% ungroup() |>
+ # mutate(across(.cols = c(ln_eav, ln_est_v), ~.x/1000000) ) %>%
+  group_by(year, triad_name) %>%
+  summarize(
+            eav =sum(cty_cook_eav, na.rm=TRUE),
+            est_value = sum(est_value, na.rm=TRUE)) %>%
+  filter(year > 2008 & year < 2021) %>%
+  ggplot() +
+
+  geom_line(aes(x=year, y = log(eav), group = triad_name)) + 
+
+      geom_line(aes(x=year, y = log(est_value), group = triad_name, color = triad_name), alpha = .5)+
+    geom_point(aes(x=year, y = log(est_value), fill = triad_name, group = triad_name), alpha = .5) +
+  scale_x_continuous(breaks = seq(ceiling(min(2006)), floor(max(2022)), by = 2)) +
+  labs(title = "Summed Value by Triad", y = "Logged Value", x = "")
+```
+
+# Models
+
+## Variations
+
+```{r}
+#| label: tbl-modelsbytype2
+#| tbl-cap: "Uses agency_group fixed effects with grouped and summed taxing agencies. Includes log(eav) and log(est_value) in model. Uses Ptaxsim 2023.0.0. and necessary files edited last on Oct. 12th. Vcov = twoway "
+
+mods_1 <- list(
+  
+  "All Types" = feols(log(total_final_levy) ~ ln_lag_eav + log(est_value)*flip_eav_updowness  | agency_group + year,
+               data = df,
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                ),
+  
+      "All Types" = feols(log(total_final_levy) ~ ln_lag_eav + log(est_value)  | agency_group + year,
+               data = df,
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                ),
+    
+      "All Types" = feols(log(total_final_levy) ~ ln_lag_eav + log(est_value)  + triad_name*reeav_updowness_year| agency_group + year,
+               data = df,
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                ),
+    "All Types" = feols(log(total_final_levy) ~ ln_lag_eav + log(est_value)  | agency_group + year^triad_name,
+               data = df,
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                ),
+  
+    "Homerule" = feols(log(total_final_levy) ~ ln_lag_eav + log(est_value)*flip_eav_updowness  | agency_group + year,
+               data = df |> filter(home_rule_ind == 1 & type == "Muni"),
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                ),
+  
+      "Homerule" = feols(log(total_final_levy) ~ ln_lag_eav + log(est_value)  | agency_group + year,
+               data = df |> filter(home_rule_ind == 1 & type == "Muni"),
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                ),
+  
+     "NonHR" = feols(log(total_final_levy) ~ ln_lag_eav + log(est_value)*flip_eav_updowness | agency_group + year,
+               data = df |> filter(home_rule_ind == 0 & type == "Muni"),
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                ),
+  
+     "NonHR" = feols(log(total_final_levy) ~ ln_lag_eav + log(est_value) | agency_group + year,
+               data = df |> filter(home_rule_ind == 0 & type == "Muni"),
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                ),
+  
+    "Schools" = feols(log(total_final_levy) ~ ln_lag_eav + log(est_value)*flip_eav_updowness  | agency_group + year,
+               data = df |> filter(type == "School"),
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                ) ,
+  
+    "Schools" = feols(log(total_final_levy) ~ ln_lag_eav + log(est_value)  | agency_group + year,
+               data = df |> filter(type == "School"),
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                )      )
+
+
+modelsummary::modelsummary(
+  mods_1,
+  output = "flextable",
+ ##gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
+              stars = TRUE
+)
+
+```
+
+```{r}
+#| label: tbl-modelsbytype3
+#| tbl-cap: "Uses agency_group fixed effects with grouped and summed taxing agencies. Compares models with log(eav), lagged log(eav), and log(est_value) in model.  Vcov = twoway"
+
+mods_1 <- list(
+  
+  "All Types" = feols(log(total_final_levy) ~ ln_lag_eav + log(eav)  | agency_group + year,
+               data = df,
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                ),
+    "All Types" = feols(log(total_final_levy) ~  log(est_value)  | agency_group + year,
+               data = df,
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                ),
+  
+    "Homerule" = feols(log(total_final_levy) ~ ln_lag_eav + log(eav)  | agency_group + year,
+               data = df |> filter(home_rule_ind == 1 & type == "Muni"),
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                ),
+  
+      "Homerule" = feols(log(total_final_levy) ~  log(est_value)*eav_updown  | agency_group + year,
+               data = df |> filter(home_rule_ind == 1 & type == "Muni"),
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                ),
+  
+     "NonHR" = feols(log(total_final_levy) ~ ln_lag_eav + log(eav) | agency_group + year,
+               data = df |> filter(home_rule_ind == 0 & type == "Muni"),
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                ),
+  
+     "NonHR" = feols(log(total_final_levy) ~  log(est_value)*eav_updown | agency_group + year,
+               data = df |> filter(home_rule_ind == 0 & type == "Muni"),
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                ),
+  
+    "Schools" = feols(log(total_final_levy) ~ ln_lag_eav + log(eav)  | agency_group + year,
+               data = df |> filter(type == "School"),
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                ) ,
+  
+    "Schools" = feols(log(total_final_levy) ~ log(est_value)*eav_updown  | agency_group + year,
+               data = df |> filter(type == "School"),
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                )      )
+
+
+modelsummary::modelsummary(
+  mods_1,
+  output = "flextable",
+ ##gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
+              stars = TRUE
+)
+
+```
+
+```{r}
+#| label: export_fes
+#| eval: false
+
+feols_test <- feols(log(total_final_levy) ~  log(est_value)  | agency_group + year,
+               data = df,
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                )
+
+FEs <- fixef(feols_test)
+
+FE_agencies <- as.list(FEs$agency_group[1])
+
+FE_vals <- as.list(FEs$agency_group[3])
+
+FE_agencies_df <- as.data.frame(FE_agencies)
+
+FE_agencies_df <- FE_agencies_df |>
+  pivot_longer()
+
+
+```
+
+```{r}
+#| label: tbl-modelsbytype4
+#| tbl-cap: "Uses agency_group fixed effects with grouped and summed taxing agencies. Compares models with log(eav), lagged log(eav), and log(est_value) in model. vcov = twoway "
+
+mods_1 <- list(
+  
+    "Homerule" = feols(log(total_final_levy) ~ ln_lag_eav + log(eav)*eav_updown  | agency_group + year,
+               data = df |> filter(home_rule_ind == 1 & type == "Muni"),
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                ),
+  
+      "Homerule" = feols(log(total_final_levy) ~  log(est_value)*eav_updown  | agency_group + year,
+               data = df |> filter(home_rule_ind == 1 & type == "Muni"),
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                ),
+  
+     "NonHR" = feols(log(total_final_levy) ~ ln_lag_eav + log(eav)*eav_updown | agency_group + year,
+               data = df |> filter(home_rule_ind == 0 & type == "Muni"),
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                ),
+  
+     "NonHR" = feols(log(total_final_levy) ~  log(est_value)*eav_updown | agency_group + year,
+               data = df |> filter(home_rule_ind == 0 & type == "Muni"),
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                ),
+  
+    "Schools" = feols(log(total_final_levy) ~ ln_lag_eav + log(eav)*eav_updown  | agency_group + year,
+               data = df |> filter(type == "School"),
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                ) ,
+  
+    "Schools" = feols(log(total_final_levy) ~ log(est_value)*eav_updown  | agency_group + year,
+               data = df |> filter(type == "School"),
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                )      )
+
+
+modelsummary::modelsummary(
+  mods_1,
+  output = "flextable",
+ ##gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
+              stars = TRUE
+)
+
+```
+
+
+```{r}
+#| label: tbl-updown
+#| tbl-cap: "Uses agency_group fixed effects with grouped and summed taxing agencies. Includes log(eav) and log(est_value) in model. Uses Ptaxsim 2023.0.0. and necessary files edited last on Oct. 12th. Vcov = twoway "
+
+mods_1 <- list(
+  
+  "All Types" = feols(log(total_final_levy) ~ ln_lag_eav*eav_updown + log(est_value)*flip_eav_updowness  | agency_group + year,
+               data = df,
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                ),
+  
+    "Homerule" = feols(log(total_final_levy) ~ ln_lag_eav*eav_updown + log(est_value)*flip_eav_updowness  | agency_group + year,
+               data = df |> filter(home_rule_ind == 1 & type == "Muni"),
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                ),
+  
+     "NonHR" = feols(log(total_final_levy) ~ ln_lag_eav*eav_updown + log(est_value)*flip_eav_updowness | agency_group + year,
+               data = df |> filter(home_rule_ind == 0 & type == "Muni"),
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                ),
+  
+    "Schools" = feols(log(total_final_levy) ~ ln_lag_eav*eav_updown + log(est_value)*flip_eav_updowness  | agency_group + year,
+               data = df |> filter(type == "School"),
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                ) ,
+    
+  "All Types" = feols(log(total_final_levy) ~ ln_lag_eav + ln_eav*eav_updown + log(est_value)  | agency_group + year,
+               data = df,
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                ),
+  
+    "Homerule" = feols(log(total_final_levy) ~ ln_lag_eav + ln_eav*eav_updown + log(est_value)  | agency_group + year,
+               data = df |> filter(home_rule_ind == 1 & type == "Muni"),
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                ),
+  
+     "NonHR" = feols(log(total_final_levy) ~ ln_lag_eav + ln_eav*eav_updown + log(est_value) | agency_group + year,
+               data = df |> filter(home_rule_ind == 0 & type == "Muni"),
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                ),
+  
+    "Schools" = feols(log(total_final_levy) ~ ln_lag_eav + ln_eav*eav_updown + log(est_value)  | agency_group + year,
+               data = df |> filter(type == "School"),
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                )   
+  )
+
+
+modelsummary::modelsummary(
+  mods_1,
+  output = "flextable",
+ ##gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
+              stars = TRUE
+)
+
+```
+
+```{r}
+#| label: tbl-merriman_models_start2011
+#| tbl-cap: "**2011-2020. All Agencies (after Grouping and Cleaning)** Agency_group and year fixed effects. Uses grouped and summed taxing agencies. Includes lagged log(eav) and log(est_value) in model. Uses Ptaxsim 2023.0.0. and necessary files edited last on Oct. 12th. HC1 standard errors as is the default for Stata. "
+
+
+df2011 <- df |> filter(year > 2010 & year <= 2020)
+
+mods_1 <- list(
+  
+  "1" = feols(log(total_final_levy) ~ ln_eav | agency_group + year,
+               data = df2011,
+               vcov = "hc1",
+               panel.id = c("agency_group", "year")
+                ),
+  
+    "2" = feols(log(total_final_levy) ~ ln_est_v | agency_group + year,
+               data = df2011,
+               vcov = "hc1",
+               panel.id = c("agency_group", "year")
+                ),
+  
+      "3" = feols(log(total_final_levy) ~ ln_lag_eav  | agency_group + year,
+               data = df2011,
+               vcov = "hc1",
+               panel.id = c("agency_group", "year")
+                ),
+  
+     "4A. HC1" = feols(log(total_final_levy) ~ ln_lag_eav + ln_est_v | agency_group + year,
+               data = df2011,
+               vcov = "hc1",
+               panel.id = c("agency_group", "year")
+                       ),
+  
+     "4B. Twoway FE" = feols(log(total_final_levy) ~ ln_lag_eav + ln_est_v | agency_group + year,
+               data = df2011,
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                       )
+)
+
+modelsummary::modelsummary(
+  mods_1,
+  output = "flextable",
+# gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
+              stars = TRUE
+)
+
+```
+```{r}
+#| label: tbl-merriman_models_start2014
+#| tbl-cap: "**2014-2020. All Agencies (after Grouping and Cleaning)** Agency_group and year fixed effects. Uses grouped and summed taxing agencies. Includes lagged log(eav) and log(est_value) in model. Uses Ptaxsim 2023.0.0. and necessary files edited last on Oct. 12th. HC1 standard errors as is the default for Stata. "
+
+
+df2014 <- df |> filter(year > 2013 & year <= 2020)
+
+mods_1 <- list(
+  
+  "1" = feols(log(total_final_levy) ~ ln_eav | agency_group + year,
+               data = df2014,
+               vcov = "hc1",
+               panel.id = c("agency_group", "year")
+                ),
+  
+    "2" = feols(log(total_final_levy) ~ ln_est_v | agency_group + year,
+               data = df2014,
+               vcov = "hc1",
+               panel.id = c("agency_group", "year")
+                ),
+  
+      "3" = feols(log(total_final_levy) ~ ln_lag_eav  | agency_group + year,
+               data = df2014,
+               vcov = "hc1",
+               panel.id = c("agency_group", "year")
+                ),
+  
+     "4A. HC1" = feols(log(total_final_levy) ~ ln_lag_eav + ln_est_v | agency_group + year,
+               data = df2014,
+               vcov = "hc1",
+               panel.id = c("agency_group", "year")
+                       ),
+  
+     "4B. Twoway FE" = feols(log(total_final_levy) ~ ln_lag_eav + ln_est_v | agency_group + year,
+               data = df2014,
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                       )
+)
+
+modelsummary::modelsummary(
+  mods_1,
+  output = "flextable",
+# gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
+              stars = TRUE
+)
+
+```
+
+```{r}
+#| label: tbl-modelsbytype_start2011
+#| tbl-cap: "2011-2020. Uses agency_group fixed effects with grouped and summed taxing agencies. Includes log(eav) and log(est_value) in model. Uses Ptaxsim 2023.0.0. and necessary files edited last on Oct. 12th. Hc1 standard errors. "
+
+mods_1 <- list(
+  
+  "All Types" = feols(log(total_final_levy) ~ ln_lag_eav + log(est_value)*flip_eav_updowness  | agency_group + year,
+               data = df2011,
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                ),
+  
+    "Homerule" = feols(log(total_final_levy) ~ ln_lag_eav + log(est_value)*flip_eav_updowness  | agency_group + year,
+               data = df2011 |> filter(home_rule_ind == 1 & type == "Muni"),
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                ),
+  
+     "NonHR" = feols(log(total_final_levy) ~ ln_lag_eav + log(est_value)*flip_eav_updowness | agency_group + year,
+               data = df2011 |> filter(home_rule_ind == 0 & type == "Muni"),
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                ),
+  
+    "Schools" = feols(log(total_final_levy) ~ ln_lag_eav + log(est_value)*flip_eav_updowness  | agency_group + year,
+               data = df2011 |> filter(type == "School"),
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                )        )
+
+
+modelsummary::modelsummary(
+  mods_1,
+  output = "flextable",
+ ##gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
+              stars = TRUE
+)
+
+```
+
+```{r}
+#| label: tbl-modelsbytype_start2014
+#| tbl-cap: "2014-2020. Uses agency_group fixed effects with grouped and summed taxing agencies. Includes log(eav) and log(est_value) in model. Uses Ptaxsim 2023.0.0. and necessary files edited last on Oct. 12th. Hc1 standard errors. "
+
+mods_1 <- list(
+  
+  "All Types" = feols(log(total_final_levy) ~ ln_lag_eav + log(est_value)*flip_eav_updowness  | agency_group + year,
+               data = df2014,
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                ),
+  
+    "Homerule" = feols(log(total_final_levy) ~ ln_lag_eav + log(est_value)*flip_eav_updowness  | agency_group + year,
+               data = df2014 |> filter(home_rule_ind == 1 & type == "Muni"),
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                ),
+  
+     "NonHR" = feols(log(total_final_levy) ~ ln_lag_eav + log(est_value)*flip_eav_updowness | agency_group + year,
+               data = df2014 |> filter(home_rule_ind == 0 & type == "Muni"),
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                ),
+  
+    "Schools" = feols(log(total_final_levy) ~ ln_lag_eav + log(est_value)*flip_eav_updowness  | agency_group + year,
+               data = df2014 |> filter(type == "School"),
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                )        )
+
+
+modelsummary::modelsummary(
+  mods_1,
+  output = "flextable",
+ ##gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
+              stars = TRUE
+)
+
+```
+
+
+## Matching Merriman's Stata Output
+
+```{r}
+#| label: tbl-merriman_models-agency_group
+#| tbl-cap: "**2010 to 2020. All Agencies (after Grouping and Cleaning)** Agency_group and year fixed effects. Uses grouped and summed taxing agencies. Includes lagged log(eav) and log(est_value) in model. Uses Ptaxsim 2023.0.0. and necessary files edited last on Oct. 12th. HC1 standard errors as is the default for Stata. "
+
+
+df <- df |> filter(year >= 2010 & year <= 2020)
+
+mods_1 <- list(
+  
+  "1" = feols(log(total_final_levy) ~ ln_eav | agency_group + year,
+               data = df,
+               vcov = "hc1",
+               panel.id = c("agency_group", "year")
+                ),
+  
+    "2" = feols(log(total_final_levy) ~ ln_est_v | agency_group + year,
+               data = df,
+               vcov = "hc1",
+               panel.id = c("agency_group", "year")
+                ),
+  
+      "3" = feols(log(total_final_levy) ~ ln_lag_eav  | agency_group + year,
+               data = df,
+               vcov = "hc1",
+               panel.id = c("agency_group", "year")
+                ),
+  
+     "4A. HC1" = feols(log(total_final_levy) ~ ln_lag_eav + ln_est_v | agency_group + year,
+               data = df,
+               vcov = "hc1",
+               panel.id = c("agency_group", "year")
+                       ),
+  
+     "4B. Twoway FE" = feols(log(total_final_levy) ~ ln_lag_eav + ln_est_v | agency_group + year,
+               data = df,
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                       )
+)
+
+modelsummary::modelsummary(
+  mods_1,
+  output = "flextable",
+# gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
+              stars = TRUE
+)
+
+```
+
+```{r}
+#| label: tbl-homerule-agency_group
+#| tbl-cap: "**Home Rule Agencies only!** Uses agency_group fixed effects with grouped and summed taxing agencies. Includes log(eav) and log(est_value) in model. Uses Ptaxsim 2023.0.0. and necessary files edited last on Oct. 12th. Twoway clustered standard errors. "
+
+library(fixest)
+
+hr_df = df %>% filter(home_rule_ind == 1)
+mods_1 <- list(
+  
+      "1" = feols(log(total_final_levy) ~  log(est_value) | agency_group + year,
+               data = hr_df,
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                ),
+      
+  "2" = feols(log(total_final_levy) ~ ln_lag_eav | agency_group + year,
+               data = hr_df,
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                ),
+  
+
+  
+     "3" = feols(log(total_final_levy) ~ ln_lag_eav + log(est_value) + flip_eav_updowness | agency_group + year,
+               data = hr_df,
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                ),
+  
+    "4" = feols(log(total_final_levy) ~ log(est_value) + ln_lag_eav | agency_group + year,
+               data = hr_df,
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                ),
+  
+  "Interact" = feols(log(total_final_levy) ~ ln_lag_eav + log(est_value) + log(est_value)*flip_eav_updowness | agency_group + year,
+               data = hr_df,
+               vcov = "twoway",
+               panel.id = c("agency_group", "year")
+                )
+  )
+
+
+modelsummary::modelsummary(
+  mods_1,
+  output = "flextable",
+ #gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
+              stars = TRUE
+)
+
+```
+
+```{r}
+#| label: tbl-NONhomerule-agency_group
+#| tbl-cap: "**Non-Home Rule Municipalities only** Uses agency_group fixed effects with grouped and summed taxing agencies. Includes log(eav) and log(est_value) in model. Uses Ptaxsim 2023.0.0. and necessary files edited last on Oct. 12th. HC1 standard errors. "
+
+library(fixest)
+
+nonhr_df = df %>% 
+  filter(home_rule_ind == 0 & type == "Muni")
+
+mods_1 <- list(
+  
+    
+    "1" = feols(log(total_final_levy) ~  log(est_value) | agency_group + year,
+               data = nonhr_df,
+               vcov = "hc1",
+               panel.id = c("agency_group", "year")
+                ),
+  
+    
+  "2" = feols(log(total_final_levy) ~ ln_lag_eav | agency_group + year,
+               data = nonhr_df,
+               vcov = "hc1",
+               panel.id = c("agency_group", "year")
+                ),
+
+     "3" = feols(log(total_final_levy) ~ ln_lag_eav + log(est_value)*flip_eav_updowness | agency_group + year,
+               data = nonhr_df,
+               vcov = "hc1",
+               panel.id = c("agency_group", "year")
+                ),
+  
+    "4" = feols(log(total_final_levy) ~ log(est_value) + ln_lag_eav | agency_group + year,
+               data = nonhr_df,
+               vcov = "hc1",
+               panel.id = c("agency_group", "year")
+                ),
+      "4" = feols(log(total_final_levy) ~ log(est_value) + ln_eav  | agency_group + year,
+               data = nonhr_df,
+               vcov = "hc1",
+               panel.id = c("agency_group", "year")
+                ),
+  
+  "Interact" = feols(log(total_final_levy) ~ ln_lag_eav + log(est_value) + log(est_value)*flip_eav_updowness | agency_group + year,
+               data = nonhr_df,
+               vcov = "hc1",
+               panel.id = c("agency_group", "year")
+                )
+  )
+
+
+modelsummary::modelsummary(
+  mods_1,
+  output = "flextable",
+# gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
+              stars = TRUE
+)
+
+```
+
+```{r}
+#| label: tbl-school-hc1
+#| tbl-cap: "**Schools only** Uses agency_group fixed effects with grouped and summed taxing agencies. Includes log(eav) and log(est_value) in model. Uses Ptaxsim 2023.0.0. and necessary files edited last on Oct. 12th. HC1 standard errors. "
+
+library(fixest)
+
+school_df = df %>% 
+  filter(type == "School")
+
+mods_1 <- list(
+  
+    
+    "1" = feols(log(total_final_levy) ~  log(est_value) | agency_group + year,
+               data = school_df,
+               vcov = "hc1",
+               panel.id = c("agency_group", "year")
+                ),
+  
+    
+  "2" = feols(log(total_final_levy) ~ ln_lag_eav | agency_group + year,
+               data = school_df,
+               vcov = "hc1",
+               panel.id = c("agency_group", "year")
+                ),
+
+     "3" = feols(log(total_final_levy) ~ ln_lag_eav + log(est_value)*flip_eav_updowness | agency_group + year,
+               data = school_df,
+               vcov = "hc1",
+               panel.id = c("agency_group", "year")
+                ),
+  
+    "4" = feols(log(total_final_levy) ~ log(est_value) + ln_lag_eav | agency_group + year,
+               data = school_df,
+               vcov = "hc1",
+               panel.id = c("agency_group", "year")
+                ),
+      "4" = feols(log(total_final_levy) ~ log(est_value) + ln_eav  | agency_group + year,
+               data = school_df,
+               vcov = "hc1",
+               panel.id = c("agency_group", "year")
+                ),
+  
+  "Interact" = feols(log(total_final_levy) ~ ln_lag_eav + log(est_value) + log(est_value)*flip_eav_updowness | agency_group + year,
+               data = school_df,
+               vcov = "hc1",
+               panel.id = c("agency_group", "year")
+                )
+  )
+
+
+modelsummary::modelsummary(
+  mods_1,
+  output = "flextable",
+# gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
+              stars = TRUE
+)
+
+```
+
+```{r}
+#| label: tbl-modelsbytype
+#| tbl-cap: "Uses agency_group fixed effects with grouped and summed taxing agencies. Includes log(eav) and log(est_value) in model. Uses Ptaxsim 2023.0.0. and necessary files edited last on Oct. 12th. HC1 standard errors. "
+
+library(fixest)
+
+mods_1 <- list(
+  
+  "All Types" = feols(log(total_final_levy) ~ ln_lag_eav + log(est_value)  | agency_group + year,
+               data = df,
+               vcov = "hc1",
+               panel.id = c("agency_group", "year")
+                ),
+  
+      "Homerule Munis" = feols(log(total_final_levy) ~ ln_lag_eav + log(est_value)  | agency_group + year,
+               data = df |> filter(home_rule_ind == 1 & type == "Muni"),
+               vcov = "hc1",
+               panel.id = c("agency_group", "year")
+                ),
+     "NonHR" = feols(log(total_final_levy) ~ ln_lag_eav + log(est_value) | agency_group + year,
+               data = df |> filter(home_rule_ind == 0 & type != "School"),
+               vcov = "hc1",
+               panel.id = c("agency_group", "year")
+                ),
+       "NonHR Munis" = feols(log(total_final_levy) ~ ln_lag_eav + log(est_value) | agency_group + year,
+               data = df |> filter(home_rule_ind == 0 & type == "Muni"),
+               vcov = "hc1",
+               panel.id = c("agency_group", "year")
+                ),
+    "Schools" = feols(log(total_final_levy) ~ ln_lag_eav + log(est_value) | agency_group + year,
+               data = df |> filter(type == "School"),
+               vcov = "hc1",
+               panel.id = c("agency_group", "year")
+                
+                )
+  )
+
+
+modelsummary::modelsummary(
+  mods_1,
+  output = "flextable",
+ #gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
+              stars = TRUE
+)
+
+```
+
+## Old
+
+### Old Models w/o "Estimated Value"
+
+```{r old_models}
+
+library(fixest)
+
+models <- list(
+  "Plain TWFE" = feols(log(total_final_levy) ~ log(cty_cook_eav)  | agency_group + year,  data = grouped_manual, vcov = "newey_west", panel.id = c("agency_group", "year")),
+  
+      "Homerule TWFE" = feols(log(total_final_levy) ~ log(cty_cook_eav)  | agency_group + year,  data = grouped_manual |> filter(home_rule_ind == "1"), vcov = "newey_west", panel.id = c("agency_group", "year")),
+      
+  "Nonhomerule" = feols(log(total_final_levy)~ log(cty_cook_eav)  | agency_group + year, vcov = "newey_west", panel.id = c("agency_group", "year"), data = grouped_manual |> filter(home_rule_ind == "0")),
+  
+    "Nonhomerule - noschools" = feols(log(total_final_levy)~ log(cty_cook_eav)  | agency_group + year, vcov = "newey_west", panel.id = c("agency_group", "year"), data = grouped_manual |> filter(home_rule_ind == "0" & type != "School")),
+  
+  "TWFE w/ AV Lags" = feols(log(total_final_levy)~ log(cty_cook_eav) + l(log(cty_cook_eav), 1) + l(log(cty_cook_eav), 2 ) | agency_group + year, vcov = "newey_west", panel.id = c("agency_group", "year"), data = grouped_manual),
+  
+  "Homerule TWFE" = feols(log(total_final_levy) ~ log(cty_cook_eav) + l(log(cty_cook_eav), 1) + l(log(cty_cook_eav), 2 ) | agency_group + year,  data = grouped_manual |> filter(home_rule_ind == "1"), vcov = "newey_west", panel.id = c("agency_group", "year")),
+      
+  "Nonhomerule" = feols(log(total_final_levy)~ log(cty_cook_eav) + l(log(cty_cook_eav), 1) + l(log(cty_cook_eav), 2 ) | agency_group + year, vcov = "newey_west", panel.id = c("agency_group", "year"), data = grouped_manual |> filter(home_rule_ind == "0"))
+  
+  )
+
+
+modelsummary(
+  models,
+  output = "flextable",
+              stars = TRUE
+)
+
+
+```
