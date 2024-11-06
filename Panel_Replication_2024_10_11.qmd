@@ -646,8 +646,114 @@ tt_cat_vars |>
 
 
 ```
+```{r}
+#| label: minor_type_by_major_type
+
+before_table_pre_format <- before_table |>
+  mutate(minor_type = case_when(minor_type == "BOND" ~ "Bond Fund",
+                                minor_type == "ELEMENTARY" ~ "Elementary School District",
+                                minor_type == "FIRE" ~ "Fire District",
+                                minor_type == "GEN ASST" ~ "General Assistance Fund",
+                                minor_type == "HEALTH" ~ "Health Services",
+                                minor_type == "INFRA" ~ "Infrastructure Fund",
+                                minor_type == "LIBRARY" ~ "Library District",
+                                minor_type == "MISC" ~ "Miscellaneous District",
+                                minor_type == "MUNI" ~ "Municipality",
+                                minor_type == "PARK" ~ "Park District",
+                                minor_type == "SECONDARY" ~ "Secondary School District",
+                                minor_type == "TOWNSHIP" ~ "Township",
+                                minor_type == "POLICE" ~ "Police District",
+                                TRUE ~ minor_type
+                                 ))
+
+major_minor_tt <- datasummary_crosstab(minor_type~type,  
+                     statistic = 1~1+N, 
+                     data = before_table_pre_format |>
+                            filter(year == 2022))
+
+major_minor_tt
+
+major_minor_tt |>
+  save_tt("major_minor_agency_crosstab_11_5_2024.docx",
+          overwrite = TRUE)
+
+
+```
 
 ## Visualizations
+
+Colors: d40032, 001e61, 41b6e5, ffbe3e, and 0085ad
+
+```{r}
+#| label: levies_over_time_by_type
+
+df |> 
+  group_by(year, type) |> 
+  summarize(median_ln_levy = median(ln_levy, na.rm = TRUE)) |> 
+  bind_rows(
+    # Generates the "total" line
+    df |> 
+      group_by(year) |>  
+      summarize(median_ln_levy = median(ln_levy, na.rm = TRUE), type = "Total")) |> 
+  ggplot(aes(x = year, y = median_ln_levy, color = type)) + 
+  geom_line() +
+  labs(
+    title = "Median ln(levy) Over Time by Taxing Agency Type",
+    x = "Year",
+    y = "Median ln(Levy)",
+    color = "Agency Type"
+  ) +
+  scale_color_manual(
+    values = c(
+      "Muni" = "#d40032", 
+      "School" = "#001e61", 
+      "Township" = "#41b6e5", 
+      "Other" = "#ffbe3e",  
+      "Total" = "#0085ad" 
+    ),
+    breaks = c("Muni", "School", "Township", "Other", "Total")  # Reorder legend
+  ) +
+  scale_x_continuous(breaks = seq(min(df$year), max(df$year), by = 2)) +  # Adjust x-axis breaks 
+  theme_minimal()
+  
+
+
+```
+
+```{r}
+#| label: tax-base-over-time
+
+df |> 
+  group_by(year, type) |> 
+  summarize(median_ln_av = median(ln_av, na.rm = TRUE)) |> 
+  bind_rows(
+    # Generates the "total" line
+    df |> 
+      group_by(year) |>  
+      summarize(median_ln_av = median(ln_levy, na.rm = TRUE), type = "Total")) |> 
+  ggplot(aes(x = year, y = median_ln_av, color = type)) + 
+  geom_line() +
+  labs(
+    title = "Median ln(AV) Over Time by Taxing Agency Type",
+    x = "Year",
+    y = "Median ln(AV)",
+    color = "Agency Type"
+  ) +
+  scale_color_manual(
+    values = c(
+      "Muni" = "#d40032", 
+      "School" = "#001e61", 
+      "Township" = "#41b6e5", 
+      "Other" = "#ffbe3e",  
+      "Total" = "#0085ad" 
+    ),
+    breaks = c("Muni", "School", "Township", "Other", "Total")  # Reorder legend
+  ) +
+  scale_x_continuous(breaks = seq(min(df$year), max(df$year), by = 2)) +  # Adjust x-axis breaks 
+  theme_minimal()
+
+```
+
 
 ```{r }
 #| warning: false
