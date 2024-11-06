@@ -349,7 +349,7 @@ datasummary_crosstab(minor_type~type,
                      statistic = 1~1+N, 
                      data = before_table_pre_format |>
                             filter(year == 2022))
-                      )
+                      
 
 ```
 
@@ -573,9 +573,81 @@ df <- df |> filter(year >= 2008  & year < 2023 & triad_name != "City"
 
 If we drop Chicago, we get to keep another year of data for all of the other munis in North and South triads. 
 
+# NTA Descriptive Statistics
+
+## Tables
 
 
-# Graphs
+```{r}
+#| label: model-vars-continuous-descr
+
+tt_cont_var <- df |>
+  select(type, ln_av, ln_levy, ln_est_v, ln_lag_av) |>
+  group_by(type) |>
+  reframe(n = n(), 
+          "min ln(av)" = min(ln_av, na.rm = T), 
+          "max ln(av)" = max(ln_av, na.rm = T), 
+          "mean ln(av)" = mean(ln_av, na.rm = T), 
+          "median ln(av)" = median(ln_av, na.rm = T),
+          "sd ln(av)" = sd(ln_av, na.rm = T),
+          "min ln(levy)" = min(ln_levy, na.rm = T), 
+          "max ln(levy)" = max(ln_levy, na.rm = T), 
+          "mean ln(levy)" = mean(ln_levy, na.rm = T), 
+          "median ln(levy)" = median(ln_levy, na.rm = T),
+          "sd ln(levy)" = sd(ln_levy, na.rm = T),
+          "min ln(lag av)" = min(ln_lag_av, na.rm = T), 
+          "max ln(lag av)" = max(ln_lag_av, na.rm = T), 
+          "mean ln(lag av)" = mean(ln_lag_av, na.rm = T), 
+          "median ln(lag av)" = median(ln_lag_av, na.rm = T),
+          "sd ln(lag av)" = sd(ln_lag_av, na.rm = T),
+          "min ln(estV)" = min(ln_est_v, na.rm = T), 
+          "max ln(estV)" = max(ln_est_v, na.rm = T), 
+          "mean ln(estV)" = mean(ln_est_v, na.rm = T), 
+          "median ln(estV)" = median(ln_est_v),
+          "sd ln(estV)" = sd(ln_est_v, na.rm = T)
+  ) |>
+  pivot_longer(
+    cols = -type, 
+    names_to = c("variable", "statistic"), 
+    names_sep = " " 
+  ) |>
+  unite(col = "var_stat", variable, statistic, sep = " ") |>
+  pivot_wider(
+    id_cols = var_stat, 
+    names_from = type, 
+    values_from = value,
+    values_fn = function(x) format(x, digits = 2, nsmall = 2)
+  ) |>
+  tt()
+          
+tt_cont_var |>
+  save_tt("cont_descr_stats_11_5_24.docx",
+          overwrite = TRUE)
+
+```
+
+```{r}
+#| label: model-vars-cat
+
+tt_cat_vars <- df |>
+  select(type, year) |>
+  group_by(type, year) |>
+  summarize(n = n()) |> 
+  pivot_wider(
+    names_from = type,  # Use 'type' as columns
+    values_from = n,     # Use 'n' as values
+    id_cols = year      # Use 'year' as rows 
+  ) |>
+  tt()
+
+tt_cat_vars |>
+  save_tt("cat_descr_stats_11_5_24.docx",
+          overwrite = TRUE)
+
+
+```
+
+## Visualizations
 
 ```{r }
 #| warning: false
