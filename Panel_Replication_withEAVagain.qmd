@@ -754,6 +754,10 @@ all_models_formatted <- modelsummary(all_models,
 
 all_models_formatted
 
+save_tt(all_models_formatted,
+        "all_models_2024_11_6.docx",
+        overwrite = TRUE)
+
 ```
 
 ```{r}
@@ -762,6 +766,13 @@ all_models_formatted
 munis_and_schools <- list(
   
   "Municipalities" = list(
+    
+    "All Municipalities" = feols(log(total_final_levy) ~ log(eav) + 
+                         l(log(eav), 1) | agency_group + year,
+                data = df |> filter(type == "Muni"),
+                vcov = ~agency_group,
+                panel.id = c("agency_group", "year")
+                ),
     
     "Homerule" = feols(log(total_final_levy) ~ log(eav) + 
                          l(log(eav), 1) | agency_group + year,
@@ -780,9 +791,16 @@ munis_and_schools <- list(
   
   "Schools" = list(
     
-    "Primary" = feols(log(total_final_levy) ~ log(eav) + 
+    "All Schools" = feols(log(total_final_levy) ~ log(eav) + 
                          l(log(eav), 1) | agency_group + year,
-                data = df |> filter(type == "School" & minor_type == "PRIMARY"),
+                data = df |> filter(type == "School"),
+                vcov = ~agency_group,
+                panel.id = c("agency_group", "year")
+                ),
+    
+    "Elementary" = feols(log(total_final_levy) ~ log(eav) + 
+                         l(log(eav), 1) | agency_group + year,
+                data = df |> filter(type == "School" & minor_type == "ELEMENTARY"),
                 vcov = ~agency_group,
                 panel.id = c("agency_group", "year")
                 ),
@@ -804,6 +822,10 @@ munis_and_schools_formatted <- modelsummary(munis_and_schools,
              stars = TRUE)
 
 munis_and_schools_formatted
+
+save_tt(munis_and_schools_formatted,
+        "munis_and_schools_formatted_2024_11_6.docx",
+        overwrite = TRUE)
 
 ```
 
