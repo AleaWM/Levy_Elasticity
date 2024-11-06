@@ -75,9 +75,9 @@ library(tinytable)
 ## of the PTAXSIM database!
 
 
-#ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "./ptaxsim.db/ptaxsim-2023.0.0.db")
+ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "./ptaxsim.db/ptaxsim-2023.0.0.db")
  
-ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/ptaxsim.db/ptaxsim-2023.0.0.db")
+#ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/ptaxsim.db/ptaxsim-2023.0.0.db")
 
 agency_dt <- DBI::dbGetQuery(
   ptaxsim_db_conn,
@@ -676,6 +676,137 @@ df %>% ungroup() |>
 ```
 
 # Models
+
+## NTA Models
+
+```{r}
+#| label: tbl-main-models
+  
+  all_models <- list(
+    
+    "All Agencies" = list(
+    
+    "I" = feols(log(total_final_levy) ~ log(eav) | agency_group + year,
+                data = df,
+                vcov = ~agency_group,
+                panel.id = c("agency_group", "year"),
+                ),
+    
+    "II" = feols(log(total_final_levy) ~ log(eav) + l(log(eav), 1) | agency_group + year,
+                data = df,
+                vcov = ~agency_group,
+                panel.id = c("agency_group", "year"),
+                )
+    ),
+    
+    "Municipalities" = list(
+
+    "I" = feols(log(total_final_levy) ~ log(eav) | agency_group + year,
+          data = df |> filter(type == "Muni"),
+          vcov = ~agency_group,
+          panel.id = c("agency_group", "year"),
+          ),
+    
+    "II" = feols(log(total_final_levy) ~ log(eav) + l(log(eav), 1) | agency_group + year,
+                data = df |> filter(type == "Muni"),
+                vcov = ~agency_group,
+                panel.id = c("agency_group", "year"),
+                )
+    ),      
+    
+    "Schools" = list(
+
+    "I" = feols(log(total_final_levy) ~ log(eav) | agency_group + year,
+          data = df |> filter(type == "School"),
+          vcov = ~agency_group,
+          panel.id = c("agency_group", "year"),
+          ),
+    
+    "II" = feols(log(total_final_levy) ~ log(eav) + l(log(eav), 1) | agency_group + year,
+                data = df |> filter(type == "School"),
+                vcov = ~agency_group,
+                panel.id = c("agency_group", "year"),
+                )
+    ),
+    
+  "Townships" = list(
+
+    "I" = feols(log(total_final_levy) ~ log(eav) | agency_group + year,
+          data = df |> filter(type == "Township"),
+          vcov = ~agency_group,
+          panel.id = c("agency_group", "year"),
+          ),
+    
+    "II" = feols(log(total_final_levy) ~ log(eav) + l(log(eav), 1) | agency_group + year,
+                data = df |> filter(type == "Township"),
+                vcov = ~agency_group,
+                panel.id = c("agency_group", "year"),
+                )
+    )
+    )
+  
+all_models_formatted <- modelsummary(all_models,
+             shape = "cbind",                                  
+             #coef_map = name_map,
+             fmt = function(x) round(x, 2),
+             #gof_omit = "AIC|BIC|RMSE|Std.Errors|FE",
+             stars = TRUE)
+
+all_models_formatted
+
+```
+
+```{r}
+#| label: munis_and_schools_models
+
+munis_and_schools <- list(
+  
+  "Municipalities" = list(
+    
+    "Homerule" = feols(log(total_final_levy) ~ log(eav) + 
+                         l(log(eav), 1) | agency_group + year,
+                data = df |> filter(type == "Muni" & home_rule_ind == 1),
+                vcov = ~agency_group,
+                panel.id = c("agency_group", "year")
+                ),
+    
+    "Non-Homerule" = feols(log(total_final_levy) ~ log(eav) + 
+                         l(log(eav), 1) | agency_group + year,
+                data = df |> filter(type == "Muni" & home_rule_ind == 0),
+                vcov = ~agency_group,
+                panel.id = c("agency_group", "year")
+                )
+  ),
+  
+  "Schools" = list(
+    
+    "Primary" = feols(log(total_final_levy) ~ log(eav) + 
+                         l(log(eav), 1) | agency_group + year,
+                data = df |> filter(type == "School" & minor_type == "PRIMARY"),
+                vcov = ~agency_group,
+                panel.id = c("agency_group", "year")
+                ),
+    
+    "Secondary" = feols(log(total_final_levy) ~ log(eav) + 
+                         l(log(eav), 1) | agency_group + year,
+                data = df |> filter(type == "School" & minor_type == "SECONDARY"),
+                vcov = ~agency_group,
+                panel.id = c("agency_group", "year")
+                )
+  )
+)
+
+munis_and_schools_formatted <- modelsummary(munis_and_schools,
+             shape = "cbind",                                  
+             #coef_map = name_map,
+             fmt = function(x) round(x, 2),
+             #gof_omit = "AIC|BIC|RMSE|Std.Errors|FE",
+             stars = TRUE)
+
+munis_and_schools_formatted
+
+```
+
 
 ## Variations
 
