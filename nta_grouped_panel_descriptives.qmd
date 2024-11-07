@@ -1,0 +1,341 @@
+---
+title: "NTA Descriptive Stats for Levy Project Data"
+warning: false
+format:
+  html:
+    df-print: paged
+    code-fold: true
+    tbl-cap-location: margin
+    toc: true
+    toc-location: left
+---
+
+
+# Data Prep
+
+```{r setup, warning=FALSE, message=FALSE, output = FALSE}
+library(modelsummary)
+library(tidyverse)
+library(janitor)
+library(dplyr)
+library(fixest)
+library(sandwich)
+
+df <-  read_csv("NTA_data_2024_11_06.csv")
+```
+
+
+
+
+```{r include = FALSE}
+df %>%  filter( year == 2023) %>% summarize(levy = sum(total_final_levy))
+df %>%  filter( year == 2023) %>% summarize(eav = sum(cty_cook_eav))
+df %>%  filter( year == 2023) %>% summarize(total_eav = sum(total_eav))
+
+
+df %>%  filter( year == 2023 & type == "Muni") %>% 
+  summarize(taxed_fmv = sum(taxed_fmv, na.rm=TRUE))
+df %>%  filter( year == 2023 & type == "Muni") %>% 
+  summarize(total_fmv = sum(total_fmv, na.rm=TRUE))
+
+
+```
+
+
+
+
+
+
+
+# Descriptive Stats
+
+```{r eval=FALSE, include=FALSE}
+datasummary_skim(df)
+datasummary_skim(df, type  = "categorical")
+```
+
+
+
+
+# Presentation Tables
+
+## Table 1: Name and Number of Taxing Agencies
+
+
+```{r}
+#| label: tbl-majortypeagencies-in2022-paneldata
+#| tbl-cap: "2023 snapshot of agencies that existed. From panel data. Agencies such as park, library, are within the MUNI/TOWNSHIP major_type."
+
+
+datasummary_crosstab(type ~home_rule_ind, statistic = 1~1+N, 
+                     data = df %>% filter(year==2022), output = "flextable")
+```
+
+
+## Table 2: Levy and Levy Growth
+
+
+
+### Total Levy
+
+
+
+```{r}
+#| label: tbl-extgrowth
+#| tbl-cap: "**Growth in total levy** from 2006 to 2022. Uses summed `total_final_levy` for grouped munis and townships."
+
+ df %>% 
+  filter(year == 2006 | year == 2023 ) %>% 
+  filter(!is.na(total_final_levy)) %>%
+  group_by(agency_group) %>%
+  summarize(n = n()) %>% arrange(desc(n))
+  
+  
+levy_table <- df %>% 
+  filter(year == 2006 | year == 2023 ) %>% 
+  filter(!is.na(total_final_levy)) %>%
+  select(year, agency_group, total_final_levy) %>% 
+  pivot_wider( id_cols = "agency_group", names_from = "year", 
+               values_from = "total_final_levy") %>% 
+  mutate(pct_growth = (round((`2023`-`2006`)/`2006` * 100, digits = 1) ) ) %>%
+  arrange(desc(pct_growth)) %>% 
+    filter(!is.na(pct_growth))
+
+levy_table %>%
+  DT::datatable(rownames = FALSE)
+```
+
+
+```{r}
+df %>% 
+  filter((year == 2006 | year == 2023) ) %>% 
+  select(year, agency_group, total_final_levy) %>% 
+  pivot_wider( id_cols = c("agency_group"), names_from = "year", 
+               values_from = "total_final_levy") %>% 
+  mutate(pct_growth = (round((`2023`-`2006`)/`2006` * 100, digits = 1) )) %>%
+    filter(!is.na(pct_growth)) %>%
+  ggplot() + 
+  geom_histogram(aes(x=pct_growth)) + 
+  theme_classic() + 
+  labs(x = "Growth %", y = "Agency Count", 
+       title = "Distribution of Growth Rates",
+       subtitle = "Summed Levy per Grouped Agency, 2006 to 2022")
+
+```
+
+
+```{r}
+#| label: tbl-levygrowth_summed_median
+#| tbl-cap: "Median levy from 2010 to 2022."
+
+
+
+df %>% 
+  filter((year == 2006 | year == 2023) ) %>% 
+  select(year, agency_group, total_final_levy) %>% 
+  pivot_wider( id_cols = c("agency_group"), names_from = "year", 
+               values_from = "total_final_levy") %>% 
+  mutate(pct_growth = (round((`2023`-`2006`)/`2006` * 100, digits = 1) )) %>%
+    filter(!is.na(pct_growth)) %>%
+
+  ungroup() %>%
+  summarize(
+    `2006 Median Levy` = median(`2006`, na.rm=TRUE),
+    `2006 Mean Levy` = mean(`2006`, na.rm=TRUE),
+    `2006 Levy StdDv` = (sd(`2006`, na.rm=TRUE)),
+    `2023 Median Levy` = median(`2023`, na.rm=TRUE),   
+    `2023 Mean Levy` = mean(`2023`, na.rm=TRUE),
+    `2023 Levy StdDv` = round(sd(`2023`, na.rm=TRUE), digits = 2),
+    `Median Growth of Levy` = round(median(pct_growth, na.rm=TRUE), digits = 2),
+    `Mean Growth of Levy` = round(mean(pct_growth, na.rm=TRUE), digits = 2),
+    `Growth StdDv` = round(sd(pct_growth, na.rm=TRUE)),
+    `# of Agencies` = n()
+  ) |>
+  mutate(across(where(is.numeric), round, digits = 1)) %>%
+  
+  pivot_longer(cols = c(`2006 Median Levy`:`# of Agencies`),  
+               names_to = "statistic", values_to = "value") |>
+  flextable::flextable(cwidth = 1.5)
+ # DT::datatable(rownames = FALSE)
+
+```
+
+## By Agency Type
+```{r}
+#| label: tbl-extgrowth2
+#| tbl-cap: "**Growth in total levy** from 2006 to 2022. Uses summed `total_final_levy` for grouped munis and townships."
+
+
+levy_table <- df %>% 
+  group_by(year, type) %>%
+  summarize(total_final_levy = sum(total_final_levy, na.rm=TRUE) ) %>%
+  filter(year == 2006 | year == 2023 ) %>% 
+  filter(!is.na(total_final_levy)) %>%
+  select(year, type, total_final_levy) %>% 
+  pivot_wider( id_cols = "type", names_from = "year", 
+               values_from = "total_final_levy") %>% 
+  mutate(pct_growth = (round((`2023`-`2006`)/`2006` * 100, digits = 1) ) ) %>%
+  arrange(desc(pct_growth)) %>% 
+    filter(!is.na(pct_growth))
+
+levy_table %>%
+  DT::datatable(rownames = FALSE)
+```
+
+
+
+
+```{r}
+#| label: tbl-levygrowth_summed_medianbytype
+#| tbl-cap: "Median levy by type, from 2006 to 2023."
+
+
+
+df %>%   
+  group_by(year, type) %>%
+  summarize(total_final_levy = sum(total_final_levy, na.rm=TRUE),
+            median_levy = median(total_final_levy)) %>%
+  filter((year == 2006 | year == 2023) ) 
+
+```
+
+
+## Table 3: Tax Base and Tax Base Growth
+
+### Tax Base (in EAV) Growth
+
+```{r}
+#| label: tbl-taxbasegrowth
+#| tbl-cap: "**Growth in the tax base** from 2006 to 2023."
+
+taxbase_table <- df %>% 
+  filter(year == 2006 | year == 2023) %>% 
+  select(year, agency_group, cty_cook_eav) %>% 
+  pivot_wider(id_cols = "agency_group", names_from = "year", 
+              values_from = "cty_cook_eav") %>% 
+  mutate(pct_growth = (round((`2023`-`2006`)/`2006` * 100, digits = 1) ) ) %>%
+  mutate(across(where(is.numeric), round, digits = 2)) %>%  
+  filter(!is.na(pct_growth))
+
+
+taxbase_table %>%
+  arrange(desc(pct_growth)) %>% 
+  DT::datatable(rownames = FALSE)
+
+
+```
+
+
+```{r}
+df %>% 
+  filter(year == 2006 | year == 2023) %>% 
+ # filter(town == "Muni" ) %>% 
+  select(year, agency_group, cty_cook_eav) %>% 
+  pivot_wider(id_cols = "agency_group", names_from = "year", 
+              values_from = "cty_cook_eav") %>% 
+  mutate(pct_growth = (round((`2023`-`2006`)/`2006` * 100, digits = 1) ) ) %>%
+  filter(!is.na(pct_growth)) %>%
+
+  ungroup() %>%
+  summarize(
+    `2006 Median Tax Base` = median(`2006`, na.rm=TRUE),
+    `2006 Mean` = mean(`2006`, na.rm=TRUE),
+    `2006 Tax Base StdDv` = (sd(`2006`, na.rm=TRUE)),
+    `2023 Median Tax Base` = median(`2023`, na.rm=TRUE),
+    `2023 Mean` = mean(`2023`, na.rm=TRUE),
+    `2023 Tax Base StdDv` = round(sd(`2023`, na.rm=TRUE)),
+    `Median Growth of Tax Base` = round(median(pct_growth, na.rm=TRUE), digits = 2),
+    `Mean Growth of Tax Base` = round(mean(pct_growth, na.rm=TRUE), digits = 2),
+    `Growth StdDv` = round(sd(pct_growth, na.rm=TRUE), digits = 2),
+    `# of Agencies` = n()
+  ) |>
+  mutate(across(where(is.numeric), round)) %>%
+  
+  pivot_longer(cols = c(`2006 Median Tax Base`:`# of Agencies`),  
+               names_to = "statistic", values_to = "value") |>
+    flextable::flextable(cwidth = 1.5)
+
+  
+ # DT::datatable(rownames = FALSE) %>%
+ #               DT::formatRound('value', mark = ",", digits = 0) 
+
+```
+
+```{r}
+taxbase_table %>% 
+  ggplot() + 
+  geom_histogram(aes(x=pct_growth)) + theme_classic() + 
+  labs(x = "Growth %", y = "Agency Count", 
+       title = "Growth in Tax Base (in EAV), 2006 to 2022")
+```
+
+```{r}
+df %>% 
+  filter(year == 2006 | year == 2023) %>% 
+ # filter(town == "Muni" ) %>% 
+  group_by(year, type) %>% 
+  summarize(eav = sum(cty_cook_eav, na.rm=TRUE),
+            median_eav = median(cty_cook_eav))
+
+
+```
+
+### CAGR 
+
+First year is 2011, last year is 2022.
+
+```{r}
+current_year <- 2023
+taxbasessums <- df %>% group_by(year) %>% 
+  summarize(cty_cook_eav = sum(cty_cook_eav, na.rm=TRUE))
+
+# function for calculating the CAGR
+calc_cagr <- function(df, n) {
+  df <- taxbasessums %>%
+     arrange(year) %>%
+  #  group_by(agency_group) %>%
+    mutate(cagr = ((`cty_cook_eav` / lag(`cty_cook_eav`, n)) ^ (1 / n)) - 1)
+
+  return(df)
+}
+
+# 2011 to 2022 is 12 years of data
+cagr_12 <- calc_cagr(taxbasessums, 18) %>% 
+    filter(year == as.numeric(as.character(current_year))) %>%
+  summarize(cagr_12 = case_when(year == current_year ~ round(sum(cagr*100, na.rm = TRUE), 2)))
+
+cagr_10 <- calc_cagr(taxbasessums, 10) %>% 
+    filter(year == as.numeric(as.character(current_year))) %>%
+  summarize(cagr_10 = case_when(year == current_year ~ round(sum(cagr*100, na.rm = TRUE), 2)))
+
+cagr_5 <- calc_cagr(taxbasessums, 5) %>% 
+  filter(year == as.numeric(as.character(current_year))) %>%
+  summarize(cagr_5 = case_when(year == current_year ~ round(sum(cagr*100, na.rm = TRUE), 2)))
+
+cagr_3 <- calc_cagr(taxbasessums, 3) %>% 
+  filter(year == current_year) %>%
+  summarize(cagr_3 = case_when(year == current_year ~ round(sum(cagr*100, na.rm = TRUE), 2)))
+
+cagr_2 <- calc_cagr(taxbasessums, 2) %>% 
+  filter(year == current_year) %>%
+  summarize(cagr_2 = case_when(year == current_year ~ round(sum(cagr*100, na.rm = TRUE), 2)))
+
+cagr_1 <- calc_cagr(taxbasessums, 1) %>% 
+  filter(year == current_year) %>%
+  summarize(cagr_1 = case_when(year == current_year ~ round(sum(cagr*100, na.rm = TRUE), 2)))
+
+# update variables so cagr_24 becomes cagr_25
+CAGR_taxbase <- data.frame(cagr_1, cagr_2, cagr_3, cagr_5, cagr_10, cagr_12 ) %>% 
+ # select(-c(agency_group.1, agency_group.2, agency_group.3, agency_group.4, agency_group.5 )) %>% 
+  rename(#"Unique ID" = agency_group, 
+         "1 Year CAGR" = cagr_1, "2 Year CAGR" = cagr_2, "3 Year CAGR" = cagr_3, "5 Year CAGR" = cagr_5, "10 Year CAGR" = cagr_10, "18 Year CAGR" = cagr_12)
+
+
+CAGR_taxbase%>%   
+  DT::datatable(rownames = FALSE) 
+
+```
+
+
+
+
