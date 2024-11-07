@@ -55,7 +55,7 @@ format:
 
 -   Create variable `pct_in_Cook` = cty_cook_eav / cty_total_eav. Keep all taxing agencies that are 90% or more in Cook County. Use cty_total_eav in the models since we are using the full levy amount in the models
 
-```{r setupt, warning = FALSE, message=FALSE}
+```{r setup, warning = FALSE, message=FALSE}
 #| code-fold: true
 
 #knitr::opts_chunk$set(warning = FALSE, message = FALSE)
@@ -1139,6 +1139,89 @@ munis_and_schools <- list(
                 panel.id = c("agency_group", "year")
                 )
     )
+)
+
+munis_and_schools_formatted <- modelsummary(munis_and_schools,
+             shape = "cbind",                                  
+             #coef_map = name_map,
+             fmt = function(x) round(x, 2),
+             #gof_omit = "AIC|BIC|RMSE|Std.Errors|FE",
+             stars = TRUE)
+
+munis_and_schools_formatted
+
+```
+```{r}
+#| label: munis_and_schools_models_estv
+#| column: page
+
+
+munis_and_schools <- list(
+  
+  "Municipalities" = list(
+    
+    "All Municipalities" = feols(log(total_final_levy) ~ log(eav) + 
+                         l(log(eav), 1) | agency_group + year,
+                data = df |> filter(type == "Muni"),
+                vcov = ~agency_group,
+                panel.id = c("agency_group", "year")
+                ),
+    
+    "Homerule" = feols(log(total_final_levy) ~ log(eav) + 
+                         l(log(eav), 1) | agency_group + year,
+                data = df |> filter(type == "Muni" & home_rule_ind == 1),
+                vcov = ~agency_group,
+                panel.id = c("agency_group", "year")
+                ),
+    
+    "Non-Homerule" = feols(log(total_final_levy) ~ log(est_value) + 
+                         l(log(eav), 1) | agency_group + year,
+                data = df |> filter(type == "Muni" & home_rule_ind == 0),
+                vcov = ~agency_group,
+                panel.id = c("agency_group", "year")
+                )
+  ),
+  
+  "Schools" = list(
+    
+    "All Schools" = feols(log(total_final_levy) ~  log(est_value) + 
+                         l(log(eav), 1) | agency_group + year,
+                data = df |> filter(type == "School"),
+                vcov = ~agency_group,
+                panel.id = c("agency_group", "year")
+                ),
+    
+    "Elementary" = feols(log(total_final_levy) ~  log(est_value) + 
+                         l(log(eav), 1) | agency_group + year,
+                data = df |> filter(type == "School" & minor_type == "ELEMENTARY"),
+                vcov = ~agency_group,
+                panel.id = c("agency_group", "year")
+                ),
+    
+    "Secondary" = feols(log(total_final_levy) ~  log(est_value) + 
+                         l(log(eav), 1) | agency_group + year,
+                data = df |> filter(type == "School" & minor_type == "SECONDARY"),
+                vcov = ~agency_group,
+                panel.id = c("agency_group", "year")
+                )
+  ), 
+  
+  "Other" = list(
+    
+    "Townships" = feols(log(total_final_levy) ~  log(est_value) + 
+                         l(log(eav), 1) | agency_group + year,
+                data = df |> filter(type == "Township"),
+                vcov = ~agency_group,
+                panel.id = c("agency_group", "year")
+                ),
+    
+    "Special District" = feols(log(total_final_levy) ~  log(est_value) + 
+                         l(log(eav), 1) | agency_group + year,
+                data = df |> filter(type == "Other"),
+                vcov = ~agency_group,
+                panel.id = c("agency_group", "year")
+                )
+  )
 )
 
 munis_and_schools_formatted <- modelsummary(munis_and_schools,
