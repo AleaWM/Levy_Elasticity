@@ -1654,7 +1654,20 @@ mods_1 <- list(
                data = df |> filter(type == "School"),
                vcov = ~ agency_group,
                panel.id = c("agency_group", "year")
-                ) 
+                ),
+    
+        "Townships" = feols(log(total_final_levy) ~  ln_lag_eav + log(eav) + log(est_value) + log(l(est_value,1)) | agency_group + year,
+                data = df |> filter(type == "Township"),
+                vcov = ~agency_group,
+                panel.id = c("agency_group", "year")
+                ),
+    
+    "Special District" = feols(log(total_final_levy) ~ ln_lag_eav + log(eav) + log(est_value) + log(l(est_value,1)) | agency_group + year,
+                data = df |> filter(type == "Other"),
+                vcov = ~agency_group,
+                panel.id = c("agency_group", "year")
+                )
+  
     )
 
 
