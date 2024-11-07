@@ -1577,7 +1577,7 @@ modelsummary::modelsummary(
 ```
 
 ```{r}
-#| label: tbl-models-MVHAWMhybrid
+#| label: tbl-models-MVHAWM
 #| tbl-cap: "Combo Tables Nov. 7th"
 #| column: page
 
@@ -1683,7 +1683,7 @@ modelsummary::modelsummary(
 
 
 ```{r}
-#| label: tbl-models-MVHAWMhybrid
+#| label: tbl-models-MVHAWMhybrid-withFMV
 #| tbl-cap: "Fair Market Value (FMV) and the Tax Base (TEAV) Nov. 7th"
 #| column: page
 
