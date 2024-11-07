@@ -75,9 +75,9 @@ library(tinytable)
 ## of the PTAXSIM database!
 
 
-ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "./ptaxsim.db/ptaxsim-2023.0.0.db")
+#ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "./ptaxsim.db/ptaxsim-2023.0.0.db")
  
-#ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/ptaxsim.db/ptaxsim-2023.0.0.db")
+ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/ptaxsim.db/ptaxsim-2023.0.0.db")
 
 agency_dt <- DBI::dbGetQuery(
   ptaxsim_db_conn,
@@ -590,6 +590,17 @@ If we drop Chicago, we get to keep another year of data for all of the other mun
 ## Tables
 
 Exported as Word Documents. 
+
+```{r}
+#| label: model-vars-continuous-notlogged2
+#| warning: false
+#| message: false
+
+crosstable::crosstable(data = df, cols = c(type, total_final_levy, cty_total_eav, av, taxed_fmv))
+
+
+```
+
 
 ```{r}
 #| label: model-vars-continuous-notlogged
