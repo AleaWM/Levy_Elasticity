@@ -75,9 +75,9 @@ library(tinytable)
 ## of the PTAXSIM database!
 
 
-#ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "./ptaxsim.db/ptaxsim-2023.0.0.db")
+ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "./ptaxsim.db/ptaxsim-2023.0.0.db")
  
-ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/ptaxsim.db/ptaxsim-2023.0.0.db")
+#ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/ptaxsim.db/ptaxsim-2023.0.0.db")
 
 agency_dt <- DBI::dbGetQuery(
   ptaxsim_db_conn,
@@ -711,6 +711,8 @@ tt_cat_vars |>
 
 ## Visualizations
 
+### Time Trends
+
 ```{r }
 #| warning: false
 #| message: false
@@ -856,6 +858,76 @@ df %>% ungroup() |>
     geom_point(aes(x=year, y = log(est_value), fill = triad_name, group = triad_name), alpha = .5) +
   scale_x_continuous(breaks = seq(ceiling(min(2006)), floor(max(2022)), by = 2)) +
   labs(title = "Summed Value by Triad", y = "Logged Value", x = "")
+```
+
+### Bar Charts/Histograms
+
+```{r}
+#| label: bar_chart_all_agencies
+
+df |>
+  filter(year == 2022) |>
+  mutate(type = ifelse(type == "Muni", "Municipality", type)) |>
+  ggplot(aes(x = type, fill = type)) +
+  geom_bar() +
+  geom_text(stat = 'count', aes(label = ..count.., y = ..count..), vjust = -0.5, color = "black") +
+  labs(
+    title = "Taxing Agency Count by Agency Type",
+    subtitle = "Values Are Consistent Across All Years",
+    x = "Agency Type",
+    y = "N"
+  ) +
+  theme_classic() +
+  scale_fill_manual(values = brewer.pal(n = 6, "Blues")[3:6]) +
+  theme(legend.position = "none",
+        axis.title.y = element_text(angle = 0))
+
+```
+
+```{r}
+#| label: bar_chart_schools
+
+df |>
+  filter(year == 2022) |>
+  filter(type == "School") |>
+  filter(minor_type %in% c("ELEMENTARY", "SECONDARY")) |>
+  ggplot(aes(x = minor_type, fill = minor_type)) +
+  geom_bar() +
+  geom_text(stat = 'count', aes(label = ..count.., y = ..count..), vjust = -0.5, color = "black") +
+  labs(
+    title = "School Districts: Primary and Secondary",
+    subtitle = "Values Are Consistent Across All Years",
+    x = "School Agency Type",
+    y = "N"
+  ) +
+  theme_classic() +
+  scale_fill_manual(values = c(brewer.pal(n = 6, "Blues")[3], brewer.pal(n = 6, "Blues")[5])) +  # Specify colors individually
+  theme(legend.position = "none",
+        axis.title.y = element_text(angle = 0))
+
+```
+
+```{r}
+#| label: bar_chart_homerule
+
+df |>
+  filter(year == 2022) |>
+  filter(type == "Muni") |>
+  mutate(home_rule = ifelse(home_rule_ind == 1, "Yes", "No")) |>  # Create a new column for home rule status
+  ggplot(aes(x = home_rule, fill = home_rule)) +
+  geom_bar() +
+  geom_text(stat = 'count', aes(label = ..count.., y = ..count..), vjust = -0.5, color = "black") +
+  labs(
+    title = "Municipalities by Home Rule Status",
+    subtitle = "Values Are Consistent Across All Years",
+    x = "Home Rule Status",
+    y = "N"
+  ) +
+  theme_classic() +
+  scale_fill_manual(values = brewer.pal(n = 5, "Blues")[3:4]) +  # Use 2 colors from the Blues palette
+  theme(legend.position = "none",
+        axis.title.y = element_text(angle = 0)) 
+
 ```
 
 # Models
