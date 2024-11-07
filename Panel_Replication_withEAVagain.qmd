@@ -244,19 +244,21 @@ grouped_manual <- grouped_manual |>
     total_final_levy = ifelse(total_final_levy == 0, NA, total_final_levy), # change 0's to NAs so ln() doesn't break it
     major_type = paste(list(unique(major_type)), sep = ", "),   
     minor_type = paste(list(unique(minor_type)), sep = ", "),
-    cty_cook_eav = mean(cty_cook_eav, na.rm=TRUE),
-    total_fmv = mean(fmv, na.rm=TRUE),
-    taxed_fmv = mean(fmv_taxed, na.rm=TRUE),
-    taxed_eav = mean(av_taxed, na.rm=TRUE),
-    total_eav = mean(eav, na.rm=TRUE),
-    cty_total_eav = mean(cty_total_eav, na.rm=TRUE), 
-    av = first(av),   
+    cty_cook_eav = first(cty_cook_eav),
+    cty_total_eav = first(cty_total_eav), 
+
+    total_fmv = sum(fmv, na.rm=TRUE),
+    taxed_fmv = sum(fmv_taxed, na.rm=TRUE),
+    taxed_eav = first(eav_taxed),
+    total_eav = first(eav),
+    av = first(av),
     triad_name = first(triad_name), 
     agency_count = n(),
     reassess_year = first(reassess_year),
     home_rule_ind = first(home_rule_ind),
     flag_drop = first(flag_drop)
   ) |> 
+  ungroup() |>
   # Create variables to indicate bundling after grouping
   mutate(
     bundled = ifelse(agency_count > 1, 1, 0),
@@ -271,7 +273,6 @@ grouped_manual <- grouped_manual |>
       first2_dig == "02"  ~ "Township", 
       TRUE ~ "Other"
       )) |>
-ungroup() |>
   select(year, agency_group, everything()) # puts variables in useful order.
 
 
@@ -439,11 +440,12 @@ Create estimated or "true" AV variable Assumes that taxed AV is accurate during 
 
 df <- grouped_manual |>
   ungroup() |>
+    mutate(assess_year_eav = ifelse(reassess_year == 1, cty_cook_eav, NA)) |>
+
   group_by(agency_group) |> 
   
   arrange(agency_group, year)|> 
   # Assessment Year
-  mutate(assess_year_eav = ifelse(reassess_year == 1, cty_cook_eav, NA)) |>
   
   fill(assess_year_eav, .direction = "down") |> 
   mutate(
@@ -456,7 +458,8 @@ df <- grouped_manual |>
          est_value = if_else(is.na(est_value), lag(est_value, 1)*(1 + r), est_value),
          est_value = if_else(year==2023 & reassess_year == 0, NA, est_value),
          est_value = if_else(year == 2022 & triad_name == "City", NA, est_value)
-         )
+         ) |> 
+  ungroup()
 
 
 
@@ -523,26 +526,40 @@ df %>% ungroup() |>
 ```{r flip_assessmentyear}
 df <- df %>% 
   ungroup() %>%
-  mutate(flip_assess = ifelse(reassess_year == 1, "0", "1")) %>%
-  group_by(agency_group) %>%
-  arrange(agency_group, year) %>%
-  mutate(eav = cty_cook_eav,  # NOTE that eav was for total EAV in the agency summary file. Here it is the taxed EAV
+  mutate(flip_assess = ifelse(reassess_year == 1, "0", "1"),
+        # eav = cty_cook_eav,  # NOTE that eav was for total EAV in the agency summary file. Here it is the taxed EAV
          ln_av = log(av),
          ln_eav = log(cty_cook_eav),
+         ln_taxed_eav = log(taxed_eav),
+         ln_taxed_fmv = log(taxed_fmv),
+         ln_fmv = log(total_fmv),
          ln_levy = log(total_final_levy),
-         ln_est_v = log(est_value),
+         ln_est_v = log(est_value),) %>%
+  group_by(agency_group) %>%
+  arrange(agency_group, year) %>%
+  mutate(
+    
          ln_lag_av = log(lag(av, 1)),
          ln_lag_eav = log(lag(cty_cook_eav)),
          eav_updown= ifelse(lag(cty_cook_eav, 1) < cty_cook_eav, "Up", "Down"),
          ass = ifelse(lag(assess_year_eav,1) < assess_year_eav, "Up", "Down"),
-         ass2 = ifelse(lag(eav,1) < eav, "Up", "Down")) %>% 
+         ass2 = ifelse(lag(cty_cook_eav,1) < cty_cook_eav, "Up", "Down")) %>% 
   ungroup() 
+```
+
+```{r}
+#| include: false
+
+df %>% filter(is.na(agency_group))
+df %>% filter(is.na(triad_name))
+
+df <- df%>% mutate(agency_group = ifelse(is.na(agency_group), agency_name, agency_group))
 ```
 
 #### Export CSV
 
 ```{r exportCSV}
-df |> write_csv("NTA_data_2024_10_20.csv")
+df |> write_csv("NTA_data_2024_11_06.csv")
 ```
 
 ```{r}
@@ -560,11 +577,6 @@ df %>%
   filter(is.na(est_value)) %>% 
   group_by(year) %>%
   summarize(count = n()) %>% arrange(desc(count))
-
-## if using est_value
-# df <- df |> filter(year >= 2008  & year < 2023 & triad_name != "City"
-#                   )
-
 
 ```
 
@@ -654,11 +666,6 @@ tt_cat_vars |>
 #| warning: false
 #| message: false
 #| label: fig-linegraph-triads-loggedtaxbase
-  
-
-df <- df %>% 
-  mutate(est_value = ifelse(est_value == 0, NA, est_value))
-
 
 df %>% ungroup() |>
  # mutate(across(.cols = c(ln_eav, ln_est_v), ~.x/1000000) ) %>%
@@ -727,7 +734,6 @@ df |>
 
 
 df |> 
-  #filter(type != "School" & type != "Other") |>
   group_by(year, home_rule_ind) |> 
   summarize(median_levy = median(total_final_levy/1000000, na.rm = TRUE)) |> 
   ggplot(aes(x = year, y = median_levy, group = home_rule_ind, lty = home_rule_ind)) + 
@@ -763,23 +769,9 @@ df |>
 #| label: tax-base-over-time
 
 df |> 
-  group_by(year, type) |>  
-  summarize(median_eav = median(cty_cook_eav/1000000, na.rm=TRUE)) |> 
-  ggplot(aes(x = year, y = median_eav, color = type)) + 
-  geom_line() +
-  labs(
-    title = "Median EAV Over Time by Taxing Agency Type",
-    x = "Year",
-    y = "EAV (Millions)",
-    color = "Agency Type"
-  ) +
-  scale_x_continuous(breaks = seq(min(df$year), max(df$year), by = 2)) +  # Adjust x-axis breaks 
-  theme_minimal()
-
-df |> 
  # filter(type != "Township")  |>
   group_by(year, type) |> 
-  summarize(median_eav = median(cty_cook_eav/1000000, na.rm = TRUE)) |> 
+  summarize(median_eav = median(taxed_eav, na.rm = TRUE)/1000000) |> 
   ggplot(aes(x = year, y = median_eav, color = type)) + 
   geom_line(lwd = 2) +
   labs(
@@ -804,7 +796,7 @@ df %>% ungroup() |>
  # mutate(across(.cols = c(ln_av, ln_est_v), ~.x/1000000) ) %>%
   group_by(year, triad_name) %>%
   summarize(
-            eav =sum(cty_cook_eav),
+            eav = sum(cty_cook_eav),
             est_value = sum(est_value)) %>%
  # filter(year > 2008 & year < 2021) %>%
   ggplot() +
@@ -826,6 +818,8 @@ df %>% ungroup() |>
 ```{r}
 #| column: page
 #| label: tbl-main-models
+
+df <- df |> mutate(eav = cty_cook_eav)
   
   all_models <- list(
     
