@@ -1702,7 +1702,7 @@ mods_1 <- list(
                panel.id = c("agency_group", "year")
                 ),
   
-     "NonHR" = feols(log(total_final_levy) ~ ln_lag_eav + log(eav) + log(total_fmv) log(taxed_fmv)  | agency_group + year,
+     "NonHR" = feols(log(total_final_levy) ~ ln_lag_eav + log(eav) + log(total_fmv) + log(taxed_fmv)  | agency_group + year,
                data = df |> filter(home_rule_ind == 0 & type == "Muni"),
              vcov  = ~ agency_group,
                panel.id = c("agency_group", "year")
