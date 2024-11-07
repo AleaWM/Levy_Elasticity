@@ -1576,6 +1576,82 @@ modelsummary::modelsummary(
 
 ```
 
+```{r}
+#| label: tbl-models-MVHAWMhybrid
+#| tbl-cap: "Combo Tables Nov. 7th"
+
+mods_1 <- list(
+  
+    "Homerule" = feols(log(total_final_levy) ~ ln_lag_eav + log(eav) + log(est_value) + log(l(est_value, 1))  | agency_group + year,
+               data = df |> filter(home_rule_ind == 1 & type == "Muni"),
+             vcov  = ~ agency_group,
+               panel.id = c("agency_group", "year")
+                ),
+  
+        "Homerule" = feols(log(total_final_levy) ~ ln_lag_eav + log(eav) + log(est_value)  | agency_group + year,
+               data = df |> filter(home_rule_ind == 1 & type == "Muni"),
+             vcov  = ~ agency_group,
+               panel.id = c("agency_group", "year")
+                ),
+    
+            "Homerule" = feols(log(total_final_levy) ~ ln_lag_eav + log(eav) + log(est_value) + log(l(est_value, 1))  | agency_group + year,
+               data = df |> filter(home_rule_ind == 1 & type == "Muni"),
+             vcov  = ~ agency_group,
+               panel.id = c("agency_group", "year")
+                ),
+    
+      "Homerule" = feols(log(total_final_levy) ~  log(est_value)  | agency_group + year,
+               data = df |> filter(home_rule_ind == 1 & type == "Muni"),
+             vcov  = ~ agency_group,
+               panel.id = c("agency_group", "year")
+                ),
+  
+     "NonHR" = feols(log(total_final_levy) ~ ln_lag_eav + log(eav)  | agency_group + year,
+               data = df |> filter(home_rule_ind == 0 & type == "Muni"),
+             vcov  = ~ agency_group,
+               panel.id = c("agency_group", "year")
+                ),
+    
+         "NonHR" = feols(log(total_final_levy) ~ ln_lag_eav + log(eav) + log(est_value)  | agency_group + year,
+               data = df |> filter(home_rule_ind == 0 & type == "Muni"),
+             vcov  = ~ agency_group,
+               panel.id = c("agency_group", "year")
+                ),
+  
+     "NonHR" = feols(log(total_final_levy) ~  log(est_value) | agency_group + year,
+               data = df |> filter(home_rule_ind == 0 & type == "Muni"),
+             vcov  = ~ agency_group,
+               panel.id = c("agency_group", "year")
+                ),
+    
+         "NonHR" = feols(log(total_final_levy) ~ ln_lag_eav + log(eav) + log(est_value)  + log(l(est_value, 1)) | agency_group + year,
+               data = df |> filter(home_rule_ind == 0 & type == "Muni"),
+             vcov  = ~ agency_group,
+               panel.id = c("agency_group", "year")
+                ),
+    
+  
+    "Schools" = feols(log(total_final_levy) ~ ln_lag_eav + log(eav)  | agency_group + year,
+               data = df |> filter(type == "School"),
+               vcov = ~ agency_group,
+               panel.id = c("agency_group", "year")
+                ) ,
+  
+    "Schools" = feols(log(total_final_levy) ~ log(est_value)  | agency_group + year,
+               data = df |> filter(type == "School"),
+               vcov = ~ agency_group,
+               panel.id = c("agency_group", "year")
+                )      )
+
+
+modelsummary::modelsummary(
+  mods_1,
+  output = "flextable",
+ ##gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
+              stars = TRUE
+)
+
+```
 
 
 ```{r}
