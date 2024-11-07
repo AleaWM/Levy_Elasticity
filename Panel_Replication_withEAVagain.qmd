@@ -876,6 +876,7 @@ df %>% ungroup() |>
 ```{r}
 #| label: bar_chart_all_agencies
 
+library(RColorBrewer)
 df |>
   filter(year == 2022) |>
   mutate(type = ifelse(type == "Muni", "Municipality", type)) |>
