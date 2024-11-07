@@ -534,11 +534,12 @@ df <- df %>%
          ln_taxed_fmv = log(taxed_fmv),
          ln_fmv = log(total_fmv),
          ln_levy = log(total_final_levy),
-         ln_est_v = log(est_value),) %>%
+         ln_est_v = log(est_value),
+          ) %>%
   group_by(agency_group) %>%
   arrange(agency_group, year) %>%
   mutate(
-    
+        lag_eav = lag(cty_cook_eav, 1),
          ln_lag_av = log(lag(av, 1)),
          ln_lag_eav = log(lag(cty_cook_eav)),
          eav_updown= ifelse(lag(cty_cook_eav, 1) < cty_cook_eav, "Up", "Down"),
@@ -553,7 +554,9 @@ df <- df %>%
 df %>% filter(is.na(agency_group))
 df %>% filter(is.na(triad_name))
 
-df <- df%>% mutate(agency_group = ifelse(is.na(agency_group), agency_name, agency_group))
+# one school didn't have an agency group name, so give it a name.
+df <- df %>% 
+  mutate(agency_group = ifelse(is.na(agency_group), agency_name, agency_group))
 ```
 
 #### Export CSV
@@ -587,6 +590,52 @@ If we drop Chicago, we get to keep another year of data for all of the other mun
 ## Tables
 
 Exported as Word Documents. 
+
+```{r}
+#| label: model-vars-continuous-notlogged
+#| warning: false
+#| message: false
+
+cont_var <- df |>
+  select(type, cty_cook_eav, total_final_levy, est_value, ln_lag_eav) |>
+  group_by(type) |>
+  reframe(n = n(), 
+          "Min TEAV" = min(cty_cook_eav, na.rm = T), 
+          "Mas TEAV" = max(cty_cook_eav, na.rm = T), 
+          "Mean TEAV" = mean(cty_cook_eav, na.rm = T), 
+          "Median TEAV" = median(cty_cook_eav, na.rm = T),
+          "SD TEAV" = sd(cty_cook_eav, na.rm = T),
+          "Min Levy" = min(total_final_levy, na.rm = T), 
+          "Max Levy" = max(total_final_levy, na.rm = T), 
+          "Mean Levy" = mean(total_final_levy, na.rm = T), 
+          "Median Levy" = median(total_final_levy, na.rm = T),
+          "SD Levy" = sd(total_final_levy, na.rm = T),
+          "Min Est. Value" = min(est_value, na.rm = T), 
+          "Max Est. Value" = max(est_value, na.rm = T), 
+          "Mean Est. Value" = mean(est_value, na.rm = T), 
+          "Median Est. Value" = median(est_value, na.rm=TRUE),
+          "SD Est. Value" = sd(est_value, na.rm = T)
+  ) |>
+  pivot_longer(
+    cols = -type,
+    names_to = c("variable", "statistic"), 
+    names_sep = " " 
+  ) |>
+  unite(col = "var_stat", variable, statistic, sep = " ") |>
+  pivot_wider(
+    id_cols = var_stat, 
+    names_from = type, 
+    values_from = value
+  ) 
+
+cont_var %>% flextable::flextable() 
+tt_cont_var <- tt(cont_var)
+         
+tt_cont_var |>
+  save_tt("cont_descr_stats_11_5_24.docx",
+          overwrite = TRUE)
+
+```
 
 
 ```{r}
@@ -769,11 +818,11 @@ df |>
 #| label: tax-base-over-time
 
 df |> 
- # filter(type != "Township")  |>
+  filter(type != "Township")  |>
   group_by(year, type) |> 
   summarize(median_eav = median(taxed_eav, na.rm = TRUE)/1000000) |> 
   ggplot(aes(x = year, y = median_eav, color = type)) + 
-  geom_line(lwd = 2) +
+  geom_line(lwd = 1.5) +
   labs(
     title = "Median EAV Over Time by Taxing Agency Type",
     x = "Year",
