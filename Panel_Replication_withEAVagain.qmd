@@ -624,12 +624,29 @@ Exported as Word Documents.
 #| warning: false
 #| message: false
 #| tbl-cap: "Table for Slides"
+library(flextable)
 
-
-datasummary((`Agency Type`=type)*((`EAV` =cty_cook_eav) + (`Levy`=total_final_levy)+ (`Estimated EAV`=est_value)) ~ Min+ Median + Mean + Max+ SD, data = df |>  select(type,cty_cook_eav, total_final_levy, est_value) |> mutate(across(.cols = c(cty_cook_eav, total_final_levy, est_value), ~.x/1000000)),
+tbl <- datasummary((`Agency Type`=type)*((`EAV` =cty_cook_eav) + (`Levy`=total_final_levy)+ (`Estimated EAV`=est_value)) ~ Min+ Median + Mean + Max+ SD, data = df |>  
+              select(type,cty_cook_eav, total_final_levy, est_value) |> 
+              mutate(across(.cols = c(cty_cook_eav, total_final_levy, est_value), ~.x/1000000)),
             fmt = 0,
                align = 'llrrrrr',
-            output = "flextable")
+            output = "flextable") 
+
+tbl %>%   
+  #border_remove() %>%
+  #hline_top() %>% 
+  hline(i = c(3,6,9,12)) %>%
+  
+  align(j = 3:7, align = "right") %>%
+align(j=2, align = "right", part = "header") %>%
+set_table_properties( layout = "autofit")
+
+tt_cont_var <- tt(tbl)
+         
+tt_cont_var |>
+  save_tt("cont_descr_stats_11_5_24.docx",
+          overwrite = TRUE)
 
 ```
 
