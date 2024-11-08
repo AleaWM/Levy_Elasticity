@@ -630,47 +630,14 @@ crosstable::crosstable(data = df, by = type, cols = c(type, total_final_levy, ct
 
 
 ```{r}
-#| label: model-vars-continuous-notlogged
+#| label: tbl-slide-descr-stats
 #| warning: false
 #| message: false
+#| tbl-cap: "Table for Slides"
 
 
-datasummary(type*(cty_cook_eav + total_final_levy + est_value) ~ Min+ Median + Mean + Max+ SD, data = df |>  select(type,cty_cook_eav, total_final_levy, est_value))
-
-cont_var <- df |>
-  select(type, cty_cook_eav, total_final_levy, est_value) |>
-  group_by(type) |> 
-  summarize(
-    "Observation Count" = n(), 
-          "Min EAV" = min(cty_cook_eav, na.rm = T), 
-          "Max EAV" = max(cty_cook_eav, na.rm = T), 
-          "Mean EAV" = mean(cty_cook_eav, na.rm = T), 
-          "Median EAV" = median(cty_cook_eav, na.rm = T),
-          "SD EAV" = sd(cty_cook_eav, na.rm = T),
-          "Min Levy" = min(total_final_levy, na.rm = T), 
-          "Max Levy" = max(total_final_levy, na.rm = T), 
-          "Mean Levy" = mean(total_final_levy, na.rm = T), 
-          "Median Levy" = median(total_final_levy, na.rm = T),
-          "SD Levy" = sd(total_final_levy, na.rm = T),
-          "Min Estimated Value" = min(est_value, na.rm = T), 
-          "Max Estimated Value" = max(est_value, na.rm = T), 
-          "Mean Estimated Value" = mean(est_value, na.rm = T), 
-          "Median Estimated Value" = median(est_value, na.rm=TRUE),
-          "SD Estimated Value" = sd(est_value, na.rm = T)
-  ) |>
-  pivot_longer(
-    cols = -type,
-    names_to = c("variable", "statistic"), 
-    names_sep = " " 
-  ) |>
-  unite(col = "var_stat", variable, statistic, sep = " ") |>
-  pivot_wider(
-    id_cols = var_stat, 
-    names_from = type, 
-    values_from = value
-  ) 
-
-cont_var %>% flextable::flextable(cwidth = 1.5) 
+datasummary(type*((`EAV` =cty_cook_eav) + (`Levy`=total_final_levy)+ (`Estimated EAV`=est_value)) ~ Min+ Median + Mean + Max+ SD, data = df |>  select(type,cty_cook_eav, total_final_levy, est_value),
+            fmt = 0)
 
 ```
 
