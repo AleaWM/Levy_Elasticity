@@ -636,9 +636,10 @@ crosstable::crosstable(data = df, by = type, cols = c(type, total_final_levy, ct
 #| tbl-cap: "Table for Slides"
 
 
-datasummary(type*((`EAV` =cty_cook_eav) + (`Levy`=total_final_levy)+ (`Estimated EAV`=est_value)) ~ Min+ Median + Mean + Max+ SD, data = df |>  select(type,cty_cook_eav, total_final_levy, est_value),
+datasummary((`Agency Type`=type)*((`EAV` =cty_cook_eav) + (`Levy`=total_final_levy)+ (`Estimated EAV`=est_value)) ~ Min+ Median + Mean + Max+ SD, data = df |>  select(type,cty_cook_eav, total_final_levy, est_value) |> mutate(across(.cols = c(cty_cook_eav, total_final_levy, est_value), ~.x/1000000)),
             fmt = 0,
-               align = 'llrrrrr')
+               align = 'llrrrrr',
+            output = "flextable")
 
 ```
 
@@ -647,6 +648,7 @@ datasummary(type*((`EAV` =cty_cook_eav) + (`Levy`=total_final_levy)+ (`Estimated
 #| label: model-vars-continuous-notlogged
 #| warning: false
 #| message: false
+#| include: false
 
 cont_var <- df |>
   select(type, cty_cook_eav, total_final_levy, est_value, ln_lag_eav) |>
