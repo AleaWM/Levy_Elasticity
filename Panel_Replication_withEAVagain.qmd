@@ -76,10 +76,8 @@ library(tinytable)
 
 file_path <- "C:/Users/aleaw/" 
 
-file.exists(file_path)
-
 if (file.exists(file_path)){
-    DBI::dbConnect(RSQLite::SQLite(), "C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/ptaxsim.db/ptaxsim-2023.0.0.db")
+   ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/ptaxsim.db/ptaxsim-2023.0.0.db")
 } else {
     ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "./ptaxsim.db/ptaxsim-2023.0.0.db")
 
@@ -497,9 +495,8 @@ for(i in graphmunis){
   filter(agency_group == i) %>%
   ggplot() +
 
-    geom_line(aes(x=year, y = assess_year_eav), alpha = .5, color = "gray50")+
-    geom_point(aes(x=year, y = assess_year_eav), 
-                 fill  = "gray50", alpha = .5) +
+   # geom_line(aes(x=year, y = assess_year_eav), alpha = .5, color = "gray50")+
+   # geom_point(aes(x=year, y = assess_year_eav), fill  = "gray50", alpha = .5) +
 
   geom_line(aes(x=year, y = cty_cook_eav), color = "black", lty = 3) + 
   geom_point(aes(x=year, y = cty_cook_eav), 
@@ -510,7 +507,8 @@ for(i in graphmunis){
                  fill  = "red", alpha = .5) +
   scale_x_continuous(breaks = seq(ceiling(min(2006)), floor(max(2022)), by = 2)) +
   scale_y_continuous(labels = scales::dollar_format()) + 
-    labs(title = paste(i), y= "Value ($1000)", x = "") -> graph
+    theme_classic() + 
+    labs(title = paste(i), y= "Tax Base (in Millions)", x = "") -> graph
 
   print(graph)
 }
@@ -961,6 +959,33 @@ df |>
         axis.title.y = element_text(angle = 0)) 
 
 ```
+
+```{r}
+df %>% ungroup() |>
+  mutate(across(.cols = c(taxed_eav, total_eav, cty_cook_eav, est_value), ~.x/1000000) ) %>%
+  group_by(year, triad_name) %>%
+  summarize(
+          eav_total = sum(total_eav),
+          eav_taxed = sum(taxed_eav),
+
+            eav = sum(cty_cook_eav),
+            est_value = sum(est_value)) %>%
+  ggplot(lwd = 3) +
+
+  geom_line(aes(x=year, y = eav, group = triad_name)) + 
+      geom_line(aes(x=year, y = eav_total, group = triad_name, color = triad_name), alpha = .5, , color = "gray")+
+
+      geom_line(aes(x=year, y = est_value, group = triad_name, color = triad_name), alpha = .5)+
+        geom_line(aes(x=year, y = eav_taxed, group = triad_name, color = triad_name), alpha = .5)+
+
+    geom_point(aes(x=year, y = est_value, fill = triad_name, group = triad_name), alpha = .5) +
+  scale_x_continuous(breaks = seq(ceiling(min(2006)), floor(max(2023)), by = 2)) +
+    scale_y_continuous(labels = scales::dollar) +
+
+  labs(title = "Summed Value by Triad", y = "Tax Base (in Millions)", x = "", 
+       caption = "Light Gray line is total Value instead of Taxed Value") + theme_classic()
+```
+
 
 # Models
 
