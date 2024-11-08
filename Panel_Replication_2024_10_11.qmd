@@ -75,9 +75,9 @@ library(tinytable)
 ## of the PTAXSIM database!
 
 
-ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "./ptaxsim.db/ptaxsim-2023.0.0.db")
+#ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "./ptaxsim.db/ptaxsim-2023.0.0.db")
  
-#ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/ptaxsim.db/ptaxsim-2023.0.0.db")
+ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/ptaxsim.db/ptaxsim-2023.0.0.db")
 
 agency_dt <- DBI::dbGetQuery(
   ptaxsim_db_conn,
@@ -216,6 +216,7 @@ grouped_manual <- recoded_data |>
   left_join(groupies,
             by = c("agency_name", "agency_num")
   ) |> 
+  filter(triad != "City") |>
   # Filter post-grouped agencies to munis, townships, schools and miscellaneous agencies such as Parks or Library Special Districts
   # 10,261 obs after filtering
   filter(
@@ -472,65 +473,6 @@ df %>% ungroup() |>
   labs(title = "Summed Value by Triad", y = "Value ($1000)", x = "")
 ```
 
-```{r estimate-smoothed-value, eval=FALSE, include = FALSE}
-
-
-## Incorrect creation of rate!! Keeping for reference. Delete later.
-
-df <- grouped_manual |>
-  ungroup() |>
-  group_by(agency_group) |> 
-  
-  arrange(year)|> 
-  # Assessment Year
-  mutate(assess_year_av = ifelse(reassess_year == 1, av, NA)) |>
-  
-  fill(assess_year_av, .direction = "down") |>
-  
-  mutate(
-    
-    # rate of growth from point A to point B = 4-year CAGR 
-   
-    # Alea's math: Calculate rate to get from assessment year to 1 year after assessment year 
-    # this rate will be changed to zero later
-    rate_smooth = if_else(lag(reassess_year, n=1) == 1 | lead(reassess_year, n=2) ==1, (lead(av, n=2) / lag(av))^(1/4) - 1, NA),
-   
-     # estimated value for 1 year after reassessment:
-    est_value = if_else(lag(reassess_year, n=1) == 1, assess_year_av*(1+rate_smooth), assess_year_av),
-     
-    # Alea's math: Calculate rate for est_value 1 year to 2 years after the assessment:
-    rate_smooth = if_else(lag(reassess_year) == 2 | lead(reassess_year, n=1) ==1, (lead(av, n=1) / lag(est_value))^(1/3) - 1, rate_smooth),
-    
-    # estimated value for 2 years after reassessment
-    est_value = if_else(lag(reassess_year, n=2) == 1 | lead(reassess_year, n=1) == 1, lag(est_value)*(1+rate_smooth), est_value),
-
-    rate_smooth = if_else(reassess_year == 1, lead(rate_smooth, n = 1), rate_smooth),
-    est_value = ifelse(reassess_year == 1, assess_year_av, est_value),
-    type = as.factor(type)
- ) |>
-  arrange(agency_name, year) |>
-  select(agency_group, year, av, assess_year_av, est_value, rate_smooth, everything()) |>
-  ungroup()
-
-df %>%ungroup() |>
-  mutate(across(.cols = c( est_value, av, assess_year_av), ~.x/1000000) ) %>%
-  group_by(year, triad_name) %>%
-  summarize(assess_year_av = sum(assess_year_av, na.rm=TRUE),
-            av =sum(av, na.rm=TRUE),
-            est_value = sum(est_value, na.rm=TRUE)) %>%
-  filter(year > 2008 & year < 2022) %>%
-  ggplot() +
-
-    geom_line(aes(x=year, y = assess_year_av, group = triad_name))+
-
-  geom_line(aes(x=year, y = av, group = triad_name)) + 
-
-      geom_line(aes(x=year, y = est_value, group = triad_name, color = triad_name), alpha = .5)+
-    geom_point(aes(x=year, y = est_value, fill = triad_name, group = triad_name), alpha = .5) +
-  scale_x_continuous(breaks = seq(ceiling(min(2006)), floor(max(2022)), by = 2)) +
-  scale_y_continuous(labels = scales::dollar_format()) + 
-  labs(title = "Summed Value by Triad", y = "Value ($1000)", x = "")
-```
 
 ```{r flip_assessmentyear}
 df <- df %>% ungroup() %>%
@@ -548,7 +490,7 @@ df <- df %>% ungroup() %>%
 
 #### Export CSV
 
-```{r exportCSV}
+```{r exportCSV, eval = FALSE}
 df |> write_csv("NTA_data_2024_10_20.csv")
 ```
 
@@ -565,9 +507,10 @@ df %>%
   group_by(year) %>%
   summarize(count = n()) %>% arrange(desc(count))
 
+# df <- df |> filter(year >= 2008  & year < 2023 & triad_name != "City"
+#                    )
+df <- df |> filter(triad_name != "City")
 
-df <- df |> filter(year >= 2008  & year < 2023 & triad_name != "City"
-                   )
 
 ```
 
@@ -580,6 +523,8 @@ If we drop Chicago, we get to keep another year of data for all of the other mun
 
 ```{r}
 #| label: model-vars-continuous-descr
+#| eval: false
+#| include: false
 
 tt_cont_var <- df |>
   select(type, ln_av, ln_levy, ln_est_v, ln_lag_av) |>
@@ -685,6 +630,8 @@ major_minor_tt |>
 Colors: d40032, 001e61, 41b6e5, ffbe3e, and 0085ad
 
 ```{r}
+#| eval: false
+#| include: false
 #| label: levies_over_time_by_type
 
 df |> 
@@ -711,7 +658,7 @@ df |>
       "Other" = "#ffbe3e",  
       "Total" = "#0085ad" 
     ),
-    breaks = c("Muni", "School", "Township", "Other", "Total")  # Reorder legend
+    labels = c("Muni", "School", "Township", "Other", "Total")  # Reorder legend
   ) +
   scale_x_continuous(breaks = seq(min(df$year), max(df$year), by = 2)) +  # Adjust x-axis breaks 
   theme_minimal()
@@ -747,7 +694,7 @@ df |>
       "Other" = "#ffbe3e",  
       "Total" = "#0085ad" 
     ),
-    breaks = c("Muni", "School", "Township", "Other", "Total")  # Reorder legend
+    labels = c("Muni", "School", "Township", "Other", "Total")  # Reorder legend
   ) +
   scale_x_continuous(breaks = seq(min(df$year), max(df$year), by = 2)) +  # Adjust x-axis breaks 
   theme_minimal()
@@ -787,28 +734,28 @@ df %>% ungroup() |>
 
 mods_1 <- list(
   
-  "All Types" = feols(log(total_final_levy) ~ ln_lag_av + log(est_value)*flip_assess  | agency_group + year,
-               data = df,
-               vcov = "twoway",
-               panel.id = c("agency_group", "year")
-                ),
-  
-      "All Types" = feols(log(total_final_levy) ~ ln_lag_av + log(est_value)  | agency_group + year,
-               data = df,
-               vcov = "twoway",
-               panel.id = c("agency_group", "year")
-                ),
-    
-      "All Types" = feols(log(total_final_levy) ~ ln_lag_av + log(est_value)  + triad_name*reassess_year| agency_group + year,
-               data = df,
-               vcov = "twoway",
-               panel.id = c("agency_group", "year")
-                ),
-    "All Types" = feols(log(total_final_levy) ~ ln_lag_av + log(est_value)  | agency_group + year^triad_name,
-               data = df,
-               vcov = "twoway",
-               panel.id = c("agency_group", "year")
-                ),
+  # "All Types" = feols(log(total_final_levy) ~ ln_lag_av + log(est_value)*flip_assess  | agency_group + year,
+  #              data = df,
+  #              vcov = "twoway",
+  #              panel.id = c("agency_group", "year")
+  #               ),
+  # 
+  #     "All Types" = feols(log(total_final_levy) ~ ln_lag_av + log(est_value)  | agency_group + year,
+  #              data = df,
+  #              vcov = "twoway",
+  #              panel.id = c("agency_group", "year")
+  #               ),
+    # 
+    #   "All Types" = feols(log(total_final_levy) ~ ln_lag_av + log(est_value)  + triad_name*reassess_year| agency_group + year,
+    #            data = df,
+    #            vcov = "twoway",
+    #            panel.id = c("agency_group", "year")
+    #             ),
+    # "All Types" = feols(log(total_final_levy) ~ ln_lag_av + log(est_value)  | agency_group + year^triad_name,
+    #            data = df,
+    #            vcov = "twoway",
+    #            panel.id = c("agency_group", "year")
+    #             ),
   
     "Homerule" = feols(log(total_final_levy) ~ ln_lag_av + log(est_value)*flip_assess  | agency_group + year,
                data = df |> filter(home_rule_ind == 1 & type == "Muni"),
@@ -834,13 +781,13 @@ mods_1 <- list(
                panel.id = c("agency_group", "year")
                 ),
   
-    "Schools" = feols(log(total_final_levy) ~ ln_lag_av + log(est_value)*flip_assess  | agency_group + year,
+    "Schools" = feols(log(total_final_levy) ~ log(est_value)*flip_assess + ln_lag_av +   | agency_group + year,
                data = df |> filter(type == "School"),
                vcov = "twoway",
                panel.id = c("agency_group", "year")
                 ) ,
   
-    "Schools" = feols(log(total_final_levy) ~ ln_lag_av + log(est_value)  | agency_group + year,
+    "Schools" = feols(log(total_final_levy) ~ log(est_value)  + ln_lag_av  | agency_group + year,
                data = df |> filter(type == "School"),
                vcov = "twoway",
                panel.id = c("agency_group", "year")
@@ -850,7 +797,6 @@ mods_1 <- list(
 modelsummary::modelsummary(
   mods_1,
   output = "flextable",
- ##gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
               stars = TRUE
 )
 
@@ -862,16 +808,16 @@ modelsummary::modelsummary(
 
 mods_1 <- list(
   
-  "All Types" = feols(log(total_final_levy) ~ ln_lag_av + log(av)  | agency_group + year,
-               data = df,
-               vcov = "twoway",
-               panel.id = c("agency_group", "year")
-                ),
-    "All Types" = feols(log(total_final_levy) ~  log(est_value)  | agency_group + year,
-               data = df,
-               vcov = "twoway",
-               panel.id = c("agency_group", "year")
-                ),
+  # "All Types" = feols(log(total_final_levy) ~ ln_lag_av + log(av)  | agency_group + year,
+  #              data = df,
+  #              vcov = "twoway",
+  #              panel.id = c("agency_group", "year")
+  #               ),
+  #   "All Types" = feols(log(total_final_levy) ~  log(est_value)  | agency_group + year,
+  #              data = df,
+  #              vcov = "twoway",
+  #              panel.id = c("agency_group", "year")
+  #              ),
   
     "Homerule" = feols(log(total_final_levy) ~ ln_lag_av + log(av)  | agency_group + year,
                data = df |> filter(home_rule_ind == 1 & type == "Muni"),
@@ -1246,17 +1192,17 @@ modelsummary::modelsummary(
 #| tbl-cap: "**2010 to 2020. All Agencies (after Grouping and Cleaning)** Agency_group and year fixed effects. Uses grouped and summed taxing agencies. Includes lagged log(av) and log(est_value) in model. Uses Ptaxsim 2023.0.0. and necessary files edited last on Oct. 12th. HC1 standard errors as is the default for Stata. "
 
 
-df <- df |> filter(year >= 2010 & year <= 2020)
+#df <- df |> filter(year >= 2010 & year <= 2021)
 
 mods_1 <- list(
   
-  "1" = feols(log(total_final_levy) ~ ln_av | agency_group + year,
+  "1" = feols(log(total_final_levy) ~ ln_est_v  | agency_group + year,
                data = df,
                vcov = "hc1",
                panel.id = c("agency_group", "year")
                 ),
   
-    "2" = feols(log(total_final_levy) ~ ln_est_v | agency_group + year,
+    "2" = feols(log(total_final_levy) ~ ln_av | agency_group + year,
                data = df,
                vcov = "hc1",
                panel.id = c("agency_group", "year")
@@ -1268,13 +1214,13 @@ mods_1 <- list(
                panel.id = c("agency_group", "year")
                 ),
   
-     "4A. HC1" = feols(log(total_final_levy) ~ ln_lag_av + ln_est_v | agency_group + year,
+     "4A. HC1" = feols(log(total_final_levy) ~  ln_est_v + ln_lag_av | agency_group + year,
                data = df,
                vcov = "hc1",
                panel.id = c("agency_group", "year")
                        ),
   
-     "4B. Twoway FE" = feols(log(total_final_levy) ~ ln_lag_av + ln_est_v | agency_group + year,
+     "4B. Twoway FE" = feols(log(total_final_levy) ~  ln_est_v + ln_lag_av | agency_group + year,
                data = df,
                vcov = "twoway",
                panel.id = c("agency_group", "year")
@@ -1313,7 +1259,7 @@ mods_1 <- list(
   
 
   
-     "3" = feols(log(total_final_levy) ~ ln_lag_av + log(est_value) + flip_assess | agency_group + year,
+     "3" = feols(log(total_final_levy) ~ log(est_value) + ln_lag_av +  flip_assess | agency_group + year,
                data = hr_df,
                vcov = "twoway",
                panel.id = c("agency_group", "year")
@@ -1325,7 +1271,7 @@ mods_1 <- list(
                panel.id = c("agency_group", "year")
                 ),
   
-  "Interact" = feols(log(total_final_levy) ~ ln_lag_av + log(est_value) + log(est_value)*flip_assess | agency_group + year,
+  "Interact" = feols(log(total_final_levy) ~  log(est_value) + ln_lag_av + log(est_value)*flip_assess | agency_group + year,
                data = hr_df,
                vcov = "twoway",
                panel.id = c("agency_group", "year")
@@ -1367,7 +1313,7 @@ mods_1 <- list(
                panel.id = c("agency_group", "year")
                 ),
 
-     "3" = feols(log(total_final_levy) ~ ln_lag_av + log(est_value)*flip_assess | agency_group + year,
+     "3" = feols(log(total_final_levy) ~ log(est_value)*flip_assess + ln_lag_av  | agency_group + year,
                data = nonhr_df,
                vcov = "hc1",
                panel.id = c("agency_group", "year")
@@ -1384,7 +1330,7 @@ mods_1 <- list(
                panel.id = c("agency_group", "year")
                 ),
   
-  "Interact" = feols(log(total_final_levy) ~ ln_lag_av + log(est_value) + log(est_value)*flip_assess | agency_group + year,
+  "Interact" = feols(log(total_final_levy) ~ log(est_value) +  ln_lag_av + log(est_value)*flip_assess | agency_group + year,
                data = nonhr_df,
                vcov = "hc1",
                panel.id = c("agency_group", "year")
@@ -1426,7 +1372,7 @@ mods_1 <- list(
                panel.id = c("agency_group", "year")
                 ),
 
-     "3" = feols(log(total_final_levy) ~ ln_lag_av + log(est_value)*flip_assess | agency_group + year,
+     "3" = feols(log(total_final_levy) ~ log(est_value)*flip_assess + ln_lag_av | agency_group + year,
                data = school_df,
                vcov = "hc1",
                panel.id = c("agency_group", "year")
@@ -1443,7 +1389,7 @@ mods_1 <- list(
                panel.id = c("agency_group", "year")
                 ),
   
-  "Interact" = feols(log(total_final_levy) ~ ln_lag_av + log(est_value) + log(est_value)*flip_assess | agency_group + year,
+  "Interact" = feols(log(total_final_levy) ~ log(est_value) + ln_lag_av +  log(est_value)*flip_assess | agency_group + year,
                data = school_df,
                vcov = "hc1",
                panel.id = c("agency_group", "year")
