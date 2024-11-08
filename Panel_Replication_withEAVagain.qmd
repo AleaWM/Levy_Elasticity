@@ -74,8 +74,17 @@ library(tinytable)
 ## Change database file path to match your computer's location 
 ## of the PTAXSIM database!
 
+file_path <- "C:/Users/aleaw/" 
 
-ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "./ptaxsim.db/ptaxsim-2023.0.0.db")
+file.exists(file_path)
+
+if (file.exists(file_path)){
+    DBI::dbConnect(RSQLite::SQLite(), "C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/ptaxsim.db/ptaxsim-2023.0.0.db")
+} else {
+    ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "./ptaxsim.db/ptaxsim-2023.0.0.db")
+
+}
+# ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "./ptaxsim.db/ptaxsim-2023.0.0.db")
  
 #ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/ptaxsim.db/ptaxsim-2023.0.0.db")
 
@@ -393,7 +402,7 @@ datasummary_crosstab(minor_type~type,
 table(grouped_manual$year, grouped_manual$type)
 
 
-datasummary_crosstab(minor_type~type, data = grouped_manual%>%filter(year==2022),  statistic = 1~1+N, output = "flextable")
+datasummary_crosstab(minor_type~type, data = grouped_manual %>% filter(year==2022),  statistic = 1~1+N, output = "flextable")
 
 ```
 
@@ -442,7 +451,7 @@ grouped_manual |>
 
 ```
 
-Create estimated or "true" AV variable Assumes that taxed AV is accurate during assessment years and stays mostly flat until the next assessment year. The true market value is then smoothed between the assessment years.
+Create estimated or "true" taxbase variable: The estimated market value is smoothed between the assessment years.
 
 ```{r}
 #| label: fig-alt-attempt-estimate-smoothed-value
@@ -736,34 +745,6 @@ tt_cat_vars |>
 ## Visualizations
 
 ### Time Trends
-
-```{r }
-#| warning: false
-#| message: false
-#| label: fig-linegraph-triads-loggedtaxbase
-
-df %>% ungroup() |>
- # mutate(across(.cols = c(ln_eav, ln_est_v), ~.x/1000000) ) %>%
-  group_by(year, triad_name) %>%
-  summarize(
-          eav_total = sum(total_eav),
-
-            eav = sum(cty_cook_eav),
-            est_value = sum(est_value)) %>%
-  #filter(year > 2008 & year < 2021) %>%
-  ggplot(lwd = 3) +
-
-  geom_line(aes(x=year, y = log(eav), group = triad_name)) + 
-      geom_line(aes(x=year, y = log(eav_total), group = triad_name, color = triad_name), alpha = .5, , color = "gray")+
-
-      geom_line(aes(x=year, y = log(est_value), group = triad_name, color = triad_name), alpha = .5)+
-    geom_point(aes(x=year, y = log(est_value), fill = triad_name, group = triad_name), alpha = .5) +
-  scale_x_continuous(breaks = seq(ceiling(min(2006)), floor(max(2022)), by = 2)) +
-  labs(title = "Summed Value by Triad", y = "Logged Value", x = "", 
-       caption = "Light Gray line is total Value instead of Taxed Value")
-
-
-```
 
 
 ```{r}
@@ -1090,105 +1071,8 @@ save_tt(all_models_formatted,
 #| column: page
 #| label: tbl-main-models-laggedeav
 #| tbl-cap: "Uses estimated value of EAV and lagged EAV"
-
-df <- df |> mutate(eav = cty_cook_eav)
-  
-  all_models <- list(
-    
-    "All Agencies" = list(
-    
-    "I" = feols(log(total_final_levy) ~ log(est_value) | agency_group + year,
-                data = df,
-                vcov = ~agency_group,
-                panel.id = c("agency_group", "year"),
-                ),
-    
-    "II" = feols(log(total_final_levy) ~ log(est_value) + l(log(eav)) | agency_group + year,
-                data = df,
-                vcov = ~agency_group,
-                panel.id = c("agency_group", "year"),
-                )
-    ),
-    
-    "Municipalities" = list(
-
-    "I" = feols(log(total_final_levy) ~ log(est_value) | agency_group + year,
-          data = df |> filter(type == "Muni"),
-          vcov = ~agency_group,
-          panel.id = c("agency_group", "year"),
-          ),
-    
-    "II" = feols(log(total_final_levy) ~ log(est_value) + l(log(eav)) | agency_group + year,
-                data = df |> filter(type == "Muni"),
-                vcov = ~agency_group,
-                panel.id = c("agency_group", "year"),
-                )
-    ),      
-    
-    "Schools" = list(
-
-    "I" = feols(log(total_final_levy) ~ log(est_value) | agency_group + year,
-          data = df |> filter(type == "School"),
-          vcov = ~agency_group,
-          panel.id = c("agency_group", "year"),
-          ),
-    
-    "II" = feols(log(total_final_levy) ~ log(est_value) +  l(log(eav)) | agency_group + year,
-                data = df |> filter(type == "School"),
-                vcov = ~agency_group,
-                panel.id = c("agency_group", "year"),
-                )
-    ),
-    
-  "Townships" = list(
-
-    "I" = feols(log(total_final_levy) ~ log(est_value) | agency_group + year,
-          data = df |> filter(type == "Township"),
-          vcov = ~agency_group,
-          panel.id = c("agency_group", "year"),
-          ),
-    
-    "II" = feols(log(total_final_levy) ~ log(est_value) + l(log(eav)) | agency_group + year,
-                data = df |> filter(type == "Township"),
-                vcov = ~agency_group,
-                panel.id = c("agency_group", "year"),
-                )
-    ),
-    "Special Districts" = list(
-
-    "I" = feols(log(total_final_levy) ~ log(est_value) | agency_group + year,
-          data = df |> filter(type == "Other"),
-          vcov = ~agency_group,
-          panel.id = c("agency_group", "year"),
-          ),
-    
-    "II" = feols(log(total_final_levy) ~ log(est_value) +  l(log(eav)) | agency_group + year,
-                data = df |> filter(type == "Other"),
-                vcov = ~agency_group,
-                panel.id = c("agency_group", "year"),
-                )
-    )
-    )
-  
-all_models_formatted <- modelsummary(all_models,
-             shape = "cbind",                                  
-             #coef_map = name_map,
-             fmt = function(x) round(x, 2),
-             #gof_omit = "AIC|BIC|RMSE|Std.Errors|FE",
-             stars = TRUE)
-
-all_models_formatted
-
-```
-
-
-```{r}
-#| eval: false
 #| include: false
-#| column: page
-#| label: tbl-main-models-old
-
-## What was sent to merriman first. Has variable order switched.
+#| eval: false
 
 df <- df |> mutate(eav = cty_cook_eav)
   
@@ -1196,13 +1080,13 @@ df <- df |> mutate(eav = cty_cook_eav)
     
     "All Agencies" = list(
     
-    "I" = feols(log(total_final_levy) ~ log(eav) | agency_group + year,
+    "I" = feols(log(total_final_levy) ~ log(est_value) | agency_group + year,
                 data = df,
                 vcov = ~agency_group,
                 panel.id = c("agency_group", "year"),
                 ),
     
-    "II" = feols(log(total_final_levy) ~ log(eav) + log(est_value)*flip_assess | agency_group + year,
+    "II" = feols(log(total_final_levy) ~ log(est_value) + l(log(eav)) | agency_group + year,
                 data = df,
                 vcov = ~agency_group,
                 panel.id = c("agency_group", "year"),
@@ -1211,13 +1095,13 @@ df <- df |> mutate(eav = cty_cook_eav)
     
     "Municipalities" = list(
 
-    "I" = feols(log(total_final_levy) ~ log(eav) | agency_group + year,
+    "I" = feols(log(total_final_levy) ~ log(est_value) | agency_group + year,
           data = df |> filter(type == "Muni"),
           vcov = ~agency_group,
           panel.id = c("agency_group", "year"),
           ),
     
-    "II" = feols(log(total_final_levy) ~ log(eav) + log(est_value)*flip_assess | agency_group + year,
+    "II" = feols(log(total_final_levy) ~ log(est_value) + l(log(eav)) | agency_group + year,
                 data = df |> filter(type == "Muni"),
                 vcov = ~agency_group,
                 panel.id = c("agency_group", "year"),
@@ -1226,13 +1110,13 @@ df <- df |> mutate(eav = cty_cook_eav)
     
     "Schools" = list(
 
-    "I" = feols(log(total_final_levy) ~ log(eav) | agency_group + year,
+    "I" = feols(log(total_final_levy) ~ log(est_value) | agency_group + year,
           data = df |> filter(type == "School"),
           vcov = ~agency_group,
           panel.id = c("agency_group", "year"),
           ),
     
-    "II" = feols(log(total_final_levy) ~ log(eav) + log(est_value)*flip_assess | agency_group + year,
+    "II" = feols(log(total_final_levy) ~ log(est_value) +  l(log(eav)) | agency_group + year,
                 data = df |> filter(type == "School"),
                 vcov = ~agency_group,
                 panel.id = c("agency_group", "year"),
@@ -1241,13 +1125,13 @@ df <- df |> mutate(eav = cty_cook_eav)
     
   "Townships" = list(
 
-    "I" = feols(log(total_final_levy) ~ log(eav) | agency_group + year,
+    "I" = feols(log(total_final_levy) ~ log(est_value) | agency_group + year,
           data = df |> filter(type == "Township"),
           vcov = ~agency_group,
           panel.id = c("agency_group", "year"),
           ),
     
-    "II" = feols(log(total_final_levy) ~ log(eav) + log(est_value)*flip_assess | agency_group + year,
+    "II" = feols(log(total_final_levy) ~ log(est_value) + l(log(eav)) | agency_group + year,
                 data = df |> filter(type == "Township"),
                 vcov = ~agency_group,
                 panel.id = c("agency_group", "year"),
@@ -1255,13 +1139,13 @@ df <- df |> mutate(eav = cty_cook_eav)
     ),
     "Special Districts" = list(
 
-    "I" = feols(log(total_final_levy) ~ log(eav) | agency_group + year,
+    "I" = feols(log(total_final_levy) ~ log(est_value) | agency_group + year,
           data = df |> filter(type == "Other"),
           vcov = ~agency_group,
           panel.id = c("agency_group", "year"),
           ),
     
-    "II" = feols(log(total_final_levy) ~ log(eav) + log(est_value)*flip_assess | agency_group + year,
+    "II" = feols(log(total_final_levy) ~ log(est_value) +  l(log(eav)) | agency_group + year,
                 data = df |> filter(type == "Other"),
                 vcov = ~agency_group,
                 panel.id = c("agency_group", "year"),
@@ -1278,14 +1162,11 @@ all_models_formatted <- modelsummary(all_models,
 
 all_models_formatted
 
-save_tt(all_models_formatted,
-        "all_models_2024_11_6.docx",
-        overwrite = TRUE)
-
 ```
 
+
 ```{r}
-#| label: munis_and_schools_models_deletemaybe
+#| label: munis_and_schools_models
 #| column: page
 
 
@@ -1293,22 +1174,19 @@ munis_and_schools <- list(
   
   "Municipalities" = list(
     
-    "All Municipalities" = feols(log(total_final_levy) ~ log(eav) + 
-                         log(est_value) | agency_group + year,
+    "All Municipalities" = feols(log(total_final_levy) ~ log(est_value) + log(eav) | agency_group + year,
                 data = df |> filter(type == "Muni"),
                 vcov = ~agency_group,
                 panel.id = c("agency_group", "year")
                 ),
     
-    "Homerule" = feols(log(total_final_levy) ~ log(eav) + 
-                         log(est_value) | agency_group + year,
+    "Homerule" = feols(log(total_final_levy) ~ log(est_value) + log(eav) | agency_group + year,
                 data = df |> filter(type == "Muni" & home_rule_ind == 1),
                 vcov = ~agency_group,
                 panel.id = c("agency_group", "year")
                 ),
     
-    "Non-Homerule" = feols(log(total_final_levy) ~ log(eav) + 
-                         log(est_value) | agency_group + year,
+    "Non-Homerule" = feols(log(total_final_levy) ~ log(est_value) + log(eav) | agency_group + year,
                 data = df |> filter(type == "Muni" & home_rule_ind == 0),
                 vcov = ~agency_group,
                 panel.id = c("agency_group", "year")
@@ -1317,22 +1195,20 @@ munis_and_schools <- list(
   
   "Schools" = list(
     
-    "All Schools" = feols(log(total_final_levy) ~ log(eav) + 
-                         log(est_value)| agency_group + year,
+    "All Schools" = feols(log(total_final_levy) ~ log(est_value) + log(eav)| agency_group + year,
                 data = df |> filter(type == "School"),
                 vcov = ~agency_group,
                 panel.id = c("agency_group", "year")
                 ),
     
-    "Elementary" = feols(log(total_final_levy) ~ log(eav) + 
-                         log(est_value) | agency_group + year,
+    "Elementary" = feols(log(total_final_levy) ~ log(est_value) + log(eav) | agency_group + year,
                 data = df |> filter(type == "School" & minor_type == "ELEMENTARY"),
                 vcov = ~agency_group,
                 panel.id = c("agency_group", "year")
                 ),
     
-    "Secondary" = feols(log(total_final_levy) ~ log(eav) + 
-                         log(est_value) | agency_group + year,
+    "Secondary" = feols(log(total_final_levy) ~ log(est_value) + log(eav)
+                        | agency_group + year,
                 data = df |> filter(type == "School" & minor_type == "SECONDARY"),
                 vcov = ~agency_group,
                 panel.id = c("agency_group", "year")
@@ -1341,15 +1217,15 @@ munis_and_schools <- list(
   
   "Other" = list(
     
-    "Townships" = feols(log(total_final_levy) ~ log(eav) + 
-                         log(est_value) | agency_group + year,
+    "Townships" = feols(log(total_final_levy) ~ log(est_value) + log(eav)
+                        | agency_group + year,
                 data = df |> filter(type == "Township"),
                 vcov = ~agency_group,
                 panel.id = c("agency_group", "year")
                 ),
     
-    "Special District" = feols(log(total_final_levy) ~ log(eav) + 
-                         log(est_value) | agency_group + year,
+    "Special District" = feols(log(total_final_levy) ~ log(est_value) + log(eav) 
+                         | agency_group + year,
                 data = df |> filter(type == "Other"),
                 vcov = ~agency_group,
                 panel.id = c("agency_group", "year")
@@ -1375,28 +1251,29 @@ save_tt(munis_and_schools_formatted,
 ```{r}
 #| label: munis_and_schools_robustness-lags
 #| column: page
+#| tbl-cap: "Robustness Check Slide: Has est_value with eav and lagged eav. "
 
 
 munis_and_schools <- list(
   
   "Municipalities" = list(
     
-    "All Municipalities" = feols(log(total_final_levy) ~ log(eav) + 
-                         l(log(eav), 1)  + log(est_value)| agency_group + year,
+    "All Municipalities" = feols(log(total_final_levy) ~ log(est_value) + log(eav) + 
+                         l(log(eav), 1)  | agency_group + year,
                 data = df |> filter(type == "Muni"),
                 vcov = ~agency_group,
                 panel.id = c("agency_group", "year")
                 ),
     
-    "Homerule" = feols(log(total_final_levy) ~ log(eav) + 
-                         l(log(eav), 1) + log(est_value)| agency_group + year,
+    "Homerule" = feols(log(total_final_levy) ~ log(est_value) + log(eav) + 
+                         l(log(eav), 1) | agency_group + year,
                 data = df |> filter(type == "Muni" & home_rule_ind == 1),
                 vcov = ~agency_group,
                 panel.id = c("agency_group", "year")
                 ),
     
-    "Non-Homerule" = feols(log(total_final_levy) ~ log(eav) + 
-                         l(log(eav), 1) + log(est_value)| agency_group + year,
+    "Non-Homerule" = feols(log(total_final_levy) ~ log(est_value) + log(eav) +  
+                             l(log(eav), 1)  | agency_group + year,
                 data = df |> filter(type == "Muni" & home_rule_ind == 0),
                 vcov = ~agency_group,
                 panel.id = c("agency_group", "year")
@@ -1405,22 +1282,22 @@ munis_and_schools <- list(
   
   "Schools" = list(
     
-    "All Schools" = feols(log(total_final_levy) ~ log(eav) + 
-                         l(log(eav), 1) +log(est_value) | agency_group + year,
+    "All Schools" = feols(log(total_final_levy) ~ log(est_value) + log(eav) +  
+                            l(log(eav), 1) | agency_group + year,
                 data = df |> filter(type == "School"),
                 vcov = ~agency_group,
                 panel.id = c("agency_group", "year")
                 ),
     
-    "Elementary" = feols(log(total_final_levy) ~ log(eav) + 
-                         l(log(eav), 1) + log(est_value)| agency_group + year,
+    "Elementary" = feols(log(total_final_levy) ~ log(est_value) + log(eav) +  
+                           l(log(eav), 1)| agency_group + year,
                 data = df |> filter(type == "School" & minor_type == "ELEMENTARY"),
                 vcov = ~agency_group,
                 panel.id = c("agency_group", "year")
                 ),
     
-    "Secondary" = feols(log(total_final_levy) ~ log(eav) + 
-                         l(log(eav), 1) + log(est_value) | agency_group + year,
+    "Secondary" = feols(log(total_final_levy) ~ log(est_value) + log(eav) +  
+                          l(log(eav), 1) | agency_group + year,
                 data = df |> filter(type == "School" & minor_type == "SECONDARY"),
                 vcov = ~agency_group,
                 panel.id = c("agency_group", "year")
@@ -1429,15 +1306,15 @@ munis_and_schools <- list(
   
   "Other" = list(
     
-    "Townships" = feols(log(total_final_levy) ~ log(eav) + 
-                         l(log(eav), 1) +log(est_value) | agency_group + year,
+    "Townships" = feols(log(total_final_levy) ~ log(est_value) + log(eav) +  
+                          l(log(eav), 1) | agency_group + year,
                 data = df |> filter(type == "Township"),
                 vcov = ~agency_group,
                 panel.id = c("agency_group", "year")
                 ),
     
-    "Special District" = feols(log(total_final_levy) ~ log(eav) + 
-                         l(log(eav), 1) +log(est_value) | agency_group + year,
+    "Special District" = feols(log(total_final_levy) ~ log(est_value) + log(eav) +  
+                                 l(log(eav), 1) | agency_group + year,
                 data = df |> filter(type == "Other"),
                 vcov = ~agency_group,
                 panel.id = c("agency_group", "year")
