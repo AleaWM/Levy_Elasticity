@@ -618,16 +618,6 @@ If we drop Chicago, we get to keep another year of data for all of the other mun
 
 Exported as Word Documents. 
 
-```{r}
-#| label: model-vars-continuous-notlogged2
-#| warning: false
-#| message: false
-
-crosstable::crosstable(data = df, by = type, cols = c(type, total_final_levy, cty_total_eav, av, taxed_fmv))
-
-
-```
-
 
 ```{r}
 #| label: tbl-slide-descr-stats
