@@ -84,9 +84,6 @@ if (file.exists(file_path)){
     ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "./ptaxsim.db/ptaxsim-2023.0.0.db")
 
 }
-# ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "./ptaxsim.db/ptaxsim-2023.0.0.db")
- 
-#ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/ptaxsim.db/ptaxsim-2023.0.0.db")
 
 agency_dt <- DBI::dbGetQuery(
   ptaxsim_db_conn,
@@ -137,7 +134,7 @@ raw_data_joined <- left_join(agency_dt, agency_triads) |> select(-c(cty_dupage_e
 
 ```
 
- ## Clean variables and filter observations from joined data
+## Clean variables and filter observations from joined data
 
 ```{r}
 
@@ -268,7 +265,7 @@ grouped_manual <- grouped_manual |>
     agency_name = first(agency_name),
     agency_num = first(agency_num),
     total_final_levy = sum(total_final_levy, na.rm=TRUE),
-    total_final_levy = ifelse(total_final_levy == 0, NA, total_final_levy), # change 0's to NAs so ln() doesn't break it
+    total_final_levy = ifelse(total_final_levy == 0, NA, total_final_levy), # change 0's to NAs so ln() doesn't break it,
     major_type = paste(list(unique(major_type)), sep = ", "),   
     minor_type = paste(list(unique(minor_type)), sep = ", "),
     cty_cook_eav = first(cty_cook_eav),
@@ -802,6 +799,7 @@ df |>
 
 df |> 
   group_by(year, type) |> 
+  mutate(type = factor(type, levels = c("School", "Muni", "Township", "Other"))) %>%
   summarize(median_levy = median(total_final_levy/1000000, na.rm = TRUE)) |> 
   ggplot() + 
   geom_line(aes(x = year, y = median_levy, color = type), lwd =2) +
@@ -838,6 +836,8 @@ df |>
 
 df |> 
   group_by(year, type, home_rule_ind) |> 
+    mutate(type = factor(type, levels = c("School", "Muni", "Township", "Other"))) %>%
+
   summarize(median_levy = median(total_final_levy/1000000, na.rm = TRUE)) |> 
   ggplot(aes(x = year, y = median_levy, color = type, lty = home_rule_ind)) + 
   geom_line(lwd =1  ) +
@@ -856,16 +856,17 @@ df |>
 ```
 
 ```{r}
-#| label: tax-base-over-time
+#| label: taxedeav-over-time
 
 df |> 
+  mutate(type = factor(type, levels = c("Township", "School", "Muni", "Other"))) %>%
   filter(type != "Township")  |>
   group_by(year, type) |> 
   summarize(median_eav = median(taxed_eav, na.rm = TRUE)/1000000) |> 
   ggplot(aes(x = year, y = median_eav, color = type)) + 
   geom_line(lwd = 1.5) +
   labs(
-    title = "Median EAV Over Time by Taxing Agency Type",
+    title = "Median Taxed EAV Over Time by Taxing Agency Type",
     x = "Year",
     y = "EAV (Millions)",
     color = "Agency Type"
@@ -875,6 +876,87 @@ df |>
   theme_minimal()
 
 ```
+
+```{r}
+#| label: totaleav-over-time
+
+df |> 
+  mutate(type = factor(type, levels = c("Township", "School", "Muni", "Other"))) %>%
+  filter(type != "Township")  |>
+  group_by(year, type) |> 
+  summarize(median_totaleav = median(total_eav, na.rm = TRUE)/1000000) |> 
+  ggplot(aes(x = year, y = median_totaleav, color = type)) + 
+  geom_line(lwd = 1.5) +
+  labs(
+    title = "Median Total EAV Over Time by Taxing Agency Type",
+    x = "Year",
+    y = "EAV (Millions)",
+    color = "Agency Type"
+  ) +
+  scale_color_brewer(palette = "Blues", direction = -1) + 
+  scale_x_continuous(breaks = seq(min(df$year), max(df$year), by = 2)) +  # Adjust x-axis breaks 
+  theme_minimal()
+
+```
+
+```{r}
+#| label: avfmv-overtime
+#| layout-ncol: 2
+
+df |> 
+  mutate(type = factor(type, levels = c("Township", "School", "Muni", "Other"))) %>%
+  filter(type != "Township")  |>
+  group_by(year, type) |> 
+  summarize(median_av = median(av, na.rm = TRUE)/1000000) |> 
+  ggplot(aes(x = year, y = median_av, color = type)) + 
+  geom_line(lwd = 1.5) +
+  labs(
+    title = "Median AV Over Time by Taxing Agency Type",
+    x = "Year",
+    y = "AV (Millions)",
+    color = "Agency Type"
+  ) +
+  scale_color_brewer(palette = "Blues", direction = -1) + 
+  scale_x_continuous(breaks = seq(min(df$year), max(df$year), by = 2)) +  # Adjust x-axis breaks 
+  theme_minimal()
+
+
+df |> 
+  mutate(type = factor(type, levels = c("Township", "School", "Muni", "Other"))) %>%
+  filter(type != "Township")  |>
+  group_by(year, type) |> 
+  summarize(median_totalfmv = median(total_fmv, na.rm = TRUE)/1000000) |> 
+  ggplot(aes(x = year, y = median_totalfmv, color = type)) + 
+  geom_line(lwd = 1.5) +
+  labs(
+    title = "Median Total FMV Over Time by Taxing Agency Type",
+    x = "Year",
+    y = "AV (Millions)",
+    color = "Agency Type"
+  ) +
+  scale_color_brewer(palette = "Blues", direction = -1) + 
+  scale_x_continuous(breaks = seq(min(df$year), max(df$year), by = 2)) +  # Adjust x-axis breaks 
+  theme_minimal()
+
+df |> 
+  mutate(type = factor(type, levels = c("Township", "School", "Muni", "Other"))) %>%
+  filter(type != "Township")  |>
+  group_by(year, type) |> 
+  summarize(median_fmv = median(taxed_fmv, na.rm = TRUE)/1000000) |> 
+  ggplot(aes(x = year, y = median_fmv, color = type)) + 
+  geom_line(lwd = 1.5) +
+  labs(
+    title = "Median Taxed FMV Over Time by Taxing Agency Type",
+    x = "Year",
+    y = "FMV (Millions)",
+    color = "Agency Type"
+  ) +
+  scale_color_brewer(palette = "Blues", direction = -1) + 
+  scale_x_continuous(breaks = seq(min(df$year), max(df$year), by = 2)) +  # Adjust x-axis breaks 
+  theme_minimal()
+
+```
+
 
 
 ```{r }
@@ -1131,6 +1213,43 @@ df %>% ungroup() |>
 
   labs(title = "Summed Municipality EAV by Triad", y = "Tax Base (in Millions)", x = "", 
        caption = "Light Gray line is total Value instead of Taxed Value") + theme_classic()
+```
+
+
+### Indexed to first year
+
+```{r}
+indexed_munis <- df %>% ungroup() %>%
+    filter(type == "Muni" ) %>%
+  select( agency_group, year, cty_cook_eav, total_final_levy, home_rule_ind, triad_name) %>%
+  group_by(agency_group, triad_name) %>% 
+  arrange(year) %>%
+    summarize(# Index values to 2006
+    eav_idx = cty_cook_eav / cty_cook_eav[year == 2006] ,
+    levy_idx = total_final_levy / total_final_levy[year == 2006] ,
+
+        year = year, home_rule_ind = home_rule_ind) 
+
+endpoints <- indexed_munis %>% filter(year == 2023)
+
+indexed_munis %>% 
+  ggplot(aes(x=year, y = levy_idx, group = agency_group)) + 
+    geom_line( linetype = "dashed") +
+    geom_text(data = endpoints, aes(x = year, y = levy_idx, label = agency_group), size = 2, vjust=-1.5, check_overlap = TRUE)+
+
+  geom_point() + 
+  theme_classic()+
+  labs(title = "Municipalities:Total Final Levy Indexed to 2006")
+```
+
+```{r}
+indexed_munis %>% ggplot() + 
+  geom_line(aes(x=year, y = eav_idx, group = agency_group, color = as.factor(home_rule_ind)))  +
+      geom_text(data = endpoints, aes(x=year, y = eav_idx, label = agency_group), size = 2, vjust=-1.5, check_overlap = TRUE)+
+  theme_minimal()+
+  theme(legend.position = "bottom")+
+
+  labs(title = "Municipalities: Taxable EAV Indexed to 2006" )
 ```
 
 
@@ -1737,28 +1856,28 @@ munis_and_schools_formatted <- modelsummary(munis_and_schools,
              #gof_omit = "AIC|BIC|RMSE|Std.Errors|FE",
              stars = TRUE)
 
-munis_and_schools_formatted
+munis_and_schools_formatted 
 
 ```
 
 
 
 ```{r}
-#| include: false
-#| eval: false
 #| label: munis_and_schools_lags_reassess
+#| warning: false
+#| message: false
 
 munis_and_schools <- list(
   
   "Municipalities" = list(
 
-    "Homerule" = feols(log(total_final_levy) ~  l(log(est_value), 1)*reassess_year | agency_group + year,
+    "Homerule" = feols(log(total_final_levy) ~ log(est_value)*reassess_year + l(log(est_value), 1)*reassess_year + log(eav)*reassess_year | agency_group + year,
                 data = df |> filter(type == "Muni" & home_rule_ind == 1),
                 vcov = ~agency_group,
                 panel.id = c("agency_group", "year")
                 ),
     
-    "Non-Homerule" = feols(log(total_final_levy) ~ l(log(est_value), 1)*reassess_year | agency_group + year,
+    "Non-Homerule" = feols(log(total_final_levy) ~ log(est_value)*reassess_year + l(log(est_value), 1)*reassess_year + log(eav)*reassess_year | agency_group + year,
                 data = df |> filter(type == "Muni" & home_rule_ind == 0),
                 vcov = ~agency_group,
                 panel.id = c("agency_group", "year")
@@ -1792,7 +1911,7 @@ munis_and_schools_formatted
 
 ```
 
-
+### Dealing with Assessment years  and Triad rotations
 ```{r}
 #| include: false
 #| eval: false
@@ -1977,6 +2096,55 @@ munis_and_schools_formatted
 
 ```
 
+#### Models by Triad
+
+```{r}
+#| column: page
+#| label: tbl-models-bytriad
+#| tbl-cap: "Uses estimated value of EAV and current tax year EAV"
+
+
+df <- df |> mutate(eav = cty_cook_eav)
+  
+all_models <- list(
+    
+    
+    "North" = feols(log(total_final_levy) ~ log(est_value)*reassess_year | agency_group + year,
+                data = (df %>% filter(triad_name == "North")),
+                vcov = ~agency_group,
+                panel.id = c("agency_group", "year")
+                ),
+        "North" = feols(log(total_final_levy) ~ log(est_value)*reassess_year +  log(eav)  | agency_group + year,
+                data = (df %>% filter(triad_name == "North")),
+                vcov = ~agency_group,
+                panel.id = c("agency_group", "year")
+                ),
+    
+    
+    "South" = feols(log(total_final_levy) ~ log(est_value) +  log(eav)  | agency_group + year,
+                data = (df %>% filter(triad_name == "South")) ,
+                vcov = ~agency_group,
+                panel.id = c("agency_group", "year")
+                ),
+        
+    "South" = feols(log(total_final_levy) ~ log(est_value)*reassess_year +  log(eav)  | agency_group + year,
+                data = (df %>% filter(triad_name == "South")) ,
+                vcov = ~agency_group,
+                panel.id = c("agency_group", "year")
+                )
+    )
+
+
+modelsummary::modelsummary(
+  all_models,
+  output = "flextable",
+              stars = TRUE
+)
+
+```
+
+
+#### Other
 
 
 ```{r}
