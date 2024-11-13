@@ -74,10 +74,14 @@ library(tinytable)
 ## Change database file path to match your computer's location 
 ## of the PTAXSIM database!
 
+file_path <- "C:/Users/aleaw/" 
 
-#ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "./ptaxsim.db/ptaxsim-2023.0.0.db")
- 
-ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/ptaxsim.db/ptaxsim-2023.0.0.db")
+if (file.exists(file_path)){
+   ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/ptaxsim.db/ptaxsim-2023.0.0.db")
+} else {
+    ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "./ptaxsim.db/ptaxsim-2023.0.0.db")
+
+}
 
 agency_dt <- DBI::dbGetQuery(
   ptaxsim_db_conn,
@@ -214,16 +218,18 @@ table(recoded_data$year, recoded_data$minor_type)
 grouped_manual <- recoded_data |> 
   # 10981 obs.
   left_join(groupies,
-            by = c("agency_name", "agency_num")
-  ) |> 
-  filter(triad != "City") |>
+            by = c("agency_name", "agency_num")) |> 
+ 
+   filter(triad_name != "City") |>
+ 
+   mutate(agency_group = ifelse(is.na(agency_group), agency_name, agency_group)) |>
   # Filter post-grouped agencies to munis, townships, schools and miscellaneous agencies such as Parks or Library Special Districts
   # 10,261 obs after filtering
   filter(
   (  (major_type == "MUNICIPALITY/TOWNSHIP" |  major_type == "MISCELLANEOUS" ) | (minor_type == "ELEMENTARY" |   minor_type == "SECONDARY") ) & 
       !minor_type %in% c("SANITARY", "WATER", "MOSQUITO", "COOK" )) 
 
-table(grouped_manual$year, grouped_manual$minor_type)
+#table(grouped_manual$year, grouped_manual$minor_type)
 
 grouped_manual <- grouped_manual |>
   
@@ -239,7 +245,7 @@ grouped_manual <- grouped_manual |>
     total_final_levy = ifelse(total_final_levy == 0, NA, total_final_levy), # change 0's to NAs so ln() doesn't break it
     major_type = paste(list(unique(major_type)), sep = ", "),   
     minor_type = paste(list(unique(minor_type)), sep = ", "),
-
+    
     cty_total_eav = mean(cty_total_eav, na.rm=TRUE), 
     av = first(av),   
     triad_name = first(triad_name), 
@@ -282,10 +288,10 @@ grouped_manual <- grouped_manual |>
 
 ```
 
-```{r bundlecoded-not-summed}
+```{r bundlecoded-not-summed, results='hide'}
 
 
-table(recoded_data$year, recoded_data$minor_type)
+#table(recoded_data$year, recoded_data$minor_type)
 
   
 before_table <- recoded_data |>
@@ -433,14 +439,13 @@ for(i in graphmunis){
                  fill  = "gray50", alpha = .5) +
 
   geom_line(aes(x=year, y = av), color = "black", lty = 3) + 
-  geom_point(aes(x=year, y = av), 
-                 fill  = "black", alpha = .5) +
+  geom_point(aes(x=year, y = av), fill  = "black") +
   
-      geom_line(aes(x=year, y = est_value), alpha = .5, color = "red", lty = 2)+
-    geom_point(aes(x=year, y = est_value), 
-                 fill  = "red", alpha = .5) +
+      geom_line(aes(x=year, y = est_value), alpha = .5, color = "red", lty = 2, lwd = 1.5)+
+  
   scale_x_continuous(breaks = seq(ceiling(min(2006)), floor(max(2022)), by = 2)) +
   scale_y_continuous(labels = scales::dollar_format()) + 
+    theme_classic() +
     labs(title = paste(i), y= "Value ($1000)", x = "") -> graph
 
   print(graph)
@@ -565,9 +570,9 @@ tt_cont_var <- df |>
   ) |>
   tt()
           
-tt_cont_var |>
-  save_tt("cont_descr_stats_11_5_24.docx",
-          overwrite = TRUE)
+# tt_cont_var |>
+#   save_tt("cont_descr_stats_11_5_24.docx",
+#           overwrite = TRUE)
 
 ```
 
@@ -585,10 +590,10 @@ tt_cat_vars <- df |>
   ) |>
   tt()
 
-tt_cat_vars |>
-  save_tt("cat_descr_stats_11_5_24.docx",
-          overwrite = TRUE)
-
+# tt_cat_vars |>
+#   save_tt("cat_descr_stats_11_5_24.docx",
+#           overwrite = TRUE)
+# 
 
 ```
 ```{r}
@@ -618,14 +623,37 @@ major_minor_tt <- datasummary_crosstab(minor_type~type,
 
 major_minor_tt
 
-major_minor_tt |>
-  save_tt("major_minor_agency_crosstab_11_5_2024.docx",
-          overwrite = TRUE)
-
+# major_minor_tt |>
+#   save_tt("major_minor_agency_crosstab_11_5_2024.docx",
+#           overwrite = TRUE)
+# 
 
 ```
 
 ## Visualizations
+
+```{r}
+#| label: av-tax-base-over-time
+
+df |> 
+  mutate(type = factor(type, levels = c("Township", "School", "Muni", "Other"))) %>%
+  filter(type != "Township")  |>
+  group_by(year, type) |> 
+  summarize(median_av = median(av, na.rm = TRUE)/1000000) |> 
+  ggplot(aes(x = year, y = median_av, color = type)) + 
+  geom_line(lwd = 1.5) +
+  labs(
+    title = "Median AV Over Time by Taxing Agency Type",
+    x = "Year",
+    y = "AV (Millions)",
+    color = "Agency Type"
+  ) +
+  scale_color_brewer(palette = "Blues", direction = -1) + 
+  scale_x_continuous(breaks = seq(min(df$year), max(df$year), by = 2)) +  # Adjust x-axis breaks 
+  theme_minimal()
+
+```
+
 
 Colors: d40032, 001e61, 41b6e5, ffbe3e, and 0085ad
 
@@ -736,60 +764,60 @@ mods_1 <- list(
   
   # "All Types" = feols(log(total_final_levy) ~ ln_lag_av + log(est_value)*flip_assess  | agency_group + year,
   #              data = df,
-  #              vcov = "twoway",
+  #              vcov = ~agency_group,
   #              panel.id = c("agency_group", "year")
   #               ),
   # 
   #     "All Types" = feols(log(total_final_levy) ~ ln_lag_av + log(est_value)  | agency_group + year,
   #              data = df,
-  #              vcov = "twoway",
+  #              vcov = ~agency_group,
   #              panel.id = c("agency_group", "year")
   #               ),
     # 
     #   "All Types" = feols(log(total_final_levy) ~ ln_lag_av + log(est_value)  + triad_name*reassess_year| agency_group + year,
     #            data = df,
-    #            vcov = "twoway",
+    #            vcov = ~agency_group,
     #            panel.id = c("agency_group", "year")
     #             ),
     # "All Types" = feols(log(total_final_levy) ~ ln_lag_av + log(est_value)  | agency_group + year^triad_name,
     #            data = df,
-    #            vcov = "twoway",
+    #            vcov = ~agency_group,
     #            panel.id = c("agency_group", "year")
     #             ),
   
     "Homerule" = feols(log(total_final_levy) ~ ln_lag_av + log(est_value)*flip_assess  | agency_group + year,
                data = df |> filter(home_rule_ind == 1 & type == "Muni"),
-               vcov = "twoway",
+               vcov = ~agency_group,
                panel.id = c("agency_group", "year")
                 ),
   
       "Homerule" = feols(log(total_final_levy) ~ ln_lag_av + log(est_value)  | agency_group + year,
                data = df |> filter(home_rule_ind == 1 & type == "Muni"),
-               vcov = "twoway",
+               vcov = ~agency_group,
                panel.id = c("agency_group", "year")
                 ),
   
      "NonHR" = feols(log(total_final_levy) ~ ln_lag_av + log(est_value)*flip_assess | agency_group + year,
                data = df |> filter(home_rule_ind == 0 & type == "Muni"),
-               vcov = "twoway",
+               vcov = ~agency_group,
                panel.id = c("agency_group", "year")
                 ),
   
      "NonHR" = feols(log(total_final_levy) ~ ln_lag_av + log(est_value) | agency_group + year,
                data = df |> filter(home_rule_ind == 0 & type == "Muni"),
-               vcov = "twoway",
+               vcov = ~agency_group,
                panel.id = c("agency_group", "year")
                 ),
   
-    "Schools" = feols(log(total_final_levy) ~ log(est_value)*flip_assess + ln_lag_av +   | agency_group + year,
+    "Schools" = feols(log(total_final_levy) ~ log(est_value)*flip_assess + ln_lag_av   | agency_group + year,
                data = df |> filter(type == "School"),
-               vcov = "twoway",
+               vcov = ~agency_group,
                panel.id = c("agency_group", "year")
                 ) ,
   
     "Schools" = feols(log(total_final_levy) ~ log(est_value)  + ln_lag_av  | agency_group + year,
                data = df |> filter(type == "School"),
-               vcov = "twoway",
+               vcov = ~agency_group,
                panel.id = c("agency_group", "year")
                 )      )
 
@@ -810,48 +838,48 @@ mods_1 <- list(
   
   # "All Types" = feols(log(total_final_levy) ~ ln_lag_av + log(av)  | agency_group + year,
   #              data = df,
-  #              vcov = "twoway",
+  #              vcov = ~agency_group,
   #              panel.id = c("agency_group", "year")
   #               ),
   #   "All Types" = feols(log(total_final_levy) ~  log(est_value)  | agency_group + year,
   #              data = df,
-  #              vcov = "twoway",
+  #              vcov = ~agency_group,
   #              panel.id = c("agency_group", "year")
   #              ),
   
     "Homerule" = feols(log(total_final_levy) ~ ln_lag_av + log(av)  | agency_group + year,
                data = df |> filter(home_rule_ind == 1 & type == "Muni"),
-               vcov = "twoway",
+               vcov = ~agency_group,
                panel.id = c("agency_group", "year")
                 ),
   
       "Homerule" = feols(log(total_final_levy) ~  log(est_value)*ass  | agency_group + year,
                data = df |> filter(home_rule_ind == 1 & type == "Muni"),
-               vcov = "twoway",
+               vcov = ~agency_group,
                panel.id = c("agency_group", "year")
                 ),
   
      "NonHR" = feols(log(total_final_levy) ~ ln_lag_av + log(av) | agency_group + year,
                data = df |> filter(home_rule_ind == 0 & type == "Muni"),
-               vcov = "twoway",
+               vcov = ~agency_group,
                panel.id = c("agency_group", "year")
                 ),
   
      "NonHR" = feols(log(total_final_levy) ~  log(est_value)*ass | agency_group + year,
                data = df |> filter(home_rule_ind == 0 & type == "Muni"),
-               vcov = "twoway",
+               vcov = ~agency_group,
                panel.id = c("agency_group", "year")
                 ),
   
     "Schools" = feols(log(total_final_levy) ~ ln_lag_av + log(av)  | agency_group + year,
                data = df |> filter(type == "School"),
-               vcov = "twoway",
+               vcov = ~agency_group,
                panel.id = c("agency_group", "year")
                 ) ,
   
     "Schools" = feols(log(total_final_levy) ~ log(est_value)*ass  | agency_group + year,
                data = df |> filter(type == "School"),
-               vcov = "twoway",
+               vcov = ~agency_group,
                panel.id = c("agency_group", "year")
                 )      )
 
@@ -871,7 +899,7 @@ modelsummary::modelsummary(
 
 feols_test <- feols(log(total_final_levy) ~  log(est_value)  | agency_group + year,
                data = df,
-               vcov = "twoway",
+               vcov = ~agency_group,
                panel.id = c("agency_group", "year")
                 )
 
@@ -897,37 +925,37 @@ mods_1 <- list(
   
     "Homerule" = feols(log(total_final_levy) ~ ln_lag_av + log(av)*ass  | agency_group + year,
                data = df |> filter(home_rule_ind == 1 & type == "Muni"),
-               vcov = "twoway",
+               vcov = ~agency_group,
                panel.id = c("agency_group", "year")
                 ),
   
       "Homerule" = feols(log(total_final_levy) ~  log(est_value)*ass  | agency_group + year,
                data = df |> filter(home_rule_ind == 1 & type == "Muni"),
-               vcov = "twoway",
+               vcov = ~agency_group,
                panel.id = c("agency_group", "year")
                 ),
   
      "NonHR" = feols(log(total_final_levy) ~ ln_lag_av + log(av)*ass | agency_group + year,
                data = df |> filter(home_rule_ind == 0 & type == "Muni"),
-               vcov = "twoway",
+               vcov = ~agency_group,
                panel.id = c("agency_group", "year")
                 ),
   
      "NonHR" = feols(log(total_final_levy) ~  log(est_value)*ass | agency_group + year,
                data = df |> filter(home_rule_ind == 0 & type == "Muni"),
-               vcov = "twoway",
+               vcov = ~agency_group,
                panel.id = c("agency_group", "year")
                 ),
   
     "Schools" = feols(log(total_final_levy) ~ ln_lag_av + log(av)*ass  | agency_group + year,
                data = df |> filter(type == "School"),
-               vcov = "twoway",
+               vcov = ~agency_group,
                panel.id = c("agency_group", "year")
                 ) ,
   
     "Schools" = feols(log(total_final_levy) ~ log(est_value)*ass  | agency_group + year,
                data = df |> filter(type == "School"),
-               vcov = "twoway",
+               vcov = ~agency_group,
                panel.id = c("agency_group", "year")
                 )      )
 
@@ -950,49 +978,49 @@ mods_1 <- list(
   
   "All Types" = feols(log(total_final_levy) ~ ln_lag_av*ass + log(est_value)*flip_assess  | agency_group + year,
                data = df,
-               vcov = "twoway",
+               vcov = ~agency_group,
                panel.id = c("agency_group", "year")
                 ),
   
     "Homerule" = feols(log(total_final_levy) ~ ln_lag_av*ass + log(est_value)*flip_assess  | agency_group + year,
                data = df |> filter(home_rule_ind == 1 & type == "Muni"),
-               vcov = "twoway",
+               vcov = ~agency_group,
                panel.id = c("agency_group", "year")
                 ),
   
      "NonHR" = feols(log(total_final_levy) ~ ln_lag_av*ass + log(est_value)*flip_assess | agency_group + year,
                data = df |> filter(home_rule_ind == 0 & type == "Muni"),
-               vcov = "twoway",
+               vcov = ~agency_group,
                panel.id = c("agency_group", "year")
                 ),
   
     "Schools" = feols(log(total_final_levy) ~ ln_lag_av*ass + log(est_value)*flip_assess  | agency_group + year,
                data = df |> filter(type == "School"),
-               vcov = "twoway",
+               vcov = ~agency_group,
                panel.id = c("agency_group", "year")
                 ) ,
     
   "All Types" = feols(log(total_final_levy) ~ ln_lag_av + ln_av*ass + log(est_value)  | agency_group + year,
                data = df,
-               vcov = "twoway",
+               vcov = ~agency_group,
                panel.id = c("agency_group", "year")
                 ),
   
     "Homerule" = feols(log(total_final_levy) ~ ln_lag_av + ln_av*ass + log(est_value)  | agency_group + year,
                data = df |> filter(home_rule_ind == 1 & type == "Muni"),
-               vcov = "twoway",
+               vcov = ~agency_group,
                panel.id = c("agency_group", "year")
                 ),
   
      "NonHR" = feols(log(total_final_levy) ~ ln_lag_av + ln_av*ass + log(est_value) | agency_group + year,
                data = df |> filter(home_rule_ind == 0 & type == "Muni"),
-               vcov = "twoway",
+               vcov = ~agency_group,
                panel.id = c("agency_group", "year")
                 ),
   
     "Schools" = feols(log(total_final_levy) ~ ln_lag_av + ln_av*ass + log(est_value)  | agency_group + year,
                data = df |> filter(type == "School"),
-               vcov = "twoway",
+               vcov = ~agency_group,
                panel.id = c("agency_group", "year")
                 )   
   )
@@ -1042,7 +1070,7 @@ mods_1 <- list(
   
      "4B. Twoway FE" = feols(log(total_final_levy) ~ ln_lag_av + ln_est_v | agency_group + year,
                data = df2011,
-               vcov = "twoway",
+               vcov = ~agency_group,
                panel.id = c("agency_group", "year")
                        )
 )
@@ -1090,7 +1118,7 @@ mods_1 <- list(
   
      "4B. Twoway FE" = feols(log(total_final_levy) ~ ln_lag_av + ln_est_v | agency_group + year,
                data = df2014,
-               vcov = "twoway",
+               vcov = ~agency_group,
                panel.id = c("agency_group", "year")
                        )
 )
@@ -1112,25 +1140,25 @@ mods_1 <- list(
   
   "All Types" = feols(log(total_final_levy) ~ ln_lag_av + log(est_value)*flip_assess  | agency_group + year,
                data = df2011,
-               vcov = "twoway",
+               vcov = ~agency_group,
                panel.id = c("agency_group", "year")
                 ),
   
     "Homerule" = feols(log(total_final_levy) ~ ln_lag_av + log(est_value)*flip_assess  | agency_group + year,
                data = df2011 |> filter(home_rule_ind == 1 & type == "Muni"),
-               vcov = "twoway",
+               vcov = ~agency_group,
                panel.id = c("agency_group", "year")
                 ),
   
      "NonHR" = feols(log(total_final_levy) ~ ln_lag_av + log(est_value)*flip_assess | agency_group + year,
                data = df2011 |> filter(home_rule_ind == 0 & type == "Muni"),
-               vcov = "twoway",
+               vcov = ~agency_group,
                panel.id = c("agency_group", "year")
                 ),
   
     "Schools" = feols(log(total_final_levy) ~ ln_lag_av + log(est_value)*flip_assess  | agency_group + year,
                data = df2011 |> filter(type == "School"),
-               vcov = "twoway",
+               vcov = ~agency_group,
                panel.id = c("agency_group", "year")
                 )        )
 
@@ -1152,25 +1180,25 @@ mods_1 <- list(
   
   "All Types" = feols(log(total_final_levy) ~ ln_lag_av + log(est_value)*flip_assess  | agency_group + year,
                data = df2014,
-               vcov = "twoway",
+               vcov = ~agency_group,
                panel.id = c("agency_group", "year")
                 ),
   
     "Homerule" = feols(log(total_final_levy) ~ ln_lag_av + log(est_value)*flip_assess  | agency_group + year,
                data = df2014 |> filter(home_rule_ind == 1 & type == "Muni"),
-               vcov = "twoway",
+               vcov = ~agency_group,
                panel.id = c("agency_group", "year")
                 ),
   
      "NonHR" = feols(log(total_final_levy) ~ ln_lag_av + log(est_value)*flip_assess | agency_group + year,
                data = df2014 |> filter(home_rule_ind == 0 & type == "Muni"),
-               vcov = "twoway",
+               vcov = ~agency_group,
                panel.id = c("agency_group", "year")
                 ),
   
     "Schools" = feols(log(total_final_levy) ~ ln_lag_av + log(est_value)*flip_assess  | agency_group + year,
                data = df2014 |> filter(type == "School"),
-               vcov = "twoway",
+               vcov = ~agency_group,
                panel.id = c("agency_group", "year")
                 )        )
 
@@ -1222,7 +1250,7 @@ mods_1 <- list(
   
      "4B. Twoway FE" = feols(log(total_final_levy) ~  ln_est_v + ln_lag_av | agency_group + year,
                data = df,
-               vcov = "twoway",
+               vcov = ~agency_group,
                panel.id = c("agency_group", "year")
                        )
 )
@@ -1247,13 +1275,13 @@ mods_1 <- list(
   
       "1" = feols(log(total_final_levy) ~  log(est_value) | agency_group + year,
                data = hr_df,
-               vcov = "twoway",
+               vcov = ~agency_group,
                panel.id = c("agency_group", "year")
                 ),
       
   "2" = feols(log(total_final_levy) ~ ln_lag_av | agency_group + year,
                data = hr_df,
-               vcov = "twoway",
+               vcov = ~agency_group,
                panel.id = c("agency_group", "year")
                 ),
   
@@ -1261,19 +1289,19 @@ mods_1 <- list(
   
      "3" = feols(log(total_final_levy) ~ log(est_value) + ln_lag_av +  flip_assess | agency_group + year,
                data = hr_df,
-               vcov = "twoway",
+               vcov = ~agency_group,
                panel.id = c("agency_group", "year")
                 ),
   
     "4" = feols(log(total_final_levy) ~ log(est_value) + ln_lag_av | agency_group + year,
                data = hr_df,
-               vcov = "twoway",
+               vcov = ~agency_group,
                panel.id = c("agency_group", "year")
                 ),
   
   "Interact" = feols(log(total_final_levy) ~  log(est_value) + ln_lag_av + log(est_value)*flip_assess | agency_group + year,
                data = hr_df,
-               vcov = "twoway",
+               vcov = ~agency_group,
                panel.id = c("agency_group", "year")
                 )
   )
