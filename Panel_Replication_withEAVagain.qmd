@@ -508,13 +508,14 @@ for(i in graphmunis){
   geom_point(aes(x=year, y = cty_cook_eav), 
                  fill  = "black", alpha = .5) +
   
-      geom_line(aes(x=year, y = est_value), alpha = .5, color = "red", lty = 2)+
+      geom_line(aes(x=year, y = est_value), alpha = .5, color = "red",  lty = 2, lwd= 1.5)+
     geom_point(aes(x=year, y = est_value), 
                  fill  = "red", alpha = .5) +
-  scale_x_continuous(breaks = seq(ceiling(min(2006)), floor(max(2022)), by = 2)) +
+  scale_x_continuous(breaks = seq(ceiling(min(2006)), floor(max(2032)), by = 2)) +
   scale_y_continuous(labels = scales::dollar_format()) + 
     theme_classic() + 
-    labs(title = paste(i), y= "Tax Base (in Millions)", x = "") -> graph
+    labs(title = paste(i), y= "Tax Base (in Millions)", x = "")  +  
+    theme(text = element_text(size = 14))-> graph
 
   print(graph)
 }
@@ -524,6 +525,7 @@ for(i in graphmunis){
 df %>%
   mutate(across(.cols = c(est_value, cty_cook_eav, assess_year_eav), ~.x/1000000) ) %>%
   filter(agency_group == "Cicero") %>%
+
   ggplot() +
   geom_line(aes(x=year, y = cty_cook_eav), color = "black", lty = 1) + 
   geom_point(aes(x=year, y = cty_cook_eav), 
@@ -532,14 +534,45 @@ df %>%
       geom_line(aes(x=year, y = est_value), alpha = .5, color = "red", lty = 2, lwd= 1.5)+
   scale_x_continuous(breaks = seq(ceiling(min(2006)), floor(max(2023)), by = 2)) +
   scale_y_continuous(labels = scales::dollar_format()) + 
+    scale_linetype_manual(values = c("Estimated Value" = "dashed", "EAV" = "solid" )) + 
     theme_classic() + 
-    labs(title = "Cicero's Tax Base", y= "Tax Base (in Millions)", x = "",
+    labs(title = "Cicero's Tax Base", 
+         y= "Tax Base (EAV in Millions)", x = "",
          caption = "Vertical lines represent reassessment years.", color = "Taxbase Type")+
+  theme(text = element_text(size = 14),
+        legend.position = "bottom") + 
+
   geom_vline(
     xintercept = seq(2008, 2023, 3),
     linetype = "dotted",
     alpha = 0.5)
+```
 
+
+```{r eval=FALSE, include=FALSE} 
+df %>%
+  mutate(across(.cols = c(est_value, cty_cook_eav, assess_year_eav), ~.x/1000000) ) %>%
+  filter(agency_group == "Cicero") %>%
+  select(year, est_value, cty_cook_eav) %>%
+  pivot_longer(cols = c(est_value, cty_cook_eav), names_to = "variables") %>%
+
+  ggplot(aes(x=year, y = value, lty = variables, color = variables)) +
+      geom_line(lwd = 1.5)+
+  scale_x_continuous(breaks = seq(2007, 20023, by = 2)) +
+  scale_y_continuous(labels = scales::dollar_format()) + 
+ #   scale_linetype_manual(values = c("Estimated Value" = "dashed", "EAV" = "solid" )) + 
+    theme_classic() + 
+    labs(title = "Cicero's Tax Base", 
+         y= "Tax Base (EAV in Millions)", x = "",
+         caption = "Vertical lines represent reassessment years.")+
+  theme(text = element_text(size = 14),
+        legend.position = "bottom", 
+        legend.title = element_blank()) + 
+
+  geom_vline(
+    xintercept = seq(2008, 2023, 3),
+    linetype = "dotted",
+    alpha = 0.5)
 ```
 
 
@@ -647,7 +680,7 @@ Exported as Word Documents.
 
 library(flextable)
 
-tbl <- datasummary((`Agency Type`=type)*((`EAV` =cty_cook_eav) + (`Levy`=total_final_levy)+ (`Estimated EAV`=est_value)) ~ Min+ Median + Mean + Max+ SD, data = df |>  
+tbl <- datasummary((`Agency Type`=type)*((`EAV` =cty_cook_eav) + (`Estimated EAV`=est_value) + (`Levy`=total_final_levy) ) ~ Min+ Median + Mean + Max+ SD, data = df |>  
               select(type,cty_cook_eav, total_final_levy, est_value) |> 
               mutate(across(.cols = c(cty_cook_eav, total_final_levy, est_value), ~.x/1000000)),
             fmt = 0,
@@ -805,13 +838,13 @@ df |>
   geom_line(aes(x = year, y = median_levy, color = type), lwd =2) +
   labs(
     title = "Median Levy Over Time by Taxing Agency Type",
-    x = "Year",
+    x = "Tax Year",
     y = "Millions of Dollars",
     color = "Agency Type"
   ) +
   scale_color_brewer(palette = "Reds", direction = -1) +
-  scale_x_continuous(breaks = seq(min(df$year), max(df$year), by = 2)) +  # Adjust x-axis breaks 
-  theme_minimal()
+  scale_x_continuous(breaks = seq(min(df$year)+1, max(df$year), by = 4)) +  # Adjust x-axis breaks 
+  theme_minimal() + theme(text = element_text(size = 18))
   
 ```
 
@@ -872,8 +905,8 @@ df |>
     color = "Agency Type"
   ) +
   scale_color_brewer(palette = "Blues", direction = -1) + 
-  scale_x_continuous(breaks = seq(min(df$year), max(df$year), by = 2)) +  # Adjust x-axis breaks 
-  theme_minimal()
+  scale_x_continuous(breaks = seq(min(df$year)+1, max(df$year), by = 4)) +  # Adjust x-axis breaks 
+  theme_minimal()  + theme(text = element_text(size = 18))
 
 ```
 
@@ -1001,6 +1034,12 @@ df |>
   theme_classic() +
   theme(legend.position = "none",
         axis.title.y = element_text(angle = 0))
+```
+
+
+```{r}
+#| layout-ncol: 2
+
 
 # Schools
 
@@ -1040,6 +1079,13 @@ df |>
   theme_classic() +
   theme(legend.position = "none",
         axis.title.y = element_text(angle = 0))
+```
+
+
+```{r} 
+#| eval: false
+#| include: false
+
 
 ## Histograms for NTA?
 
@@ -1121,6 +1167,11 @@ df |>
 
 ```{r}
 #| label: bar_chart_all_agencies
+#| include: false
+#| eval: false
+
+## keep for color reference only 
+
 
 library(RColorBrewer)
 df |>
@@ -1142,54 +1193,10 @@ df |>
 
 ```
 
-```{r}
-#| label: bar_chart_schools
-
-df |>
-  filter(year == 2022) |>
-  filter(type == "School") |>
-  filter(minor_type %in% c("ELEMENTARY", "SECONDARY")) |>
-  ggplot(aes(x = minor_type, fill = minor_type)) +
-  geom_bar() +
-  geom_text(stat = 'count', aes(label = ..count.., y = ..count..), vjust = -0.5, color = "black") +
-  labs(
-    title = "School Districts: Primary and Secondary",
-    subtitle = "Values Are Consistent Across All Years",
-    x = "School Agency Type",
-    y = "N"
-  ) +
-  theme_classic() +
-  scale_fill_manual(values = c(brewer.pal(n = 6, "Blues")[3], brewer.pal(n = 6, "Blues")[5])) +  # Specify colors individually
-  theme(legend.position = "none",
-        axis.title.y = element_text(angle = 0))
-
-```
 
 ```{r}
-#| label: bar_chart_homerule
-
-df |>
-  filter(year == 2022) |>
-  filter(type == "Muni") |>
-  mutate(home_rule = ifelse(home_rule_ind == 1, "Yes", "No")) |>  # Create a new column for home rule status
-  ggplot(aes(x = home_rule, fill = home_rule)) +
-  geom_bar() +
-  geom_text(stat = 'count', aes(label = ..count.., y = ..count..), vjust = -0.5, color = "black") +
-  labs(
-    title = "Municipalities by Home Rule Status",
-    subtitle = "Values Are Consistent Across All Years",
-    x = "Home Rule Status",
-    y = "N"
-  ) +
-  theme_classic() +
-  scale_fill_manual(values = brewer.pal(n = 5, "Blues")[3:4]) +  # Use 2 colors from the Blues palette
-  theme(legend.position = "none",
-        axis.title.y = element_text(angle = 0)) 
-
-```
-
-```{r}
-df %>% ungroup() |>
+df %>% 
+  ungroup() |>
   filter(type == "Muni") |>
   mutate(across(.cols = c(taxed_eav, total_eav, cty_cook_eav, est_value), ~.x/1000000) ) %>%
   group_by(year, triad_name) %>%
@@ -1627,6 +1634,59 @@ save_tt(munis_and_schools_formatted,
         overwrite = TRUE)
 
 ```
+
+
+# First  Differencing Secret Attempt
+
+
+## Year over year change
+
+```{r}
+quants <-  c(.5, .95)
+  
+
+
+
+df <- df  %>% 
+  group_by(agency_group) |> 
+  arrange(year) |>
+  mutate(levy_change = round(total_final_levy-lag(total_final_levy), digits =0),
+         levy_change = ifelse(is.nan(levy_change), 0, levy_change),
+ 
+         eav_change = round(cty_total_eav - lag(cty_total_eav), digits = 0),
+    eav_change = ifelse(is.nan(eav_change), 0, eav_change)
+         ) 
+
+library(stats)
+
+# df <-   df |> 
+#   ungroup() |> 
+#   group_by(year) |> 
+#   mutate(
+#     eav_quant = quantile(eav_change, probs = c(.5, .95)),
+#     levy_quant = quantile(levy_change, probs=c(.5, .95)))
+
+
+df |> 
+  filter(year == 2010 & levy_change < 2500000 
+         ) |> 
+  ggplot() +
+  geom_histogram(aes(x=levy_change))
+
+df |> 
+  filter(year == 2010 & eav_change > -150000000 & eav_change < 5000000000000) |> 
+  ggplot() +
+  geom_histogram(aes(x=eav_change)) 
+
+
+df |> filter(between(levy_change, -50000, 50000))
+
+
+
+df |> filter(between(eav_change, -2500000, 2500000))
+```
+
+
 
 
 ## Variations
@@ -2601,6 +2661,16 @@ modelsummary::modelsummary(
 
 ```
 
+
+# Odds and Ends
+
+
+```{r}
+#| lable: fig-yearlyptel
+#| fig-cap: "PTEL value each year. Based on CPI and/or inflation. "
+ggplot(cpi %>% filter(year > 2004)) + geom_line(aes(x=year, y = ptell_cook)) + theme_bw()
+
+```
 
 <!-- ## Matching Merriman's Stata Output -->
 
