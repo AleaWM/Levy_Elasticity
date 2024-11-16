@@ -11,10 +11,6 @@ format:
     toc-location: left
     cap-location: margin
     df-print: default
-    # grid:
-    #   sidebar-width: 200px
-    #   body-width: 900px
-    #   margin-width: 200px
 ---
 
 **Files needed for panel creation replication:**
@@ -118,6 +114,12 @@ eq_factor <- read_csv("./Necessary_Files/eq_factor.csv") |>
 agency_triads <- read_csv("./Necessary_Files/agency_reassessmentyears.csv") 
 
 agency_sum_file <- read_csv("./Necessary_files/ptaxsim_taxing_agency_summaries_2006to2023.csv")  %>% select(-c(agency_minor_type, agency_major_type))
+
+# 
+# muni_sum_file <- read_csv("./Necessary_files/ptaxsim_muni_MC_2006to2023.csv") 
+# c2_burden <- muni_sum_file |> filter(muni_mc_major_class_code == 2) |> select(muni_mc_year, clean_name = muni_mc_clean_name, muni_mc_mean_fmv_all:muni_mc_max_fmv_all, muni_mc_fmv_taxed:muni_mc_fmv_residential, muni_mc_levy, muni_mc_current_rate_avg:muni_mc_zero_bills) %>%
+#   rename(median_fmv = muni_mc_median_fmv_all)
+# 
 
 
 ```
@@ -246,13 +248,17 @@ table(grouped_manual$year, grouped_manual$minor_type)
 #| include: false
 grouped_manual %>% filter(is.na(agency_group))
 
-grouped_manual <- grouped_manual |> 
-  mutate(agency_group = ifelse(is.na(agency_group), agency_name, agency_group))
+
 ```
 
 
 ```{r}
 #| results: hide
+
+
+grouped_manual <- grouped_manual |> 
+  mutate(agency_group = ifelse(is.na(agency_group), agency_name, agency_group))
+
 
 grouped_manual <- grouped_manual |>
   
@@ -280,7 +286,12 @@ grouped_manual <- grouped_manual |>
     agency_count = n(),
     reassess_year = first(reassess_year),
     home_rule_ind = first(home_rule_ind),
-    flag_drop = first(flag_drop)
+    flag_drop = first(flag_drop),
+    c2_median_fmv=max(median_fmv_c2),
+    c2_median_fmv_taxed=max(median_c2fmv_taxed),
+    c2_sd_fmv = max(fmv_sd_c2),
+    c2_sd_fmv_taxed = max(fmv_taxed_c2_sd),
+
   ) |> 
   ungroup() |>
   # Create variables to indicate bundling after grouping
@@ -288,6 +299,7 @@ grouped_manual <- grouped_manual |>
     bundled = ifelse(agency_count > 1, 1, 0),
     uniqueid = str_c(agency_group, "_", home_rule_ind, "_", bundled),
     first2_dig = str_sub(agency_num, 1, 2),
+    c2_burden  = c2_median_fmv_taxed/total_final_levy,
     
     # Fix misclassification of Cicero, Evanston, and Chicago
     type = case_when(
@@ -1636,58 +1648,6 @@ save_tt(munis_and_schools_formatted,
 ```
 
 
-# First  Differencing Secret Attempt
-
-
-## Year over year change
-
-```{r}
-quants <-  c(.5, .95)
-  
-
-
-
-df <- df  %>% 
-  group_by(agency_group) |> 
-  arrange(year) |>
-  mutate(levy_change = round(total_final_levy-lag(total_final_levy), digits =0),
-         levy_change = ifelse(is.nan(levy_change), 0, levy_change),
- 
-         eav_change = round(cty_total_eav - lag(cty_total_eav), digits = 0),
-    eav_change = ifelse(is.nan(eav_change), 0, eav_change)
-         ) 
-
-library(stats)
-
-# df <-   df |> 
-#   ungroup() |> 
-#   group_by(year) |> 
-#   mutate(
-#     eav_quant = quantile(eav_change, probs = c(.5, .95)),
-#     levy_quant = quantile(levy_change, probs=c(.5, .95)))
-
-
-df |> 
-  filter(year == 2010 & levy_change < 2500000 
-         ) |> 
-  ggplot() +
-  geom_histogram(aes(x=levy_change))
-
-df |> 
-  filter(year == 2010 & eav_change > -150000000 & eav_change < 5000000000000) |> 
-  ggplot() +
-  geom_histogram(aes(x=eav_change)) 
-
-
-df |> filter(between(levy_change, -50000, 50000))
-
-
-
-df |> filter(between(eav_change, -2500000, 2500000))
-```
-
-
-
 
 ## Variations
 
@@ -1972,6 +1932,7 @@ munis_and_schools_formatted
 ```
 
 ### Dealing with Assessment years  and Triad rotations
+
 ```{r}
 #| include: false
 #| eval: false
@@ -2390,6 +2351,55 @@ modelsummary::modelsummary(
 
 
 ```{r}
+#| eval: false
+#| label: tbl-taxedfmv_models
+#| tbl-cap: "TYPE THIS."
+
+mods_1 <- list(
+  
+    "Homerule" = feols(log(total_final_levy) ~ l(log(taxed_fmv)) + l(ln_fmv) | agency_group + year,
+               data = df |> filter(home_rule_ind == 1 & type == "Muni"),
+             vcov  = ~ agency_group,
+               panel.id = c("agency_group", "year")
+                ),
+  
+     "NonHR" = feols(log(total_final_levy) ~ l(log(taxed_fmv)) + l(ln_fmv) | agency_group + year,
+               data = df |> filter(home_rule_ind == 0 & type == "Muni"),
+             vcov  = ~ agency_group,
+               panel.id = c("agency_group", "year")
+                ),
+  
+    "Schools" = feols(log(total_final_levy) ~ l(log(taxed_fmv)) + l(ln_fmv) | agency_group + year,
+               data = df |> filter(type == "School"),
+               vcov = ~ agency_group,
+               panel.id = c("agency_group", "year")
+                ) ,
+  
+    "Townships" =feols(log(total_final_levy) ~ l(log(taxed_fmv)) + l(ln_fmv)  | agency_group + year,
+               data = df |> filter(type == "Township"),
+               vcov = ~ agency_group,
+               panel.id = c("agency_group", "year")
+                ) ,
+      
+    "Special Districts" =feols(log(total_final_levy) ~ l(log(taxed_fmv)) + l(ln_fmv)  | agency_group + year,
+               data = df |> filter(type == "Other"),
+               vcov = ~ agency_group,
+               panel.id = c("agency_group", "year")
+                )  
+    
+    )
+
+
+modelsummary::modelsummary(
+  mods_1,
+  output = "flextable",
+  stars = TRUE
+)
+
+```
+
+
+```{r}
 #| label: tbl-models-MVHAWMhybrid-withFMV
 #| tbl-cap: "Fair Market Value (FMV) and the Tax Base (TEAV) Nov. 7th"
 #| column: page
@@ -2477,7 +2487,6 @@ mods_1 <- list(
 modelsummary::modelsummary(
   mods_1,
   output = "flextable",
- ##gof_map = c("nobs", "f",  "r2.within","r2.within.adjusted","complete.obs","std.error.type", "rmse"),
               stars = TRUE
 )
 
@@ -2660,6 +2669,119 @@ modelsummary::modelsummary(
 )
 
 ```
+
+
+
+
+# First  Differencing Secret Attempt
+
+
+## Year over year change
+
+```{r}
+quants <-  c(.5, .95)
+  
+
+
+
+df <- df  %>% 
+  group_by(agency_group) |> 
+  arrange(year) |>
+  mutate(levy_change = round(total_final_levy-lag(total_final_levy), digits =0),
+         levy_pct_change = (total_final_levy-lag(total_final_levy)) / lag(total_final_levy),
+         levy_change = ifelse(is.na(levy_change), 0, levy_change),
+         
+ 
+         eav_change = round(cty_total_eav - lag(cty_total_eav), digits = 0),
+         eav_pct_change = (cty_total_eav - lag(cty_total_eav))/lag(cty_total_eav),
+
+    eav_change = ifelse(is.na(eav_change), 0, eav_change),
+             av_pct_change = (av - lag(av))/lag(av),
+
+         ) 
+
+library(stats)
+q = c(.5, .95)
+
+df |>
+  ungroup() |>
+  group_by(year) |>
+  filter(year > 2006) |>
+  mutate(
+  #  eav_quant = quantile(eav_change, probs = c(.5, .95), na.rm=TRUE),
+            eavquant05 = round(quantile(eav_change, probs = q[1])), 
+            eavquant90 = round(quantile(eav_change, probs = q[2])),
+   # levy_quant = quantile(levy_change, probs=c(.5, .95),na.rm=TRUE),
+                levyquant05 = round(quantile(levy_change, probs = q[1])),
+            levyquant95 = round(quantile(levy_change, probs = q[2])),
+)
+
+
+df |> 
+  filter(year == 2010 & levy_change < 2500000 
+         ) |> 
+  ggplot() +
+  geom_histogram(aes(x=levy_change))
+
+df |> 
+  filter(year == 2010 & eav_change > -150000000 & eav_change < 5000000000000) |> 
+  ggplot() +
+  geom_histogram(aes(x=eav_change)) 
+
+
+df |> filter(between(levy_change, -50000, 50000))
+
+
+
+df |> filter(between(eav_change, -2500000, 2500000))
+```
+
+
+```{r}
+
+endpoints <- df %>% filter(year == 2023)
+
+df %>% 
+  filter(levy_pct_change < 50 & triad_name == "North") |>
+  ggplot(aes(x=year, y = levy_pct_change, group = agency_group)) + 
+    geom_line(linetype = "dashed") +
+    geom_text(data = endpoints, aes(x = year, y = levy_pct_change, label = agency_group), size = 2, vjust=-1.5, check_overlap = TRUE) + 
+  geom_point() + 
+
+  theme_classic()+
+  #  geom_line(aes(x=cpi$year, y = cpi$ptell_cook, color = "blue"))+
+
+  labs(title = "Municipalities: Year over Year Change in Levy")
+
+df %>% 
+  filter(levy_pct_change < 50 & triad_name == "South") |>
+  ggplot(aes(x=year, y = levy_pct_change, group = agency_group)) + 
+    geom_line( linetype = "dashed") +
+    geom_text(data = endpoints, aes(x = year, y = levy_pct_change, label = agency_group), size = 2, vjust=-1.5, check_overlap = TRUE) +
+  geom_point() + 
+  theme_classic()+
+  labs(title = "Municipalities: North Triad Year over Year Change in Levy")
+```
+
+```{r}
+df %>% ggplot() + 
+  geom_line(aes(x=year, y = eav_pct_change, group = agency_group, color = as.factor(home_rule_ind)), alpha = .5)  +
+      geom_text(data = endpoints, aes(x=year, y = eav_pct_change, label = agency_group), size = 2, vjust=-1.5, check_overlap = TRUE)+
+  theme_minimal()+
+  theme(legend.position = "bottom")+
+
+  labs(title = "Municipalities: Pct Change of Taxed EAV" )
+
+df %>%
+  ggplot() +
+  geom_line(aes(x=year, y = av_pct_change, group = agency_group, color = triad_name), alpha = .5)  +
+     # geom_text(data = endpoints, aes(x=year, y = av_pct_change, label = agency_group), size = 2, vjust=-1.5, check_overlap = TRUE)+
+  theme_minimal()+
+  theme(legend.position = "bottom")+
+
+  labs(title = "Municipalities: Pct Change of Taxed AV" )
+```
+
 
 
 # Odds and Ends
