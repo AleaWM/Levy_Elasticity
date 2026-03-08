@@ -1,3 +1,4 @@
+# Setup ----------------------------------------------------------------------
 # descriptive_stats_15_lags_cluster.R
 # Rough R translation of: descriptive stats_15_lags_cluster.do
 # Converted from Stata to R on 2026-03-06.
@@ -61,8 +62,22 @@ options(scipen = 999)
 message(Sys.Date())
 message(format(Sys.time(), "%H:%M:%S"))
 
-main_df <- read_csv("NTA_data_2024_11_06.csv") |>
-  arrange(type)
+
+
+# file DM used:  #"NTA_data_2024_10_14.csv"
+# email shows that he had qustions about this file and then michael sent one for 10_16
+main_df <- read_csv("NTA_data_2024_10_14.csv")
+
+
+# File MVH sent him:
+# main_df <- read_csv("NTA_data_2024_10_16.csv") |>
+#   arrange(type)
+
+
+# Most recent file AWM had on her computer:
+# main_df <- read_csv("NTA_data_2024_11_08.csv") |>
+#   arrange(type)
+
 
 agency_lookup <- read_dta("fips_all_agency_name.dta")
 
@@ -71,8 +86,8 @@ main_df <- main_df |>
 
 # Stata listed unmatched rows and dropped merge==1 rows.
 # In dplyr terms: drop observations from master that did not match.
-# main_df <- main_df |>
-#   filter(!is.na(fipsid))
+main_df <- main_df |>
+  filter(!is.na(fipsid))
 
 census_df <- read_dta("census_data.dta")
 
@@ -86,7 +101,7 @@ main_df <- main_df |>
 # Stata used a .dta called eq_factor after previously creating it from CSV.
 # Adjust extension if your stored file is actually .csv.
 
-eq_factor_path_dta <- file.path(p$post_nta, "eq_factor.dta")
+eq_factor_path_dta <- file.path("eq_factor.dta")
 eq_factor_path_csv <- file.path("Necessary_Files/eq_factor.csv")
 
 eq_factor <- if (file.exists(eq_factor_path_dta)) {
@@ -100,16 +115,16 @@ eq_factor <- if (file.exists(eq_factor_path_dta)) {
 main_df <- main_df |>
   left_join(eq_factor, by = "year")
 
-# string_num_vars <- c("assess_year_av", "av_true", "rate_smooth", "total_final_levy")
+string_num_vars <- c("assess_year_av", "av_true", "rate_smooth", "total_final_levy")
 
-# main_df <- main_df |>
-#   mutate(
-#     across(
-#       all_of(string_num_vars),
-#       ~ readr::parse_number(as.character(.x), na = c("NA", "", ".")),
-#       .names = "n_{.col}"
-#     )
-#   )
+main_df <- main_df |>
+  mutate(
+    across(
+      all_of(string_num_vars),
+      ~ readr::parse_number(as.character(.x), na = c("NA", "", ".")),
+      .names = "n_{.col}"
+    )
+  )
 
 # ================================================================
 # 3. PANEL SETUP + CONSTRUCTED VARIABLES
@@ -161,7 +176,9 @@ main_df <- main_df |>
       TRUE ~ 0
     ),
     ln_EstV = log(EstV),
-    d_av = 100 * log(av / lag_av),
+    d_av = 100 * log(av / lag_av)) |>
+  group_by(n_agency_group) |>
+  mutate(
     d_eav = 100 * log((av * eq_factor_final) / (lag_av * lag(eq_factor_final))),
     d_levy = 100 * log(total_final_levy / lag(total_final_levy)),
     d_total_ig_revenue = 100 * log(total_ig_revenue / lag(total_ig_revenue)),
@@ -169,9 +186,12 @@ main_df <- main_df |>
     has_ig_data = if_else(is.na(d_total_ig_revenue), 0, 1),
     type_2 = case_when(
       type == "Muni" & home_rule_ind == 1 ~ "HR_muni",
+
+      ## Added this row below!!
+      type == "Muni" & home_rule_ind == 0 ~ "NonHR_muni",
       TRUE ~ as.character(type)
     )
-  )
+  ) |> ungroup()
 
 # ================================================================
 # 4. HELPERS
@@ -218,19 +238,42 @@ save_table <- function(models, file_stub, title = NULL, notes = NULL, coef_map =
     gof_omit = gof_omit
   )
 }
-
+# Appendix A1 ---------------------------------------------------------------
 # ================================================================
 # 5. INSTRUMENT VALIDITY CHECKS
 # ================================================================
 
-instrument_df <- main_df
+instrument_df <- main_df |>
+  filter(year > 2008)
 
-models < -list(
-  "all_instrument"      <- feols(d_eav ~ reassess_year,                         data = instrument_df, cluster = vcov_uid),
-  "muni_instrument"     <- feols(d_eav ~ reassess_year,                         data = filter(instrument_df, type == "Muni"),     cluster = vcov_uid),
-  "other_instrument"    <- feols(d_eav ~ reassess_year,                         data = filter(instrument_df, type == "Other"),    cluster = vcov_uid),
-  "school_instrument"   <- feols(d_eav ~ reassess_year,                         data = filter(instrument_df, type == "School"),   cluster = vcov_uid),
-  "township_instrument" <- feols(d_eav ~ reassess_year,                         data = filter(instrument_df, type == "Township"), cluster = vcov_uid)
+table(instrument_df$year) # 2009 through 2023
+
+feols(d_eav ~ reassess_year,
+  data = instrument_df,
+  cluster = vcov_uid,
+  fsplit = ~type)
+
+feols(d_eav ~ reassess_year,
+  data = instrument_df |> filter(type == "Muni"),
+  cluster = vcov_uid,
+  fsplit = ~home_rule_ind)
+
+
+models <- list(
+  "all_instrument"      = feols(d_eav ~ reassess_year,
+    data = instrument_df, cluster = vcov_uid),
+  "muni_instrument"     = feols(d_eav ~ reassess_year,
+    data = filter(instrument_df, type == "Muni"),
+    cluster = vcov_uid),
+  "other_instrument"    = feols(d_eav ~ reassess_year,
+    data = filter(instrument_df, type == "Other"),
+    cluster = vcov_uid),
+  "school_instrument"   = feols(d_eav ~ reassess_year,
+    data = filter(instrument_df, type == "School"),
+    cluster = vcov_uid),
+  "township_instrument" = feols(d_eav ~ reassess_year,
+    data = filter(instrument_df, type == "Township"),
+    cluster = vcov_uid)
 )
 
 save_table(
@@ -253,9 +296,13 @@ save_table(
 reg_df <- main_df |>
   filter(year > 2008)
 
+
+# Matches Table 2 -----------------------------------------------------------
+
 # ================================================================
 # 7. ALL-AGENCY OLS
 # ================================================================
+
 
 all_ols_1 <- feols(d_levy ~ d_eav, data = reg_df, cluster = vcov_uid)
 all_ols_2 <- feols(d_levy ~ d_eav | year, data = reg_df, cluster = vcov_uid)
@@ -267,12 +314,13 @@ reg_df$used_in_reg[used_in_reg] <- TRUE
 
 all_ols_4 <- feols(
   d_levy ~ d_eav + d_total_ig_revenue | year + n_uniqueid,
-  data = filter(reg_df, used_in_reg),
+  data = reg_df,
+  # data = filter(reg_df, used_in_reg),
   cluster = vcov_uid
 )
 
 save_table(
-  list(M1 = all_ols_1, M2 = all_ols_2, M3 = all_ols_3 # , M4 = all_ols_4
+  list(M1 = all_ols_1, M2 = all_ols_2, M3 = all_ols_3, M4 = all_ols_4
   ),
   file_stub = "OLS_all_agencies",
   title = "Table X: OLS Predict levy using d_eav",
@@ -282,29 +330,30 @@ save_table(
   )
 )
 
+table(reg_df$year)
+
+# Matches Table 3 ----------------------------------------------------------
 # ================================================================
 # 8. ALL-AGENCY IV
 # ================================================================
 
-all_iv_1 <- feols(d_levy ~ 1 | 0 | (d_eav ~ reassess_year), data = reg_df, cluster = ~agency_group
-  # , cluster = vcov_uid
-)
-all_iv_2 <- feols(d_levy ~ 1 | year | (d_eav ~ reassess_year), data = reg_df, cluster = vcov_uid)
-all_iv_3 <- feols(d_levy ~ d_total_ig_revenue | year | (d_eav ~ reassess_year), data = reg_df, cluster = vcov_uid)
+all_iv_1 <- feols(d_levy ~ 1  | d_eav ~ reassess_year, data = reg_df, cluster = vcov_uid)
+all_iv_2 <- feols(d_levy ~ 1 | year | d_eav ~ reassess_year, data = reg_df, cluster = vcov_uid)
+all_iv_3 <- feols(d_levy ~ d_total_ig_revenue | year | d_eav ~ reassess_year, data = reg_df, cluster = vcov_uid)
 
 used_in_reg2 <- model.frame(all_iv_3) |> rownames() |> as.integer()
 reg_df$used_in_reg2 <- FALSE
 reg_df$used_in_reg2[used_in_reg2] <- TRUE
 
 all_iv_4 <- feols(
-  d_levy ~ d_total_ig_revenue | year + n_uniqueid | (d_eav ~ reassess_year),
-  data = filter(reg_df, used_in_reg2),
+  d_levy ~ d_total_ig_revenue | year + agency_group | d_eav ~ reassess_year,
+  # data = (reg_df |> filter(used_in_reg2 == TRUE)) ,
+  data = reg_df,
   cluster = vcov_uid
 )
 
 save_table(
-  list(M1 = all_iv_1, M2 = all_iv_2
-    # , M3 = all_iv_3, M4 = all_iv_4
+  list(M1 = all_iv_1, M2 = all_iv_2, M3 = all_iv_3, M4 = all_iv_4
   ),
   file_stub = "IV_all_agencies",
   title = "Table X: IV Predict levy using d_eav",
@@ -315,37 +364,57 @@ save_table(
   )
 )
 
+# Table 4 ------------------------------------------------------------------
 # ================================================================
 # 9. BY GOVERNMENT TYPE: OLS + IV
 # ================================================================
 
-gov_types <- c("Muni", "HR_muni", "Other", "School", "Township")
+models <- list(
+  m1 <- feols(d_levy ~ d_eav, data = reg_df,
+    cluster = vcov_uid, fsplit = ~type_2),
+  m2 <- feols(d_levy ~ d_eav | year, data = reg_df,
+    cluster = vcov_uid, fsplit = ~type_2),
+  m3 <- feols(d_levy ~ d_eav + d_total_ig_revenue | year,
+    data = reg_df, cluster = vcov_uid, fsplit = ~type_2),
+  m4 <- feols(d_levy ~ d_eav + d_total_ig_revenue | year + n_uniqueid,
+    data = reg_df, cluster = vcov_uid)
+)
+
+gov_types <- c("NonHR_muni", "HR_muni", "Other", "School", "Township")
 
 run_type_models <- function(df, gov, iv = FALSE) {
   d <- df |> filter(type_2 == gov)
 
   if (!iv) {
-    m1 <- feols(d_levy ~ d_eav, data = d, cluster = vcov_uid)
-    m2 <- feols(d_levy ~ d_eav | year, data = d, cluster = vcov_uid)
-    m3 <- feols(d_levy ~ d_eav + d_total_ig_revenue | year, data = d, cluster = vcov_uid)
+    m1 <- feols(d_levy ~ d_eav, data = d,
+      cluster = vcov_uid)
+    m2 <- feols(d_levy ~ d_eav | year, data = d,
+      cluster = vcov_uid)
+    m3 <- feols(d_levy ~ d_eav + d_total_ig_revenue | year,
+      data = d, cluster = vcov_uid)
 
-    idx <- model.frame(m3) |> rownames() |> as.integer()
-    d$used <- FALSE
-    d$used[idx] <- TRUE
+    # idx <- model.frame(m3) |> rownames() |> as.integer()
+    # d$used <- FALSE
+    # d$used[idx] <- TRUE
 
     m4 <- feols(d_levy ~ d_eav + d_total_ig_revenue | year + n_uniqueid,
-      data = filter(d, used), cluster = vcov_uid)
+      # data = filter(d, used),
+      data = d,
+      cluster = vcov_uid)
   } else {
-    m1 <- feols(d_levy ~ 1 | 0 | (d_eav ~ reassess_year), data = d, cluster = vcov_uid)
-    m2 <- feols(d_levy ~ 1 | year | (d_eav ~ reassess_year), data = d, cluster = vcov_uid)
-    m3 <- feols(d_levy ~ d_total_ig_revenue | year | (d_eav ~ reassess_year), data = d, cluster = vcov_uid)
+    m1 <- feols(d_levy ~ 1 | 0 | d_eav ~ reassess_year, data = d, cluster = vcov_uid)
+    m2 <- feols(d_levy ~ 1 | year | d_eav ~ reassess_year, data = d, cluster = vcov_uid)
+    m3 <- feols(d_levy ~ d_total_ig_revenue | year | d_eav ~ reassess_year, data = d, cluster = vcov_uid)
 
-    idx <- model.frame(m3) |> rownames() |> as.integer()
-    d$used <- FALSE
-    d$used[idx] <- TRUE
+    # idx <- model.frame(m3) |> rownames() |> as.integer()
+    # d$used <- FALSE
+    # d$used[idx] <- TRUE
 
-    m4 <- feols(d_levy ~ d_total_ig_revenue | year + n_uniqueid | (d_eav ~ reassess_year),
-      data = filter(d, used), cluster = vcov_uid)
+    m4 <- feols(d_levy ~ d_total_ig_revenue | year + n_uniqueid | d_eav ~ reassess_year,
+      # data = filter(d, used),
+      data = d,
+
+      cluster = vcov_uid)
   }
 
   list(M1 = m1, M2 = m2, M3 = m3, M4 = m4)
@@ -389,24 +458,29 @@ run_school_models <- function(df, subtype, iv = FALSE) {
     m3 <- feols(d_levy ~ d_eav + d_enrollment | year, data = d, cluster = vcov_uid)
     m4 <- feols(d_levy ~ d_eav + d_total_ig_revenue | year, data = d, cluster = vcov_uid)
 
-    idx <- model.frame(m4) |> rownames() |> as.integer()
-    d$used <- FALSE
-    d$used[idx] <- TRUE
+    # idx <- model.frame(m4) |> rownames() |> as.integer()
+    # d$used <- FALSE
+    # d$used[idx] <- TRUE
 
     m5 <- feols(d_levy ~ d_eav + d_total_ig_revenue | year + n_uniqueid,
-      data = filter(d, used), cluster = vcov_uid)
+      # data = filter(d, used),
+      data = d,
+
+      cluster = vcov_uid)
   } else {
-    m1 <- feols(d_levy ~ 1 | 0 | (d_eav ~ reassess_year), data = d, cluster = vcov_uid)
-    m2 <- feols(d_levy ~ 1 | year | (d_eav ~ reassess_year), data = d, cluster = vcov_uid)
-    m3 <- feols(d_levy ~ d_enrollment | year | (d_eav ~ reassess_year), data = d, cluster = vcov_uid)
-    m4 <- feols(d_levy ~ d_total_ig_revenue | year | (d_eav ~ reassess_year), data = d, cluster = vcov_uid)
+    m1 <- feols(d_levy ~ 1 |  d_eav ~ reassess_year, data = d, cluster = vcov_uid)
+    m2 <- feols(d_levy ~ 1 | year | d_eav ~ reassess_year, data = d, cluster = vcov_uid)
+    m3 <- feols(d_levy ~ d_enrollment | year | d_eav ~ reassess_year, data = d, cluster = vcov_uid)
+    m4 <- feols(d_levy ~ d_total_ig_revenue | year | d_eav ~ reassess_year, data = d, cluster = vcov_uid)
 
-    idx <- model.frame(m4) |> rownames() |> as.integer()
-    d$used <- FALSE
-    d$used[idx] <- TRUE
+    # idx <- model.frame(m4) |> rownames() |> as.integer()
+    # d$used <- FALSE
+    # d$used[idx] <- TRUE
 
-    m5 <- feols(d_levy ~ d_total_ig_revenue | year + n_uniqueid | (d_eav ~ reassess_year),
-      data = filter(d, used), cluster = vcov_uid)
+    m5 <- feols(d_levy ~ d_total_ig_revenue | year + n_uniqueid | d_eav ~ reassess_year,
+      # data = filter(d, used),
+      data = d,
+      cluster = vcov_uid)
   }
 
   list(M1 = m1, M2 = m2, M3 = m3, M4 = m4, M5 = m5)
@@ -432,6 +506,7 @@ walk(1:5, function(i) {
   )
 })
 
+# Table 5 & 6 --------------------------------------------------------------------
 # ================================================================
 # 11. ASYMMETRY VARIABLES
 # ================================================================
@@ -455,28 +530,31 @@ reg_df$pos_d_eav_hat <- reg_df$pos_d_eav * reg_df$d_eav_hat
 reg_A <- feols(d_levy ~ pos_d_eav + neg_d_eav, data = reg_df, cluster = vcov_uid)
 reg_B <- feols(d_levy ~ pos_d_eav + neg_d_eav | year, data = reg_df, cluster = vcov_uid)
 reg_C <- feols(d_levy ~ pos_d_eav + neg_d_eav + d_total_ig_revenue | year, data = reg_df, cluster = vcov_uid)
-
-idx_A <- model.frame(reg_C) |> rownames() |> as.integer()
-reg_df$used_asym <- FALSE
-reg_df$used_asym[idx_A] <- TRUE
+#
+# idx_A <- model.frame(reg_C) |> rownames() |> as.integer()
+# reg_df$used_asym <- FALSE
+# reg_df$used_asym[idx_A] <- TRUE
 
 reg_D <- feols(
   d_levy ~ pos_d_eav + neg_d_eav + d_total_ig_revenue | year + n_uniqueid,
-  data = filter(reg_df, used_asym),
+  # data = filter(reg_df, used_asym),
+  data = reg_df,
+
   cluster = vcov_uid
 )
 
-reg_E <- feols(d_levy ~ 1 | 0 | (neg_d_eav + pos_d_eav ~ reassess_year + pos_d_eav_hat), data = reg_df, cluster = vcov_uid)
-reg_F <- feols(d_levy ~ 1 | year | (neg_d_eav + pos_d_eav ~ reassess_year + pos_d_eav_hat), data = reg_df, cluster = vcov_uid)
-reg_G <- feols(d_levy ~ d_total_ig_revenue | year | (neg_d_eav + pos_d_eav ~ reassess_year + pos_d_eav_hat), data = reg_df, cluster = vcov_uid)
+reg_E <- feols(d_levy ~ 1 | neg_d_eav + pos_d_eav ~ reassess_year + pos_d_eav_hat, data = reg_df, cluster = vcov_uid)
+reg_F <- feols(d_levy ~ 1 | year | neg_d_eav + pos_d_eav ~ reassess_year + pos_d_eav_hat, data = reg_df, cluster = vcov_uid)
+reg_G <- feols(d_levy ~ d_total_ig_revenue | year | neg_d_eav + pos_d_eav ~ reassess_year + pos_d_eav_hat, data = reg_df, cluster = vcov_uid)
 
-idx_B <- model.frame(reg_G) |> rownames() |> as.integer()
-reg_df$used_asym_iv <- FALSE
-reg_df$used_asym_iv[idx_B] <- TRUE
+# idx_B <- model.frame(reg_G) |> rownames() |> as.integer()
+# reg_df$used_asym_iv <- FALSE
+# reg_df$used_asym_iv[idx_B] <- TRUE
 
 reg_H <- feols(
-  d_levy ~ d_total_ig_revenue | year + n_uniqueid | (neg_d_eav + pos_d_eav ~ reassess_year + pos_d_eav_hat),
-  data = filter(reg_df, used_asym_iv),
+  d_levy ~ d_total_ig_revenue | year + n_uniqueid | neg_d_eav + pos_d_eav ~ reassess_year + pos_d_eav_hat,
+  # data = filter(reg_df, used_asym_iv),
+  data = reg_df,
   cluster = vcov_uid
 )
 
@@ -486,6 +564,9 @@ asym_iv_models  <- list(M1 = reg_E, M2 = reg_F, M3 = reg_G, M4 = reg_H)
 save_table(asym_ols_models, "OLS_all_agencies_asym", title = "Table X: OLS Predict levy using d_eav")
 save_table(asym_iv_models,  "IV_all_agencies_asym",  title = "Table X: IV Predict levy using d_eav")
 
+
+
+# Table 7 ---------------------------------------------------------------------
 # ================================================================
 # 13. ASYMMETRIC MODELS BY GOVERNMENT TYPE
 # ================================================================
@@ -498,23 +579,15 @@ run_asym_type_models <- function(df, gov, iv = FALSE) {
     m2 <- feols(d_levy ~ neg_d_eav + pos_d_eav | year, data = d, cluster = vcov_uid)
     m3 <- feols(d_levy ~ neg_d_eav + pos_d_eav + d_total_ig_revenue | year, data = d, cluster = vcov_uid)
 
-    idx <- model.frame(m3) |> rownames() |> as.integer()
-    d$used <- FALSE
-    d$used[idx] <- TRUE
-
     m4 <- feols(d_levy ~ neg_d_eav + pos_d_eav + d_total_ig_revenue | year + n_uniqueid,
-      data = filter(d, used), cluster = vcov_uid)
+      data = d,  cluster = vcov_uid)
+
   } else {
-    m1 <- feols(d_levy ~ 1 | 0 | (neg_d_eav + pos_d_eav ~ reassess_year + pos_d_eav_hat), data = d, cluster = vcov_uid)
-    m2 <- feols(d_levy ~ 1 | year | (neg_d_eav + pos_d_eav ~ reassess_year + pos_d_eav_hat), data = d, cluster = vcov_uid)
-    m3 <- feols(d_levy ~ d_total_ig_revenue | year | (neg_d_eav + pos_d_eav ~ reassess_year + pos_d_eav_hat), data = d, cluster = vcov_uid)
-
-    idx <- model.frame(m3) |> rownames() |> as.integer()
-    d$used <- FALSE
-    d$used[idx] <- TRUE
-
-    m4 <- feols(d_levy ~ d_total_ig_revenue | year + n_uniqueid | (neg_d_eav + pos_d_eav ~ reassess_year + pos_d_eav_hat),
-      data = filter(d, used), cluster = vcov_uid)
+    m1 <- feols(d_levy ~ 1 | neg_d_eav + pos_d_eav ~ reassess_year + pos_d_eav_hat, data = d, cluster = vcov_uid)
+    m2 <- feols(d_levy ~ 1 | year | neg_d_eav + pos_d_eav ~ reassess_year + pos_d_eav_hat, data = d, cluster = vcov_uid)
+    m3 <- feols(d_levy ~ d_total_ig_revenue | year | neg_d_eav + pos_d_eav ~ reassess_year + pos_d_eav_hat, data = d, cluster = vcov_uid)
+    m4 <- feols(d_levy ~ d_total_ig_revenue | year + n_uniqueid | neg_d_eav + pos_d_eav ~ reassess_year + pos_d_eav_hat,
+      data = d, cluster = vcov_uid)
   }
 
   list(M1 = m1, M2 = m2, M3 = m3, M4 = m4)
@@ -553,24 +626,15 @@ run_asym_school_models <- function(df, subtype, iv = FALSE) {
     m3 <- feols(d_levy ~ neg_d_eav + pos_d_eav + d_enrollment | year, data = d, cluster = vcov_uid)
     m4 <- feols(d_levy ~ neg_d_eav + pos_d_eav + d_total_ig_revenue | year, data = d, cluster = vcov_uid)
 
-    idx <- model.frame(m4) |> rownames() |> as.integer()
-    d$used <- FALSE
-    d$used[idx] <- TRUE
-
     m5 <- feols(d_levy ~ neg_d_eav + pos_d_eav + d_total_ig_revenue | year + n_uniqueid,
-      data = filter(d, used), cluster = vcov_uid)
+      data = d, cluster = vcov_uid)
   } else {
-    m1 <- feols(d_levy ~ 1 | 0 | (neg_d_eav + pos_d_eav ~ reassess_year + pos_d_eav_hat), data = d, cluster = vcov_uid)
-    m2 <- feols(d_levy ~ 1 | year | (neg_d_eav + pos_d_eav ~ reassess_year + pos_d_eav_hat), data = d, cluster = vcov_uid)
-    m3 <- feols(d_levy ~ d_enrollment | year | (neg_d_eav + pos_d_eav ~ reassess_year + pos_d_eav_hat), data = d, cluster = vcov_uid)
-    m4 <- feols(d_levy ~ d_total_ig_revenue | year | (neg_d_eav + pos_d_eav ~ reassess_year + pos_d_eav_hat), data = d, cluster = vcov_uid)
-
-    idx <- model.frame(m4) |> rownames() |> as.integer()
-    d$used <- FALSE
-    d$used[idx] <- TRUE
-
-    m5 <- feols(d_levy ~ d_total_ig_revenue | year + n_uniqueid | (neg_d_eav + pos_d_eav ~ reassess_year + pos_d_eav_hat),
-      data = filter(d, used), cluster = vcov_uid)
+    m1 <- feols(d_levy ~ 1 | neg_d_eav + pos_d_eav ~ reassess_year + pos_d_eav_hat, data = d, cluster = vcov_uid)
+    m2 <- feols(d_levy ~ 1 | year | neg_d_eav + pos_d_eav ~ reassess_year + pos_d_eav_hat, data = d, cluster = vcov_uid)
+    m3 <- feols(d_levy ~ d_enrollment | year | neg_d_eav + pos_d_eav ~ reassess_year + pos_d_eav_hat, data = d, cluster = vcov_uid)
+    m4 <- feols(d_levy ~ d_total_ig_revenue | year | neg_d_eav + pos_d_eav ~ reassess_year + pos_d_eav_hat, data = d, cluster = vcov_uid)
+    m5 <- feols(d_levy ~ d_total_ig_revenue | year + n_uniqueid | neg_d_eav + pos_d_eav ~ reassess_year + pos_d_eav_hat,
+      data = d, cluster = vcov_uid)
   }
 
   list(M1 = m1, M2 = m2, M3 = m3, M4 = m4, M5 = m5)
@@ -596,6 +660,8 @@ walk(1:5, function(i) {
   )
 })
 
+
+# Table 8 ---------------------------------------------------------------------
 # ================================================================
 # 15. LAGGED EFFECTS
 # ================================================================
@@ -612,14 +678,9 @@ reg_df <- reg_df |>
 lag_all_ols_1 <- feols(d_levy ~ d_eav + d_2_eav + d_3_eav, data = reg_df, cluster = vcov_uid)
 lag_all_ols_2 <- feols(d_levy ~ d_eav + d_2_eav + d_3_eav | year, data = reg_df, cluster = vcov_uid)
 lag_all_ols_3 <- feols(d_levy ~ d_eav + d_2_eav + d_3_eav + d_total_ig_revenue | year, data = reg_df, cluster = vcov_uid)
-
-idx_lag <- model.frame(lag_all_ols_3) |> rownames() |> as.integer()
-reg_df$used_lag <- FALSE
-reg_df$used_lag[idx_lag] <- TRUE
-
 lag_all_ols_4 <- feols(
   d_levy ~ d_eav + d_2_eav + d_3_eav + d_total_ig_revenue | year + n_uniqueid,
-  data = filter(reg_df, used_lag),
+  data = reg_df,
   cluster = vcov_uid
 )
 
@@ -640,13 +701,8 @@ run_lag_type_models <- function(df, gov) {
   m1 <- feols(d_levy ~ d_eav + d_2_eav + d_3_eav, data = d, cluster = vcov_uid)
   m2 <- feols(d_levy ~ d_eav + d_2_eav + d_3_eav | year, data = d, cluster = vcov_uid)
   m3 <- feols(d_levy ~ d_eav + d_2_eav + d_3_eav + d_total_ig_revenue | year, data = d, cluster = vcov_uid)
-
-  idx <- model.frame(m3) |> rownames() |> as.integer()
-  d$used <- FALSE
-  d$used[idx] <- TRUE
-
   m4 <- feols(d_levy ~ d_eav + d_2_eav + d_3_eav + d_total_ig_revenue | year + n_uniqueid,
-    data = filter(d, used), cluster = vcov_uid)
+    data = d, cluster = vcov_uid)
 
   list(M1 = m1, M2 = m2, M3 = m3, M4 = m4)
 }
@@ -669,13 +725,8 @@ run_lag_school_models <- function(df, subtype) {
   m2 <- feols(d_levy ~ d_eav + d_2_eav + d_3_eav | year, data = d, cluster = vcov_uid)
   m3 <- feols(d_levy ~ d_eav + d_2_eav + d_3_eav + d_enrollment | year, data = d, cluster = vcov_uid)
   m4 <- feols(d_levy ~ d_eav + d_2_eav + d_3_eav + d_total_ig_revenue | year, data = d, cluster = vcov_uid)
-
-  idx <- model.frame(m4) |> rownames() |> as.integer()
-  d$used <- FALSE
-  d$used[idx] <- TRUE
-
   m5 <- feols(d_levy ~ d_eav + d_2_eav + d_3_eav + d_total_ig_revenue | year + n_uniqueid,
-    data = filter(d, used), cluster = vcov_uid)
+    data = d, cluster = vcov_uid)
 
   list(M1 = m1, M2 = m2, M3 = m3, M4 = m4, M5 = m5)
 }
