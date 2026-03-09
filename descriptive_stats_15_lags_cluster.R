@@ -76,7 +76,7 @@ main_df <- read_csv("NTA_data_2024_10_14.csv")
 
 # Most recent file AWM had on her computer:
 # main_df <- read_csv("NTA_data_2024_11_08.csv") |>
-#   arrange(type)
+arrange(type)
 
 
 agency_lookup <- read_dta("fips_all_agency_name.dta")
@@ -115,12 +115,12 @@ eq_factor <- if (file.exists(eq_factor_path_dta)) {
 main_df <- main_df |>
   left_join(eq_factor, by = "year")
 
-string_num_vars <- c("assess_year_av", "av_true", "rate_smooth", "total_final_levy")
+string_num_vars <- c("assess_year_eav",  "assess_year_av", "av_true", "rate_smooth", "total_final_levy")
 
 main_df <- main_df |>
   mutate(
     across(
-      all_of(string_num_vars),
+      any_of(string_num_vars),
       ~ readr::parse_number(as.character(.x), na = c("NA", "", ".")),
       .names = "n_{.col}"
     )
@@ -227,7 +227,7 @@ safe_lincom <- function(model, combo) {
 }
 
 save_table <- function(models, file_stub, title = NULL, notes = NULL, coef_map = NULL, gof_omit = "IC|Log|Adj|RMSE|Std.Errors") {
-  out_file <- file.path(paste0("merriman_file_output/", file_stub, ".html"))
+  out_file <- file.path(paste0("merriman_file_output_newerfile/", file_stub, ".html"))
   modelsummary(
     models,
     output = out_file,
@@ -259,22 +259,25 @@ feols(d_eav ~ reassess_year,
   fsplit = ~home_rule_ind)
 
 
-models <- list(
-  "all_instrument"      = feols(d_eav ~ reassess_year,
-    data = instrument_df, cluster = vcov_uid),
-  "muni_instrument"     = feols(d_eav ~ reassess_year,
-    data = filter(instrument_df, type == "Muni"),
-    cluster = vcov_uid),
-  "other_instrument"    = feols(d_eav ~ reassess_year,
-    data = filter(instrument_df, type == "Other"),
-    cluster = vcov_uid),
-  "school_instrument"   = feols(d_eav ~ reassess_year,
-    data = filter(instrument_df, type == "School"),
-    cluster = vcov_uid),
-  "township_instrument" = feols(d_eav ~ reassess_year,
-    data = filter(instrument_df, type == "Township"),
-    cluster = vcov_uid)
-)
+
+all_instrument      <- feols(d_eav ~ reassess_year,
+  data = instrument_df, cluster = vcov_uid)
+
+muni_instrument    <- feols(d_eav ~ reassess_year,
+  data = filter(instrument_df, type == "Muni"),
+  cluster = vcov_uid)
+
+other_instrument    <- feols(d_eav ~ reassess_year,
+  data = filter(instrument_df, type == "Other"),
+  cluster = vcov_uid)
+
+school_instrument   <- feols(d_eav ~ reassess_year,
+  data = filter(instrument_df, type == "School"),
+  cluster = vcov_uid)
+
+township_instrument <- feols(d_eav ~ reassess_year,
+  data = filter(instrument_df, type == "Township"),
+  cluster = vcov_uid)
 
 save_table(
   list(
