@@ -23,37 +23,6 @@ suppressPackageStartupMessages({
 
 options(scipen = 999)
 
-# ================================================================
-# 0. PATHS
-# ================================================================
-
-# location <- "box"  # "home", "office", or "box"
-#
-# paths <- list(
-#   home = list(
-#     data_main   = "C:/Users/dmerrim/OneDrive - University of Illinois at Chicago/igpa/fiscal futures budget project/2023_2024/elasticity of levy/data from Micheal",
-#     data_census = "C:/Users/dmerrim/OneDrive - University of Illinois Chicago/igpa/fiscal futures budget project/2023_2024/elasticity of levy/data from census",
-#     willamette  = "C:/Users/dmerrim/OneDrive - University of Illinois Chicago/igpa/fiscal futures budget project/2023_2024/elasticity of levy/willamete university data",
-#     post_nta    = "C:/Users/dmerrim/OneDrive - University of Illinois Chicago/igpa/fiscal futures budget project/2023_2024/elasticity of levy/post nta",
-#     output      = "C:/Users/dmerrim/OneDrive - University of Illinois Chicago/igpa/fiscal futures budget project/2023_2024/elasticity of levy/post nta/output"
-#   ),
-#   office = list(
-#     data_main   = "C:/Users/dmerrim/OneDrive - University of Illinois Chicago/igpa/fiscal futures budget project/2023_2024/elasticity of levy/data from Micheal",
-#     data_census = "C:/Users/dmerrim/OneDrive - University of Illinois Chicago/igpa/fiscal futures budget project/2023_2024/elasticity of levy/data from census",
-#     willamette  = "C:/Users/dmerrim/OneDrive - University of Illinois Chicago/igpa/fiscal futures budget project/2023_2024/elasticity of levy/willamete university data",
-#     post_nta    = "C:/Users/dmerrim/OneDrive - University of Illinois Chicago/igpa/fiscal futures budget project/2023_2024/elasticity of levy/post nta",
-#     output      = "C:/Users/dmerrim/OneDrive - University of Illinois Chicago/igpa/fiscal futures budget project/2023_2024/elasticity of levy/post nta/output"
-#   ),
-#   box = list(
-#     data_main   = "C:/Users/dmerrim/Box/Super Cool RA Tree Fort & Club House/LevyEAV Elasticity/elasticity of levy/data from Micheal",
-#     data_census = "C:/Users/dmerrim/Box/Super Cool RA Tree Fort & Club House/LevyEAV Elasticity/elasticity of levy/data from census",
-#     willamette  = "C:/Users/dmerrim/Box/Super Cool RA Tree Fort & Club House/LevyEAV Elasticity/elasticity of levy/willamete university data",
-#     post_nta    = "C:/Users/dmerrim/Box/Super Cool RA Tree Fort & Club House/LevyEAV Elasticity/elasticity of levy/post nta",
-#     output      = "C:/Users/dmerrim/Box/Super Cool RA Tree Fort & Club House/LevyEAV Elasticity/elasticity of levy/post nta/output"
-#   )
-# )
-#
-# p <- paths[[location]]
 
 # ================================================================
 # 1. READ + MERGE DATA
@@ -65,9 +34,10 @@ message(format(Sys.time(), "%H:%M:%S"))
 
 
 # file DM used:  #"NTA_data_2024_10_14.csv"
-# email shows that he had qustions about this file and then michael sent one for 10_16
+# email shows that he had questions about this file and then michael sent one for 10_16
 main_df <- read_csv("NTA_data_2024_10_14.csv")
 
+main_df |> distinct(agency_group)
 
 # File MVH sent him:
 # main_df <- read_csv("NTA_data_2024_10_16.csv") |>
@@ -76,20 +46,25 @@ main_df <- read_csv("NTA_data_2024_10_14.csv")
 
 # Most recent file AWM had on her computer:
 # main_df <- read_csv("NTA_data_2024_11_08.csv") |>
-arrange(type)
+# arrange(type)
 
 
 agency_lookup <- read_dta("fips_all_agency_name.dta")
 
+anti_join(main_df, agency_lookup)
+
 main_df <- main_df |>
   left_join(agency_lookup, by = "agency_group")
-
+# 7470 observations before dropping NAs
+# 7416 after dropping NAs
 # Stata listed unmatched rows and dropped merge==1 rows.
 # In dplyr terms: drop observations from master that did not match.
 main_df <- main_df |>
   filter(!is.na(fipsid))
 
 census_df <- read_dta("census_data.dta")
+
+anti_join(main_df, census_df)
 
 main_df <- main_df |>
   left_join(census_df, by = c("fipsid", "year"))
@@ -307,20 +282,31 @@ reg_df <- main_df |>
 # ================================================================
 
 
-all_ols_1 <- feols(d_levy ~ d_eav, data = reg_df, cluster = vcov_uid)
-all_ols_2 <- feols(d_levy ~ d_eav | year, data = reg_df, cluster = vcov_uid)
-all_ols_3 <- feols(d_levy ~ d_eav + d_total_ig_revenue | year, data = reg_df, cluster = vcov_uid)
+all_ols_1 <- feols(d_levy ~ d_eav,
+  data = reg_df, cluster = vcov_uid)
 
-used_in_reg <- model.frame(all_ols_3) |> rownames() |> as.integer()
-reg_df$used_in_reg <- FALSE
-reg_df$used_in_reg[used_in_reg] <- TRUE
+all_ols_2 <- feols(d_levy ~ d_eav | year,
+  data = reg_df, cluster = vcov_uid)
+
+all_ols_3 <- feols(d_levy ~ d_eav + d_total_ig_revenue | year,
+  data = reg_df, cluster = vcov_uid)
 
 all_ols_4 <- feols(
   d_levy ~ d_eav + d_total_ig_revenue | year + n_uniqueid,
-  data = reg_df,
-  # data = filter(reg_df, used_in_reg),
-  cluster = vcov_uid
+  data = reg_df, cluster = vcov_uid
 )
+
+all_ols_1b <- feols(d_levy ~ d_eav | year + agency_group,
+  data = reg_df, cluster = vcov_uid)
+# modelsummary(all_ols_1b, stars = TRUE)
+
+all_ols_1c <- feols(d_levy ~ d_eav | year + agency_group,
+  data = reg_df |> filter(!is.na(d_total_ig_revenue)), cluster = vcov_uid)
+# modelsummary(all_ols_1c, stars = TRUE)
+
+all_ols_3b <- feols(d_levy ~ d_eav + d_total_ig_revenue | year, data = reg_df |> filter(!is.na(d_total_ig_revenue)), cluster = vcov_uid)
+# modelsummary(all_ols_3b)
+
 
 save_table(
   list(M1 = all_ols_1, M2 = all_ols_2, M3 = all_ols_3, M4 = all_ols_4
@@ -332,6 +318,16 @@ save_table(
     "Columns 2, 3, and 4 include year fixed effects; column 4 includes unit fixed effects."
   )
 )
+
+
+save_table(
+  list(M1 = all_ols_1b, M2 = all_ols_1c, M3 = all_ols_3b
+  ),
+  file_stub = "ALT_OLS_all_agencies",
+  title = "Alternate Table X: OLS Predict levy using d_eav",
+  notes = c(
+    "Cook County, Illinois data from 2008 through 2023."
+))
 
 table(reg_df$year)
 
@@ -534,9 +530,33 @@ reg_A <- feols(d_levy ~ pos_d_eav + neg_d_eav, data = reg_df, cluster = vcov_uid
 reg_B <- feols(d_levy ~ pos_d_eav + neg_d_eav | year, data = reg_df, cluster = vcov_uid)
 reg_C <- feols(d_levy ~ pos_d_eav + neg_d_eav + d_total_ig_revenue | year, data = reg_df, cluster = vcov_uid)
 #
-# idx_A <- model.frame(reg_C) |> rownames() |> as.integer()
-# reg_df$used_asym <- FALSE
-# reg_df$used_asym[idx_A] <- TRUE
+
+reg_Dv2 <- feols(
+  d_levy ~ pos_d_eav * home_rule_ind + neg_d_eav * home_rule_ind  | year + n_uniqueid,
+  data = reg_df,
+  cluster = vcov_uid
+)
+
+hypotheses(reg_Dv2, "b1 - b2 = 0")
+
+reg_Dv2 <- feols(
+  d_levy ~ pos_d_eav + neg_d_eav | year + n_uniqueid + home_rule_ind,
+  data = reg_df,
+  cluster = vcov_uid
+)
+
+hypotheses(reg_Dv2, "b1 - b2 = 0")
+
+
+
+reg_Dv2 <- feols(
+  d_levy ~ pos_d_eav + neg_d_eav  | year * home_rule_ind + n_uniqueid,
+  data = reg_df,
+  cluster = vcov_uid
+)
+
+hypotheses(reg_Dv2, "b1 - b2 = 0")
+
 
 reg_D <- feols(
   d_levy ~ pos_d_eav + neg_d_eav + d_total_ig_revenue | year + n_uniqueid,
