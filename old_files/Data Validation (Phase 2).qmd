@@ -39,7 +39,7 @@ ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "G:/My Drive/PhD/Cook Count
 
 ```{r awm-setup, message=FALSE, include = FALSE}
 
-ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/ptaxsim.db/ptaxsim-2022.0.0.db")
+ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), "C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/ptaxsim.db/ptaxsim-2023.0.0.db")
 ```
 
 3.  Query PTAXSIM DB for minor_type == "muni" and Cicero names
@@ -154,27 +154,27 @@ grouped_manual <- recoded_data %>%
 ```{r}
 # 1552 obs
 # 2278 - 3/31/2024    and 2916 if not filtering for count == 17
-grouped_manual_has17 <- grouped_manual %>% 
+grouped_manual_has18 <- grouped_manual %>% 
   ungroup() %>%
   arrange(home_rule_ind) %>%
   group_by(uniqueid) %>%
   distinct() %>%
   mutate(count = n()) %>%
-  filter(count == 17) %>% 
+  filter(count == 18) %>% 
   ungroup()
 ```
 
 ```{r eval=FALSE}
 datasummary_crosstab(~home_rule_ind, data = grouped_manual, title = "Taxing Agency Types by Home Rule Indicator", output = "flextable")
 
-datasummary_crosstab(minor_type~home_rule_ind, data = grouped_manual_has17, title = "Taxing Agency Types by Home Rule Indicator", output = "flextable")
+datasummary_crosstab(minor_type~home_rule_ind, data = grouped_manual_has18, title = "Taxing Agency Types by Home Rule Indicator", output = "flextable")
 ```
 
 ```{r}
-chicago_obs <- grouped_manual_has17 %>% filter(grouped_label == "Chicago")
+chicago_obs <- grouped_manual_has18 %>% filter(grouped_label == "Chicago")
 
 
-grouped_manual_has17 %>% 
+grouped_manual_has18 %>% 
   filter(grouped_label != "Chicago") %>%
   ggplot() + 
   geom_line(aes(x=year,y=total_final_levy, group = uniqueid, alpha = .5, color = home_rule_ind)) + 
@@ -182,7 +182,7 @@ grouped_manual_has17 %>%
 
 
 
-grouped_manual_has17 %>%     
+grouped_manual_has18 %>%     
   filter(grouped_label != "Chicago") %>%
 ggplot() + 
 
@@ -190,7 +190,7 @@ ggplot() +
   facet_wrap(~home_rule_ind) +
   theme_classic() 
 
-grouped_manual_has17 %>%  
+grouped_manual_has18 %>%  
     filter(grouped_label != "Chicago") %>%
 ggplot() +
   geom_point(aes(x=year, y=total_final_levy,# color = home_rule_ind, 
@@ -202,7 +202,7 @@ ggplot() +
                   color = home_rule_ind), se=FALSE, size = 2) + 
   theme_classic()
 
-grouped_manual_has17 %>% 
+grouped_manual_has18 %>% 
     filter(grouped_label != "Chicago") %>%
 ggplot() + 
   geom_point(aes(x=year, y=total_final_levy,# color = home_rule_ind, 
@@ -217,7 +217,7 @@ ggplot() +
 ```
 
 ```{r}
-grouped_manual_has17 %>% 
+grouped_manual_has18 %>% 
     filter(grouped_label != "Chicago") %>%
   filter(home_rule_ind == 1) %>%
 ggplot() + 
@@ -230,7 +230,7 @@ ggplot() +
   theme_classic()+
   facet_wrap(~Triad)
 
-grouped_manual_has17 %>% 
+grouped_manual_has18 %>% 
     filter(grouped_label != "Chicago") %>%
   filter(home_rule_ind == 1) %>%
 ggplot() + 
@@ -243,7 +243,7 @@ ggplot() +
   theme_classic()+
   facet_wrap(~Triad)
 
-grouped_manual_has17 %>% 
+grouped_manual_has18 %>% 
     filter(grouped_label != "Chicago") %>%
   filter(home_rule_ind == 1) %>%
 ggplot() + 
@@ -259,7 +259,7 @@ ggplot() +
 
 
 
-grouped_manual_has17 %>% 
+grouped_manual_has18 %>% 
     filter(grouped_label != "Chicago") %>%
   filter(home_rule_ind == 1) %>%
 ggplot() + 
@@ -280,7 +280,7 @@ ggplot() +
 #| column: page
 
 
-grouped_manual_has17 %>% 
+grouped_manual_has18 %>% 
     filter(grouped_label != "Chicago") %>%
   filter(home_rule_ind == 1) %>%
 ggplot() + 
@@ -294,7 +294,7 @@ ggplot() +
   theme_classic()+
   facet_wrap(~Triad)
 
-grouped_manual_has17 %>% 
+grouped_manual_has18 %>% 
     filter(grouped_label != "Chicago") %>%
   filter(home_rule_ind == 1) %>%
 ggplot() + 
@@ -308,7 +308,7 @@ ggplot() +
   theme_classic()+
   facet_wrap(~Triad)
 
-grouped_manual_has17 %>% 
+grouped_manual_has18 %>% 
     filter(grouped_label != "Chicago") %>%
   filter(home_rule_ind == 1) %>%
 ggplot() + 
@@ -325,7 +325,7 @@ ggplot() +
 
 ```{r}
 
-grouped_manual_has17 %>% 
+grouped_manual_has18 %>% 
     filter(home_rule_ind == 1) %>%
 
   filter(grouped_label != "Chicago") %>%
@@ -334,7 +334,7 @@ grouped_manual_has17 %>%
   theme_classic() +
   facet_wrap(~year)
 
-grouped_manual_has17 %>% 
+grouped_manual_has18 %>% 
     filter(home_rule_ind == 1) %>%
 
   filter(grouped_label != "Chicago") %>%
@@ -347,7 +347,7 @@ grouped_manual_has17 %>%
 
 ```{r}
 # 
-# grouped_manual_has17 %>% 
+# grouped_manual_has18 %>% 
 #   filter(grouped_label != "Chicago") %>%
 #   filter(home_rule_ind == 1) %>%
 #   ggplot() + 
@@ -355,7 +355,7 @@ grouped_manual_has17 %>%
 #   theme_classic() +
 #   facet_wrap(~grouped_label, scales = "free")
 
-grouped_manual_has17 %>% 
+grouped_manual_has18 %>% 
   filter(grouped_label != "Chicago") %>% 
   filter(Triad == "North") %>%
   filter(home_rule_ind == 1) %>%
@@ -364,7 +364,7 @@ grouped_manual_has17 %>%
   theme_classic() +
   facet_wrap(~grouped_label, scales = "free")
 
-grouped_manual_has17 %>% 
+grouped_manual_has18 %>% 
   filter(grouped_label != "Chicago") %>% 
   filter(Triad == "South") %>%
   filter(home_rule_ind == 1) %>%
@@ -375,7 +375,7 @@ grouped_manual_has17 %>%
 ```
 
 ```{r include = FALSE}
-# grouped_manual_has17 %>% 
+# grouped_manual_has18 %>% 
 #   filter(grouped_label != "Chicago") %>%
 #   filter(home_rule_ind == 1) %>%
 #   ggplot() + 
@@ -383,7 +383,7 @@ grouped_manual_has17 %>%
 #   theme_classic() +
 #   facet_wrap(~grouped_label, scales = "free")
 
-grouped_manual_has17 %>% 
+grouped_manual_has18 %>% 
   filter(grouped_label != "Chicago") %>% 
   filter(Triad == "North") %>%
   filter(home_rule_ind == 1) %>%
@@ -392,7 +392,7 @@ grouped_manual_has17 %>%
   theme_classic() +
   facet_wrap(~grouped_label, scales = "free")
 
-grouped_manual_has17 %>% 
+grouped_manual_has18 %>% 
   filter(grouped_label != "Chicago") %>% 
   filter(Triad == "South") %>%
   filter(home_rule_ind == 1) %>%
@@ -409,7 +409,7 @@ grouped_manual_has17 %>%
 ```{r}
 detach("package:dplyr", unload = TRUE)
 
-grouped_munis <- pdata.frame(grouped_manual_has17, index = c("uniqueid", "year")) 
+grouped_munis <- pdata.frame(grouped_manual_has18, index = c("uniqueid", "year")) 
 
 table(grouped_munis$year)
 grouped_munis <- make.pbalanced(grouped_munis)
@@ -915,7 +915,7 @@ plm(log(total_final_levy) ~ log(cty_total_eav), #*year + log(cty_total_eav)*up_d
 library(dplyr)
 library(tidyverse)
 
-indexed_munis <- grouped_manual_has17 %>%
+indexed_munis <- grouped_manual_has18 %>%
 #  mutate(year = as.factor(year)) %>%
   ungroup() %>%
  # filter(minor_type == "MUNI") %>%
