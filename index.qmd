@@ -1,0 +1,21 @@
+---
+title: "Measuring Local Government Levies’ Responsiveness to the Property Tax Base"
+subtitle: "Replication Materials and Additional Data Exploration"
+format:
+  html:
+    toc: true
+    toc-depth: 2
+    number-sections: false
+---
+
+# Overview
+
+Property taxpayers often assume that rising assessed values automatically allow local governments to collect more property tax revenue. That intuition fits rate-driven taxes such as sales taxes, but it is less appropriate in property tax systems where local governments choose the levy and the tax rate is calculated afterward. 
+
+This paper estimates how responsive local government property tax levies are to changes in the property tax base in Cook County, Illinois, from 2008 through 2023. Using data on municipalities, school districts, townships, and other taxing agencies, we find that annual changes in equalized assessed value are far more volatile than annual changes in levies. 
+
+In the pooled descriptive data, tax base changes are negative in more than half of agency-year observations, while levy declines occur in less than one quarter of observations. OLS estimates show positive but small contemporaneous elasticities: a 10 percent increase in the tax base is associated with less than a 1 percent increase in the levy in the preferred pooled specifications. Instrumental variables estimates that use reassessment timing to isolate variation in the tax base are smaller and often statistically indistinguishable from zero. We also test for asymmetric and lagged responses. 
+
+Evidence for asymmetry is limited and sensitive to specification, while OLS models provide some evidence of lagged responses, especially for school districts. Overall, the results suggest that in this levy-first institutional setting, changes in the property tax base do not translate into large contemporaneous changes in local government levies. 
+
+The findings clarify an important distinction in property tax politics: reassessments can redistribute the tax burden across taxpayers without mechanically increasing total revenue collected by local governments.
