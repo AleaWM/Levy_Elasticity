@@ -8,6 +8,8 @@ format:
     number-sections: false
 ---
 
+> Disclaimer: This site is still being built- AWM
+
 # Overview
 
 Property taxpayers often assume that rising assessed values automatically allow local governments to collect more property tax revenue. That intuition fits rate-driven taxes such as sales taxes, but it is less appropriate in property tax systems where local governments choose the levy and the tax rate is calculated afterward. 
@@ -19,3 +21,12 @@ In the pooled descriptive data, tax base changes are negative in more than half 
 Evidence for asymmetry is limited and sensitive to specification, while OLS models provide some evidence of lagged responses, especially for school districts. Overall, the results suggest that in this levy-first institutional setting, changes in the property tax base do not translate into large contemporaneous changes in local government levies. 
 
 The findings clarify an important distinction in property tax politics: reassessments can redistribute the tax burden across taxpayers without mechanically increasing total revenue collected by local governments.
+
+# Scripts for building panel data
+
+- helper_combine_data_sources.R   (creates agency_raw_joined.csv)
+
+- helper_recode_variables.R (creates panel_data_[insertdate].csv)
+
+- or see paper_replication code_2026_03_01.qmd for latest data set creation steps
+
