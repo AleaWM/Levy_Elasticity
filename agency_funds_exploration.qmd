@@ -101,7 +101,7 @@ agency_funds %>%
 
 ```{r}
 agency_funds %>% 
-  filter(agenc_name == "VILLAGE ") %>%
+  filter(agency_name == "VILLAGE ") %>%
   select(agency_name, everything()) %>% arrange(agency_name)
 ```
 
