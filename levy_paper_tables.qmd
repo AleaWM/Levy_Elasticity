@@ -1,0 +1,696 @@
+---
+title: "Levy Elasticity Paper Tables"
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: true
+    theme: cosmo
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+```{r}
+#| label: setup
+#| include: false
+
+library(htmltools)
+library(fs)
+library(tidyverse)
+library(haven)
+library(gt)
+library(fixest)
+library(modelsummary)
+
+# Tables are created by scripts/descriptive_stats_22_lags_cluster_updated.R
+# after running the model script locally.
+table_dir <- fs::path("results", "tables")
+
+include_table <- function(file) {
+  table_path <- fs::path(table_dir, file)
+
+  if (!fs::file_exists(table_path)) {
+    htmltools::HTML(
+      paste0(
+        "<p><strong>Missing table:</strong> <code>",
+        htmltools::htmlEscape(as.character(table_path)),
+        "</code></p>"
+      )
+    )
+  } else {
+    htmltools::includeHTML(table_path)
+  }
+}
+```
+
+This page displays the HTML tables created by the replication script. Before rendering the site, run:
+
+```{r}
+#| eval: false
+source("scripts/descriptive_stats_22_lags_cluster_updated.R")
+quarto::quarto_render()
+```
+
+```{r}
+# ================================================================
+# 1. READ + MERGE DATA
+# ================================================================
+
+message(Sys.Date())
+message(format(Sys.time(), "%H:%M:%S"))
+
+safe_se <- function(model, term) {
+  out <- tryCatch(fixest::se(model)[[term]], error = function(e) NA_real_)
+  if (is.null(out)) NA_real_ else out
+}
+
+safe_coef <- function(model, term) {
+  out <- tryCatch(stats::coef(model)[[term]], error = function(e) NA_real_)
+  if (is.null(out)) NA_real_ else out
+}
+
+term_stats <- function(model, term = "d_eav", label = NULL) {
+  est <- safe_coef(model, term)
+  se  <- safe_se(model, term)
+  tibble(
+    model = label %||% deparse(substitute(model)),
+    N = tryCatch(stats::nobs(model), error = function(e) NA_integer_),
+    estimate = est,
+    std_error = se,
+    upper_bound = est + 1.645 * se,
+    p_value = tryCatch(2 * pnorm(abs(est / se), lower.tail = FALSE), error = function(e) NA_real_)
+  )
+}
+safe_first_stage_f <- function(model) {
+  # fixest exposes several IV fit statistics, but names differ across versions.
+  out <- tryCatch(fixest::fitstat(model, "ivf1"), error = function(e) NULL)
+  if (is.null(out)) return(NA_real_)
+  as.numeric(unlist(out))[1]
+}
+
+
+# file DM used:  #"NTA_data_2024_10_14.csv"
+# email shows that he had questions about this file and then michael sent one for 10_16
+main_df <- read_csv("NTA_data_2024_10_14.csv")
+
+# main_df |> distinct(agency_group)
+#415 distinct agency_groups in the 10_14 file.
+
+# File MVH sent him:
+# main_df <- read_csv("NTA_data_2024_10_16.csv") |>
+#   arrange(type)
+
+
+# Most recent file AWM had on her computer:
+# main_df <- read_csv("NTA_data_2024_11_08.csv") |>
+# arrange(type)
+
+
+agency_lookup <- read_dta("fips_all_agency_name.dta")
+
+# anti_join(main_df, agency_lookup)
+
+main_df <- main_df |>
+  left_join(agency_lookup, by = "agency_group")
+# 7470 observations before dropping NAs
+# 7416 after dropping NAs
+# Stata listed unmatched rows and dropped merge==1 rows.
+# In dplyr terms: drop observations from master that did not match.
+main_df <- main_df |>
+  filter(!is.na(fipsid))
+
+census_df <- read_dta("census_data.dta")
+
+# 3,509 observations didn't have the census data and get dropped unless missing data is filled in between census years.
+#anti_join(main_df, census_df)
+
+main_df <- main_df |>
+  left_join(census_df, by = c("fipsid", "year"))
+
+# ================================================================
+# 2. MERGE EQUALIZATION FACTORS + CLEAN NUMERIC FIELDS
+# ================================================================
+
+# Stata used a .dta called eq_factor after previously creating it from CSV.
+# Adjust extension if your stored file is actually .csv.
+
+eq_factor_path_dta <- file.path("eq_factor.dta")
+eq_factor_path_csv <- file.path("Necessary_Files/eq_factor.csv")
+
+eq_factor <- if (file.exists(eq_factor_path_dta)) {
+  read_dta(eq_factor_path_dta)
+} else if (file.exists(eq_factor_path_csv)) {
+  read_csv(eq_factor_path_csv, show_col_types = FALSE)
+} else {
+  stop("Could not find eq_factor.dta or eq_factor.csv in post nta folder.")
+}
+
+main_df <- main_df |>
+  left_join(eq_factor, by = "year")
+
+string_num_vars <- c("assess_year_eav",  "assess_year_av", "av_true", "rate_smooth", "total_final_levy")
+
+main_df <- main_df |>
+  mutate(
+    across(
+      any_of(string_num_vars),
+      ~ readr::parse_number(as.character(.x), na = c("NA", "", ".")),
+      .names = "n_{.col}"
+    )
+  )
+
+vcov_uid <- ~n_uniqueid
+
+
+# ================================================================
+# 3. PANEL SETUP + CONSTRUCTED VARIABLES
+# ================================================================
+
+main_df <- main_df |>
+  mutate(
+    n_agency_group = as.integer(factor(agency_group)),
+    n_uniqueid     = as.integer(factor(uniqueid))
+  ) |>
+  arrange(n_agency_group, year) |>
+  filter(!is.na(n_agency_group)) |>
+  group_by(n_agency_group) |>
+  arrange(year, .by_group = TRUE) |>
+  mutate(
+    lag_av = lag(av, 1),
+    lag2_av = lag(av, 2),
+    lag3_av = lag(av, 3),
+    lead1_av = lead(av, 1),
+    lead2_av = lead(av, 2),
+    lead3_av = lead(av, 3),
+    lag_eq_factor_final = lag(eq_factor_final, 1),
+    lag2_eq_factor_final = lag(eq_factor_final, 2),
+    lag3_eq_factor_final = lag(eq_factor_final, 3),
+    lag_reassess_year = lag(reassess_year, 1),
+    lag2_reassess_year = lag(reassess_year, 2)
+  ) |>
+  ungroup() |>
+  filter(year >= 2008)
+
+main_df <- main_df |>
+  mutate(
+    t = case_when(
+      reassess_year == 1 ~ 1,
+      lag_reassess_year == 1 ~ 2,
+      lag2_reassess_year == 1 ~ 3,
+    ),
+    r = case_when(
+      t == 1 ~ ((lead3_av / av)^(1 / 3)) - 1,
+      t == 2 ~ ((lead2_av / lag_av)^(1 / 3)) - 1,
+      t == 3 ~ ((lead1_av / lag2_av)^(1 / 3)) - 1,
+      TRUE ~ 0
+    ),
+    EstV = case_when(
+      t == 1 ~ av,
+      t == 2 ~ lag_av * (1 + r),
+      t == 3 ~ lag2_av * (1 + r)^2,
+      TRUE ~ 0
+    ),
+    ln_EstV = log(EstV),
+    d_av = 100 * log(av / lag_av)) |>
+  group_by(n_agency_group) |>
+  mutate(
+    d_eav = 100 * log((av * eq_factor_final) / (lag_av * lag(eq_factor_final))),
+    d_levy = 100 * log(total_final_levy / lag(total_final_levy)),
+    d_total_ig_revenue = 100 * log(total_ig_revenue / lag(total_ig_revenue)),
+    d_enrollment = 100 * log(enrollment / lag(enrollment)),
+    has_ig_data = if_else(is.na(d_total_ig_revenue), 0, 1),
+    type_2 = case_when(
+      type == "Muni" & home_rule_ind == 1 ~ "HR_muni",
+
+      ## Added this row below!!
+      type == "Muni" & home_rule_ind == 0 ~ "NonHR_muni",
+      TRUE ~ as.character(type)
+    )
+  ) |> ungroup()
+
+
+
+reg_df <- main_df |>
+  filter(year > 2008)
+
+
+reg_df <- reg_df |>
+  mutate(
+    # Keep municipal types separate in by-type models.
+    type_2 = case_when(
+      type == "Muni" & home_rule_ind == 1 ~ "HR_muni",
+      type == "Muni" & home_rule_ind == 0 ~ "NonHR_muni",
+      TRUE ~ as.character(type)
+    ),
+    # Use a non-missing home-rule flag for year-by-home-rule fixed effects.
+    home_rule_for_fe = replace_na(as.integer(home_rule_ind), 0L)
+  )
+
+
+gov_types <- c("Other", "Township", "HR_muni", "NonHR_muni", "School")
+gov_types_B <- c("HR_muni", "NonHR_muni", "School")
+minor_types <- c("ELEMENTARY", "SECONDARY")
+
+gof_omit = "IC|Log|Adj|RMSE|Std.Errors"
+```
+
+
+
+# Main paper tables
+
+
+## Table 1. Distribution of Percentage Changes in Levies and EAV
+
+```{r tbl1}
+# summarize d_levy and d_eav by type
+## Table 1. Distribution of Percentage Changes in Levies and EAV
+
+table1 <- reg_df |>
+  filter(year >= 2009) |>
+  mutate(
+    agency_type = case_when(
+      type == "Muni" ~ "All Munis",
+      type == "School" ~ "Schools",
+      type == "Township" ~ "Townships",
+      type == "Other" ~ "Other Districts"
+    )
+  ) |>
+  select(agency_type, d_levy, d_eav) |>
+  pivot_longer(
+    cols = c(d_levy, d_eav),
+    names_to = "stat",
+    values_to = "value"
+  ) |>
+  group_by(agency_type, stat) |>
+  summarize(
+    N = sum(!is.na(value)),
+    p5 = quantile(value, .05, na.rm = TRUE),
+    p25 = quantile(value, .25, na.rm = TRUE),
+    p50 = quantile(value, .50, na.rm = TRUE),
+    p75 = quantile(value, .75, na.rm = TRUE),
+    p95 = quantile(value, .95, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+table1 |>
+  gt() |>
+  fmt_number(
+    columns = c(p5, p25, p50, p75, p95),
+    decimals = 1
+  ) |>
+  tab_header(
+    title = md("**Table 1. Distribution of Percentage Changes in Levies and EAV**")
+  )
+```
+
+
+## Table 2. All agencies OLS
+
+```{r}
+#| label: tbl-02-ols-all
+#| results: asis
+include_table("v22_table_02_OLS_all_agencies.html")
+```
+
+## Table 2. OLS upper-bound summary
+
+```{r}
+#| label: tbl-02-ols-upper
+#| results: asis
+include_table("v22_table_02_OLS_all_agencies_upper_bounds.html")
+```
+
+## Table 3. All agencies IV
+
+```{r}
+#| label: tbl-03-iv-all
+#| results: asis
+include_table("v22_table_03_IV_all_agencies.html")
+```
+
+## Table 3. IV upper-bound summary
+
+```{r}
+all_iv_3 <- feols(d_levy ~ 1 | year^home_rule_for_fe + n_uniqueid | d_eav ~ reassess_year,
+  data = reg_df, cluster = vcov_uid)
+modelsummary(all_iv_3, gof_omit = gof_omit, stars = TRUE)
+extra_stats <-  term_stats(all_iv_3, "fit_d_eav", "M3") |>
+                                   mutate(first_stage_F =  safe_first_stage_f(all_iv_3))
+
+extra_stats
+```
+
+```{r}
+#| label: tbl-03-iv-upper
+#| results: asis
+include_table("v22_table_03_IV_all_agencies_upper_bounds.html")
+```
+
+## Table 4. OLS by agency type
+
+
+```{r}
+d <- reg_df |> filter(type_2 %in% gov_types)
+
+m1 <- feols(d_levy ~ d_eav, data = d, cluster = vcov_uid)
+m2 <- feols(d_levy ~ d_eav | year, data = d, cluster = vcov_uid)
+m3 <- feols(d_levy ~ d_eav | year + n_uniqueid, data = d, cluster = vcov_uid, split = ~type_2)
+
+
+modelsummary(m3, gof_omit = gof_omit, stars = TRUE)
+
+# extra_stats <-  term_stats(m3, "d_eav", "M3") |>
+#                                    mutate(first_stage_F =  safe_first_stage_f(m3))
+# 
+# extra_stats
+
+mods <- as.list(m3)
+extra_stats <- purrr::imap_dfr(
+  mods,
+  ~ term_stats(.x, "d_eav", .y) |>
+      mutate(
+        first_stage_F = safe_first_stage_f(.x)
+      )
+)
+
+extra_stats <-  term_stats(m3, "d_eav") |>
+                                   mutate(first_stage_F =  safe_first_stage_f(m3))
+
+extra_stats
+```
+
+```{r}
+agency_label <- function(x) {
+  recode(as.character(x),
+    HR_muni = "Home-rule municipalities",
+    NonHR_muni = "Non-home-rule municipalities",
+    Muni = "All Munis",
+    Other = "Other",
+    Township = "Townships",
+    School = "Schools",
+    .default = as.character(x)
+  )
+}
+
+gov_types <- c("Other", "Township", "HR_muni", "NonHR_muni", "School")
+gov_types_B <- c("HR_muni", "NonHR_muni", "School")
+minor_types <- c("ELEMENTARY", "SECONDARY")
+
+run_type_v22 <- function(df, gov, iv = FALSE) {
+  d <- df |> filter(type_2 == gov)
+  if (!iv) {
+    m1 <- feols(d_levy ~ d_eav, data = d, cluster = vcov_uid)
+    m2 <- feols(d_levy ~ d_eav | year, data = d, cluster = vcov_uid)
+    m3 <- feols(d_levy ~ d_eav | year + n_uniqueid, data = d, cluster = vcov_uid)
+    return(list(m1 = m1, m2 = m2, m3 = m3))
+  }
+  m1 <- feols(d_levy ~ 1 | 0 | d_eav ~ reassess_year, data = d, cluster = vcov_uid)
+  m2 <- feols(d_levy ~ 1 | year | d_eav ~ reassess_year, data = d, cluster = vcov_uid)
+  m3 <- feols(d_levy ~ 1 | year + n_uniqueid | d_eav ~ reassess_year, data = d, cluster = vcov_uid)
+  list(m1 = m1, m2 = m2, m3 = m3)
+}
+
+
+make_by_type_summary <- function(models_A, iv = FALSE) {
+  term <- if (iv) "fit_d_eav" else "d_eav"
+  rows <- list()
+  for (spec in paste0("m", 1:3)) {
+    rows[[spec]] <- map_dfr(gov_types, function(gov) {
+      term_stats(models_A[[gov]][[spec]], term, gov) |>
+        transmute(row = spec, agency = model, N, upper_bound, estimate, p_value)
+    })
+  }
+bind_rows(rows) |>
+    mutate(
+      agency = agency_label(agency),
+      row = recode(row,
+        m1 = "No controls",
+        m2 = "Year FE",
+        m3 = "Year + unit FE"
+    ))
+}
+
+ols_type_A <- setNames(map(gov_types, ~ run_type_v22(reg_df, .x, iv = FALSE)), gov_types)
+iv_type_A <- setNames(map(gov_types, ~ run_type_v22(reg_df, .x, iv = TRUE)), gov_types)
+
+ols_by_type_summary <- make_by_type_summary(ols_type_A, iv = FALSE)
+
+ols_by_type_summary |> filter(row == "Year + unit FE")
+iv_by_type_summary <- make_by_type_summary(iv_type_A, iv = TRUE)
+
+
+```
+
+```{r}
+m1 <- feols(d_levy ~ 1 | 0 | d_eav ~ reassess_year, data = d, cluster = vcov_uid)
+m2 <- feols(d_levy ~ 1 | year | d_eav ~ reassess_year, data = d, cluster = vcov_uid)
+m3 <- feols(d_levy ~ 1 | year + n_uniqueid | d_eav ~ reassess_year, data = d, cluster = vcov_uid)
+
+iv_mods <-   list(m1 = m1, m2 = m2, m3 = m3)
+
+
+```
+
+```{r}
+#| label: tbl-04-ols-type
+#| results: asis
+include_table("v22_table_04_OLS_by_type_upper_bounds.html")
+```
+
+## Table 5. IV by agency type
+
+```{r}
+save_df_table <- function(df, file_stub, title = NULL, digits = 3) {
+  out_file <- file.path(output_dir, paste0(file_stub, ".html"))
+  df_out <- df |>
+    mutate(across(where(is.numeric), ~ round(.x, digits)))
+
+  html <- knitr::kable(df_out, format = "html", caption = title, escape = TRUE)
+  writeLines(html, out_file)
+  invisible(df_out)
+}
+
+safe_se <- function(model, term) {
+  out <- tryCatch(fixest::se(model)[[term]], error = function(e) NA_real_)
+  if (is.null(out)) NA_real_ else out
+}
+
+safe_coef <- function(model, term) {
+  out <- tryCatch(stats::coef(model)[[term]], error = function(e) NA_real_)
+  if (is.null(out)) NA_real_ else out
+}
+
+term_stats <- function(model, term = "d_eav", label = NULL) {
+  est <- safe_coef(model, term)
+  se  <- safe_se(model, term)
+  tibble(
+    model = label %||% deparse(substitute(model)),
+    N = tryCatch(stats::nobs(model), error = function(e) NA_integer_),
+    estimate = est,
+    std_error = se,
+    upper_bound = est + 1.645 * se,
+    p_value = tryCatch(2 * pnorm(abs(est / se), lower.tail = FALSE), error = function(e) NA_real_)
+  )
+}
+
+p_equal_terms <- function(model, lhs = "neg_d_eav", rhs = "pos_d_eav") {
+  tryCatch(fixest::wald(model, paste0(lhs, " = ", rhs))$p, error = function(e) NA_real_)
+}
+
+lincom_sum <- function(model, terms, label = NULL) {
+  b <- stats::coef(model)
+  V <- tryCatch(stats::vcov(model), error = function(e) NULL)
+  if (is.null(V) || !all(terms %in% names(b)) || !all(terms %in% rownames(V))) {
+    return(tibble(
+      model = label %||% deparse(substitute(model)),
+      N = tryCatch(stats::nobs(model), error = function(e) NA_integer_),
+      lagged_magnitude = NA_real_,
+      std_error = NA_real_,
+      A_upper_bound = NA_real_,
+      lagged_p = NA_real_
+    ))
+  }
+  est <- sum(b[terms])
+  Vsub <- V[terms, terms, drop = FALSE]
+  se <- sqrt(sum(Vsub))
+  tibble(
+    model = label %||% deparse(substitute(model)),
+    N = tryCatch(stats::nobs(model), error = function(e) NA_integer_),
+    lagged_magnitude = est,
+    std_error = se,
+    A_upper_bound = est + 1.645 * se,
+    lagged_p = 2 * pnorm(abs(est / se), lower.tail = FALSE)
+  )
+}
+
+sample_index <- function(model, data) {
+  idx <- tryCatch(fixest::obs(model), error = function(e) NULL)
+  if (!is.null(idx)) return(idx)
+  # fallback: mark complete cases for variables used in the model is not perfect,
+  # but prevents hard failure if fixest::obs changes.
+  seq_len(nrow(data))
+}
+
+safe_first_stage_f <- function(model) {
+  # fixest exposes several IV fit statistics, but names differ across versions.
+  out <- tryCatch(fixest::fitstat(model, "ivf1"), error = function(e) NULL)
+  if (is.null(out)) return(NA_real_)
+  as.numeric(unlist(out))[1]
+}
+```
+
+```{r}
+#| label: tbl-05-iv-type
+#| results: asis
+include_table("v22_table_05_IV_by_type_upper_bounds.html")
+```
+
+## Table 6. All agencies OLS with asymmetric effects
+
+```{r}
+#| label: tbl-06-asym-ols-all
+#| results: asis
+include_table("v22_table_06_OLS_all_agencies_asym.html")
+```
+
+## Table 6. OLS asymmetric upper-bound summary
+
+```{r}
+#| label: tbl-06-asym-ols-upper
+#| results: asis
+include_table("v22_table_06_OLS_all_agencies_asym_upper_bounds.html")
+```
+
+## Table 7. All agencies IV with asymmetric effects
+
+```{r}
+#| label: tbl-07-asym-iv-all
+#| results: asis
+include_table("v22_table_07_IV_all_agencies_asym.html")
+```
+
+## Table 7. IV asymmetric upper-bound summary
+
+```{r}
+#| label: tbl-07-asym-iv-upper
+#| results: asis
+include_table("v22_table_07_IV_all_agencies_asym_upper_bounds.html")
+```
+
+## Table 8. OLS by agency type with asymmetric effects
+
+```{r}
+#| label: tbl-08-asym-ols-type
+#| results: asis
+include_table("v22_table_08_OLS_by_type_asym_upper_bounds.html")
+```
+
+## Table 9. IV by agency type with asymmetric effects
+
+```{r}
+#| label: tbl-09-asym-iv-type
+#| results: asis
+include_table("v22_table_09_IV_by_type_asym_upper_bounds.html")
+```
+
+## Table 10. All agencies OLS with lagged EAV effects
+
+```{r}
+#| label: tbl-10-lag-ols-all
+#| results: asis
+include_table("v22_table_10_OLS_all_agencies_lagged.html")
+```
+
+## Table 10. Sum of current and lagged effects
+
+```{r}
+#| label: tbl-10-lag-sums
+#| results: asis
+include_table("v22_table_10_OLS_all_agencies_lagged_sums.html")
+```
+
+## Table 11. OLS by agency type with lagged EAV effects
+
+```{r}
+#| label: tbl-11-lag-ols-type
+#| results: asis
+include_table("v22_table_11_OLS_by_type_lagged_upper_bounds.html")
+```
+
+# Appendix tables
+
+
+# A1. Instrument validity
+
+```{r}
+#| label: tbl-instrument-validity
+#| results: asis
+include_table("instrument_validity_checks.html")
+```
+
+
+## Table A2. OLS by agency type point estimates
+
+```{r}
+#| label: tbl-a2-ols-type-points
+#| results: asis
+include_table("v22_table_A2_OLS_by_type_point_estimates.html")
+```
+
+## Table A3. IV by agency type point estimates
+
+```{r}
+#| label: tbl-a3-iv-type-points
+#| results: asis
+include_table("v22_table_A3_IV_by_type_point_estimates.html")
+```
+
+## Table A4. OLS symmetry tests
+
+```{r}
+#| label: tbl-a4-ols-symmetry
+#| results: asis
+include_table("v22_table_A4_OLS_by_type_asym_p_equal.html")
+```
+
+## Table A5. OLS asymmetric point estimates
+
+```{r}
+#| label: tbl-a5-ols-asym-points
+#| results: asis
+include_table("v22_table_A5_OLS_by_type_asym_point_estimates.html")
+```
+
+## Table A6. IV symmetry tests
+
+```{r}
+#| label: tbl-a6-iv-symmetry
+#| results: asis
+include_table("v22_table_A6_IV_by_type_asym_p_equal.html")
+```
+
+## Table A7. IV asymmetric point estimates
+
+```{r}
+#| label: tbl-a7-iv-asym-points
+#| results: asis
+include_table("v22_table_A7_IV_by_type_asym_point_estimates.html")
+```
+
+## Table A8. Lagged model p-values
+
+```{r}
+#| label: tbl-a8-lag-pvalues
+#| results: asis
+include_table("v22_table_A8_OLS_by_type_lagged_p_values.html")
+```
+
+## Table A9. Lagged model point estimates
+
+```{r}
+#| label: tbl-a9-lag-points
+#| results: asis
+include_table("v22_table_A9_OLS_by_type_lagged_point_estimates.html")
+```
