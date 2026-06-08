@@ -121,13 +121,32 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span class="menu-text">Website Info</span></a>
   </li>  
   <li class="nav-item">
-    <a class="nav-link" href="./levy_paper_tables.html"> 
+    <a class="nav-link" href="./levy_paper_tables_integrated_clean.qmd"> 
 <span class="menu-text">Replication Material</span></a>
   </li>  
-  <li class="nav-item">
-    <a class="nav-link" href="./agency_funds_exploration.html"> 
-<span class="menu-text">Exploration &amp; Descriptive</span></a>
+  <li class="nav-item dropdown ">
+    <a class="nav-link dropdown-toggle" href="#" id="nav-menu-data-exploration--descriptive-statistics" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+ <span class="menu-text">Data Exploration &amp; Descriptive Statistics</span>
+    </a>
+    <ul class="dropdown-menu" aria-labelledby="nav-menu-data-exploration--descriptive-statistics">    
+        <li>
+    <a class="dropdown-item" href="./agency_funds_exploration.html">
+ <span class="dropdown-text">Agency Funds Exploration</span></a>
   </li>  
+        <li>
+    <a class="dropdown-item" href="./helper_basic_graphs.html">
+ <span class="dropdown-text">Descriptive Graphs</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="./nta_grouped_panel_descriptives.html">
+ <span class="dropdown-text">NTA Descriptive Stats - Indexed Growth</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="./paper_replication_code_2026_03_01.html">
+ <span class="dropdown-text">Replication Code for <em>Measuring Local Government Levies’ Responsiveness to the Property Tax Base</em></span></a>
+  </li>  
+    </ul>
+  </li>
 </ul>
           </div> <!-- /navcollapse -->
           <div class="quarto-navbar-tools">
@@ -145,6 +164,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
    
   <ul class="collapse">
   <li><a href="#overview" id="toc-overview" class="nav-link active" data-scroll-target="#overview">Overview</a></li>
+  <li><a href="#scripts-for-building-panel-data" id="toc-scripts-for-building-panel-data" class="nav-link" data-scroll-target="#scripts-for-building-panel-data">Scripts for building panel data</a></li>
   </ul>
 </nav>
     </div>
@@ -171,6 +191,9 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </header>
 
 
+<blockquote class="blockquote">
+<p>Disclaimer: This site is still being built- AWM</p>
+</blockquote>
 <section id="overview" class="level1">
 <h1>Overview</h1>
 <p>Property taxpayers often assume that rising assessed values automatically allow local governments to collect more property tax revenue. That intuition fits rate-driven taxes such as sales taxes, but it is less appropriate in property tax systems where local governments choose the levy and the tax rate is calculated afterward.</p>
@@ -178,6 +201,14 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <p>In the pooled descriptive data, tax base changes are negative in more than half of agency-year observations, while levy declines occur in less than one quarter of observations. OLS estimates show positive but small contemporaneous elasticities: a 10 percent increase in the tax base is associated with less than a 1 percent increase in the levy in the preferred pooled specifications. Instrumental variables estimates that use reassessment timing to isolate variation in the tax base are smaller and often statistically indistinguishable from zero. We also test for asymmetric and lagged responses.</p>
 <p>Evidence for asymmetry is limited and sensitive to specification, while OLS models provide some evidence of lagged responses, especially for school districts. Overall, the results suggest that in this levy-first institutional setting, changes in the property tax base do not translate into large contemporaneous changes in local government levies.</p>
 <p>The findings clarify an important distinction in property tax politics: reassessments can redistribute the tax burden across taxpayers without mechanically increasing total revenue collected by local governments.</p>
+</section>
+<section id="scripts-for-building-panel-data" class="level1">
+<h1>Scripts for building panel data</h1>
+<ul>
+<li><p>helper_combine_data_sources.R (creates agency_raw_joined.csv)</p></li>
+<li><p>helper_recode_variables.R (creates panel_data_[insertdate].csv)</p></li>
+<li><p>or see paper_replication code_2026_03_01.qmd for latest data set creation steps</p></li>
+</ul>
 
 
 <!-- -->
@@ -633,17 +664,27 @@ window.document.addEventListener("DOMContentLoaded", function (event) {
 <span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="co">    number-sections: false</span></span>
 <span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="co">---</span></span>
 <span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="fu"># Overview</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="at">&gt; Disclaimer: This site is still being built- AWM</span></span>
 <span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>Property taxpayers often assume that rising assessed values automatically allow local governments to collect more property tax revenue. That intuition fits rate-driven taxes such as sales taxes, but it is less appropriate in property tax systems where local governments choose the levy and the tax rate is calculated afterward. </span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="fu"># Overview</span></span>
 <span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>This paper estimates how responsive local government property tax levies are to changes in the property tax base in Cook County, Illinois, from 2008 through 2023. Using data on municipalities, school districts, townships, and other taxing agencies, we find that annual changes in equalized assessed value are far more volatile than annual changes in levies. </span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>Property taxpayers often assume that rising assessed values automatically allow local governments to collect more property tax revenue. That intuition fits rate-driven taxes such as sales taxes, but it is less appropriate in property tax systems where local governments choose the levy and the tax rate is calculated afterward. </span>
 <span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>In the pooled descriptive data, tax base changes are negative in more than half of agency-year observations, while levy declines occur in less than one quarter of observations. OLS estimates show positive but small contemporaneous elasticities: a 10 percent increase in the tax base is associated with less than a 1 percent increase in the levy in the preferred pooled specifications. Instrumental variables estimates that use reassessment timing to isolate variation in the tax base are smaller and often statistically indistinguishable from zero. We also test for asymmetric and lagged responses. </span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>This paper estimates how responsive local government property tax levies are to changes in the property tax base in Cook County, Illinois, from 2008 through 2023. Using data on municipalities, school districts, townships, and other taxing agencies, we find that annual changes in equalized assessed value are far more volatile than annual changes in levies. </span>
 <span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>Evidence for asymmetry is limited and sensitive to specification, while OLS models provide some evidence of lagged responses, especially for school districts. Overall, the results suggest that in this levy-first institutional setting, changes in the property tax base do not translate into large contemporaneous changes in local government levies. </span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>In the pooled descriptive data, tax base changes are negative in more than half of agency-year observations, while levy declines occur in less than one quarter of observations. OLS estimates show positive but small contemporaneous elasticities: a 10 percent increase in the tax base is associated with less than a 1 percent increase in the levy in the preferred pooled specifications. Instrumental variables estimates that use reassessment timing to isolate variation in the tax base are smaller and often statistically indistinguishable from zero. We also test for asymmetric and lagged responses. </span>
 <span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>The findings clarify an important distinction in property tax politics: reassessments can redistribute the tax burden across taxpayers without mechanically increasing total revenue collected by local governments.</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>Evidence for asymmetry is limited and sensitive to specification, while OLS models provide some evidence of lagged responses, especially for school districts. Overall, the results suggest that in this levy-first institutional setting, changes in the property tax base do not translate into large contemporaneous changes in local government levies. </span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>The findings clarify an important distinction in property tax politics: reassessments can redistribute the tax burden across taxpayers without mechanically increasing total revenue collected by local governments.</span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a><span class="fu"># Scripts for building panel data</span></span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>helper_combine_data_sources.R   (creates agency_raw_joined.csv)</span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>helper_recode_variables.R (creates panel_data_<span class="co">[</span><span class="ot">insertdate</span><span class="co">]</span>.csv)</span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>or see paper_replication code_2026_03_01.qmd for latest data set creation steps</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div></div></div></div></div>
 </div> <!-- /content -->
 

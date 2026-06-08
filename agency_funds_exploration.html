@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 
-<title>Agency Funds</title>
+<title>Agency Funds Exploration</title>
 <style>
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
@@ -121,13 +121,32 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span class="menu-text">Website Info</span></a>
   </li>  
   <li class="nav-item">
-    <a class="nav-link" href="./levy_paper_tables.html"> 
+    <a class="nav-link" href="./levy_paper_tables_integrated_clean.qmd"> 
 <span class="menu-text">Replication Material</span></a>
   </li>  
-  <li class="nav-item">
-    <a class="nav-link active" href="./agency_funds_exploration.html" aria-current="page"> 
-<span class="menu-text">Exploration &amp; Descriptive</span></a>
+  <li class="nav-item dropdown ">
+    <a class="nav-link dropdown-toggle" href="#" id="nav-menu-data-exploration--descriptive-statistics" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+ <span class="menu-text">Data Exploration &amp; Descriptive Statistics</span>
+    </a>
+    <ul class="dropdown-menu" aria-labelledby="nav-menu-data-exploration--descriptive-statistics">    
+        <li>
+    <a class="dropdown-item" href="./agency_funds_exploration.html">
+ <span class="dropdown-text">Agency Funds Exploration</span></a>
   </li>  
+        <li>
+    <a class="dropdown-item" href="./helper_basic_graphs.html">
+ <span class="dropdown-text">Descriptive Graphs</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="./nta_grouped_panel_descriptives.html">
+ <span class="dropdown-text">NTA Descriptive Stats - Indexed Growth</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="./paper_replication_code_2026_03_01.html">
+ <span class="dropdown-text">Replication Code for <em>Measuring Local Government Levies’ Responsiveness to the Property Tax Base</em></span></a>
+  </li>  
+    </ul>
+  </li>
 </ul>
           </div> <!-- /navcollapse -->
           <div class="quarto-navbar-tools">
@@ -147,7 +166,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 
 <header id="title-block-header" class="quarto-title-block default">
 <div class="quarto-title">
-<div class="quarto-title-block"><div><h1 class="title">Agency Funds</h1><button type="button" class="btn code-tools-button dropdown-toggle" id="quarto-code-tools-menu" data-bs-toggle="dropdown" aria-expanded="false"><i class="bi"></i> Code</button><ul class="dropdown-menu dropdown-menu-end" aria-labelelledby="quarto-code-tools-menu"><li><a id="quarto-show-all-code" class="dropdown-item" href="javascript:void(0)" role="button">Show All Code</a></li><li><a id="quarto-hide-all-code" class="dropdown-item" href="javascript:void(0)" role="button">Hide All Code</a></li><li><hr class="dropdown-divider"></li><li><a id="quarto-view-source" class="dropdown-item" href="javascript:void(0)" role="button">View Source</a></li></ul></div></div>
+<div class="quarto-title-block"><div><h1 class="title">Agency Funds Exploration</h1><button type="button" class="btn code-tools-button dropdown-toggle" id="quarto-code-tools-menu" data-bs-toggle="dropdown" aria-expanded="false"><i class="bi"></i> Code</button><ul class="dropdown-menu dropdown-menu-end" aria-labelelledby="quarto-code-tools-menu"><li><a id="quarto-show-all-code" class="dropdown-item" href="javascript:void(0)" role="button">Show All Code</a></li><li><a id="quarto-hide-all-code" class="dropdown-item" href="javascript:void(0)" role="button">Hide All Code</a></li><li><hr class="dropdown-divider"></li><li><a id="quarto-view-source" class="dropdown-item" href="javascript:void(0)" role="button">View Source</a></li></ul></div></div>
 </div>
 
 
@@ -818,7 +837,6 @@ Please download the PTAXSIM DB and assign a SQLite DB connection to ptaxsim_db_c
 </div>
 </div>
 <p>Inspect Library funds - are they library agencies or muni agencies?</p>
-<p>Both</p>
 <div class="cell">
 <details class="code-fold">
 <summary>Code</summary>
@@ -1341,7 +1359,7 @@ window.document.addEventListener("DOMContentLoaded", function (event) {
 });
 </script><div class="modal fade" id="quarto-embedded-source-code-modal" tabindex="-1" aria-labelledby="quarto-embedded-source-code-modal-label" aria-hidden="true"><div class="modal-dialog modal-dialog-scrollable"><div class="modal-content"><div class="modal-header"><h5 class="modal-title" id="quarto-embedded-source-code-modal-label">Source Code</h5><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><div class="">
 <div class="sourceCode" id="cb24" data-shortcodes="false"><pre class="sourceCode markdown code-with-copy"><code class="sourceCode markdown"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a><span class="co">---</span></span>
-<span id="cb24-2"><a href="#cb24-2" aria-hidden="true" tabindex="-1"></a><span class="an">title:</span><span class="co"> "Agency Funds"</span></span>
+<span id="cb24-2"><a href="#cb24-2" aria-hidden="true" tabindex="-1"></a><span class="an">title:</span><span class="co"> "Agency Funds Exploration"</span></span>
 <span id="cb24-3"><a href="#cb24-3" aria-hidden="true" tabindex="-1"></a><span class="an">format:</span><span class="co"> html</span></span>
 <span id="cb24-4"><a href="#cb24-4" aria-hidden="true" tabindex="-1"></a><span class="co">---</span></span>
 <span id="cb24-5"><a href="#cb24-5" aria-hidden="true" tabindex="-1"></a></span>
@@ -1421,34 +1439,31 @@ window.document.addEventListener("DOMContentLoaded", function (event) {
 <span id="cb24-85"><a href="#cb24-85" aria-hidden="true" tabindex="-1"></a>  <span class="fu">summarize</span>(<span class="at">n =</span> <span class="fu">n</span>(),</span>
 <span id="cb24-86"><a href="#cb24-86" aria-hidden="true" tabindex="-1"></a>            <span class="at">amount =</span> <span class="fu">sum</span>(levy, <span class="at">na.rm =</span> <span class="cn">TRUE</span>))</span>
 <span id="cb24-87"><a href="#cb24-87" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb24-88"><a href="#cb24-88" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb24-89"><a href="#cb24-89" aria-hidden="true" tabindex="-1"></a>Inspect Library funds - are they library agencies or muni agencies?</span>
-<span id="cb24-90"><a href="#cb24-90" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb24-91"><a href="#cb24-91" aria-hidden="true" tabindex="-1"></a>Both</span>
-<span id="cb24-92"><a href="#cb24-92" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb24-95"><a href="#cb24-95" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb24-96"><a href="#cb24-96" aria-hidden="true" tabindex="-1"></a>agency_funds <span class="sc">%&gt;%</span> </span>
-<span id="cb24-97"><a href="#cb24-97" aria-hidden="true" tabindex="-1"></a> <span class="co"># filter(year == 2022) %&gt;%</span></span>
-<span id="cb24-98"><a href="#cb24-98" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(fund_name <span class="sc">==</span> <span class="st">"LIBRARY BUILDING AND SITES"</span> <span class="sc">&amp;</span> levy <span class="sc">&gt;</span> <span class="dv">0</span>) <span class="sc">%&gt;%</span></span>
-<span id="cb24-99"><a href="#cb24-99" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(agency_name, <span class="fu">everything</span>()) <span class="sc">%&gt;%</span> <span class="fu">arrange</span>(agency_name)</span>
-<span id="cb24-100"><a href="#cb24-100" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb24-101"><a href="#cb24-101" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb24-102"><a href="#cb24-102" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb24-105"><a href="#cb24-105" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb24-106"><a href="#cb24-106" aria-hidden="true" tabindex="-1"></a>agency_funds <span class="sc">%&gt;%</span> </span>
-<span id="cb24-107"><a href="#cb24-107" aria-hidden="true" tabindex="-1"></a>  <span class="fu">group_by</span>(year, agency_name, agency_num, major_type, minor_type, capped_ind) <span class="sc">%&gt;%</span></span>
-<span id="cb24-108"><a href="#cb24-108" aria-hidden="true" tabindex="-1"></a>  <span class="fu">summarize</span>(<span class="at">fundcount =</span> <span class="fu">n</span>(),</span>
-<span id="cb24-109"><a href="#cb24-109" aria-hidden="true" tabindex="-1"></a>            <span class="at">levy=</span><span class="fu">sum</span>(levy, <span class="at">na.rm=</span><span class="cn">TRUE</span>) ) <span class="sc">%&gt;%</span></span>
-<span id="cb24-110"><a href="#cb24-110" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(agency_name, <span class="fu">everything</span>()) <span class="sc">%&gt;%</span> </span>
-<span id="cb24-111"><a href="#cb24-111" aria-hidden="true" tabindex="-1"></a>  <span class="fu">arrange</span>(agency_name)</span>
-<span id="cb24-112"><a href="#cb24-112" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
-<span id="cb24-113"><a href="#cb24-113" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb24-114"><a href="#cb24-114" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb24-117"><a href="#cb24-117" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
-<span id="cb24-118"><a href="#cb24-118" aria-hidden="true" tabindex="-1"></a>agency_funds <span class="sc">%&gt;%</span> </span>
-<span id="cb24-119"><a href="#cb24-119" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(agency_name <span class="sc">==</span> <span class="st">"VILLAGE "</span>) <span class="sc">%&gt;%</span></span>
-<span id="cb24-120"><a href="#cb24-120" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(agency_name, <span class="fu">everything</span>()) <span class="sc">%&gt;%</span> <span class="fu">arrange</span>(agency_name)</span>
-<span id="cb24-121"><a href="#cb24-121" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb24-88"><a href="#cb24-88" aria-hidden="true" tabindex="-1"></a>Inspect Library funds - are they library agencies or muni agencies?</span>
+<span id="cb24-89"><a href="#cb24-89" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb24-92"><a href="#cb24-92" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb24-93"><a href="#cb24-93" aria-hidden="true" tabindex="-1"></a>agency_funds <span class="sc">%&gt;%</span> </span>
+<span id="cb24-94"><a href="#cb24-94" aria-hidden="true" tabindex="-1"></a> <span class="co"># filter(year == 2022) %&gt;%</span></span>
+<span id="cb24-95"><a href="#cb24-95" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(fund_name <span class="sc">==</span> <span class="st">"LIBRARY BUILDING AND SITES"</span> <span class="sc">&amp;</span> levy <span class="sc">&gt;</span> <span class="dv">0</span>) <span class="sc">%&gt;%</span></span>
+<span id="cb24-96"><a href="#cb24-96" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(agency_name, <span class="fu">everything</span>()) <span class="sc">%&gt;%</span> <span class="fu">arrange</span>(agency_name)</span>
+<span id="cb24-97"><a href="#cb24-97" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb24-98"><a href="#cb24-98" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb24-99"><a href="#cb24-99" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb24-102"><a href="#cb24-102" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb24-103"><a href="#cb24-103" aria-hidden="true" tabindex="-1"></a>agency_funds <span class="sc">%&gt;%</span> </span>
+<span id="cb24-104"><a href="#cb24-104" aria-hidden="true" tabindex="-1"></a>  <span class="fu">group_by</span>(year, agency_name, agency_num, major_type, minor_type, capped_ind) <span class="sc">%&gt;%</span></span>
+<span id="cb24-105"><a href="#cb24-105" aria-hidden="true" tabindex="-1"></a>  <span class="fu">summarize</span>(<span class="at">fundcount =</span> <span class="fu">n</span>(),</span>
+<span id="cb24-106"><a href="#cb24-106" aria-hidden="true" tabindex="-1"></a>            <span class="at">levy=</span><span class="fu">sum</span>(levy, <span class="at">na.rm=</span><span class="cn">TRUE</span>) ) <span class="sc">%&gt;%</span></span>
+<span id="cb24-107"><a href="#cb24-107" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(agency_name, <span class="fu">everything</span>()) <span class="sc">%&gt;%</span> </span>
+<span id="cb24-108"><a href="#cb24-108" aria-hidden="true" tabindex="-1"></a>  <span class="fu">arrange</span>(agency_name)</span>
+<span id="cb24-109"><a href="#cb24-109" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
+<span id="cb24-110"><a href="#cb24-110" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb24-111"><a href="#cb24-111" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb24-114"><a href="#cb24-114" aria-hidden="true" tabindex="-1"></a><span class="in">```{r}</span></span>
+<span id="cb24-115"><a href="#cb24-115" aria-hidden="true" tabindex="-1"></a>agency_funds <span class="sc">%&gt;%</span> </span>
+<span id="cb24-116"><a href="#cb24-116" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(agency_name <span class="sc">==</span> <span class="st">"VILLAGE "</span>) <span class="sc">%&gt;%</span></span>
+<span id="cb24-117"><a href="#cb24-117" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(agency_name, <span class="fu">everything</span>()) <span class="sc">%&gt;%</span> <span class="fu">arrange</span>(agency_name)</span>
+<span id="cb24-118"><a href="#cb24-118" aria-hidden="true" tabindex="-1"></a><span class="in">```</span></span>
 </code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div></div></div></div></div>
 </div> <!-- /content -->
