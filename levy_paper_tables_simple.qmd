@@ -1,0 +1,2045 @@
+---
+title: "Levy Elasticity Paper Tables"
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: true
+    code-tools: true
+    theme: cosmo
+params:
+  run_models: false
+execute:
+  warning: false
+  message: false
+freeze: auto
+---
+
+```{r}
+#| label: display-helpers
+
+
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(haven)
+  library(fixest)
+  library(modelsummary)
+  library(broom)
+  library(glue)
+  library(readr)
+  library(gt)
+})
+
+options(scipen = 999)
+
+table_dir <- fs::path("paper", "tables")
+
+
+
+display_model_table <- function(file_stub, title = NULL, notes = NULL, coef_map = NULL,
+                                gof_omit = "IC|Log|Adj|RMSE|Std.Errors", gof_function = NULL, add_rows = NULL) {
+  model_path <- fs::path(table_dir, paste0(file_stub, "_models.rds"))
+
+  if (!fs::file_exists(model_path)) {
+    missing_output(model_path)
+    return(invisible(NULL))
+  }
+
+  models <- readRDS(model_path)
+
+  modelsummary(
+    models,
+    title = title,
+    notes = notes,
+    coef_map = coef_map,
+    stars = c("*" = .10, "**" = .05, "***" = .01),
+    gof_omit = gof_omit,
+    add_rows = add_rows
+  )
+}
+
+display_df_table <- function(file_stub, title = NULL, digits = 3) {
+  rds_path <- fs::path(table_dir, paste0(file_stub, ".rds"))
+
+  if (!fs::file_exists(rds_path)) {
+    missing_output(rds_path)
+    return(invisible(NULL))
+  }
+
+  readRDS(rds_path) |>
+    knitr::kable(
+      format = "html",
+      caption = title,
+      digits = digits,
+      escape = TRUE
+    )
+}
+
+# ================================================================
+# 4. HELPERS
+# ================================================================
+
+vcov_uid <- ~n_uniqueid
+
+tidy_plus <- function(model, extra = NULL) {
+  out <- broom::tidy(model)
+  if (!is.null(extra)) {
+    attr(out, "extra") <- extra
+  }
+  out
+}
+
+safe_wald_p <- function(model, hypothesis) {
+  out <- tryCatch(fixest::wald(model, hypothesis), error = function(e) NULL)
+  if (is.null(out)) return(NA_real_)
+  out$p
+}
+
+safe_lincom <- function(model, combo) {
+  out <- tryCatch(fixest::lincom(model, combo), error = function(e) NULL)
+  if (is.null(out)) {
+    return(tibble(estimate = NA_real_, ci_low = NA_real_, ci_high = NA_real_, p.value = NA_real_))
+  }
+  tibble(
+    estimate = out$estimate,
+    ci_low   = out$ci_low,
+    ci_high  = out$ci_high,
+    p.value  = out$p.value
+  )
+}
+
+# ---- output folder ---------------------------------------------------------
+# These HTML outputs are intentionally written to a stable, Quarto-friendly
+# path for the replication site.
+output_dir <- file.path("paper", "tables")
+
+dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+
+
+save_table <- function(models, file_stub, title = NULL, notes = NULL,
+                       coef_map = NULL, gof_omit = "IC|Log|Adj|RMSE|Std.Errors",
+                       gof_function = NULL,
+                       add_rows = NULL) {
+
+  out_html <- file.path(output_dir, paste0(file_stub, ".html"))
+  out_rds  <- file.path(output_dir, paste0(file_stub, "_models.rds"))
+
+  modelsummary(
+    models,
+    output = out_html,
+    title = title,
+    notes = notes,
+    coef_map = coef_map,
+    stars = c("*" = .10, "**" = .05, "***" = .01),
+    gof_omit = gof_omit
+  )
+
+  saveRDS(models, out_rds)
+  invisible(models)
+}
+
+html_escape <- function(x) {
+  x <- as.character(x)
+  x <- gsub("&", "&amp;", x, fixed = TRUE)
+  x <- gsub("<", "&lt;", x, fixed = TRUE)
+  x <- gsub(">", "&gt;", x, fixed = TRUE)
+  x
+}
+
+save_df_table <- function(df, file_stub, title = NULL, digits = 3) {
+  out_html <- file.path(output_dir, paste0(file_stub, ".html"))
+  out_rds  <- file.path(output_dir, paste0(file_stub, ".rds"))
+
+  df_out <- df |>
+    mutate(across(where(is.numeric), ~ round(.x, digits)))
+
+  html <- knitr::kable(df_out, format = "html", caption = title, escape = TRUE)
+  writeLines(html, out_html)
+  saveRDS(df_out, out_rds)
+  invisible(df_out)
+}
+
+safe_se <- function(model, term) {
+  out <- tryCatch(fixest::se(model)[[term]], error = function(e) NA_real_)
+  if (is.null(out)) NA_real_ else out
+}
+
+safe_coef <- function(model, term) {
+  out <- tryCatch(stats::coef(model)[[term]], error = function(e) NA_real_)
+  if (is.null(out)) NA_real_ else out
+}
+
+model_n <- function(model) {
+  out <- tryCatch(fixest::nobs(model), error = function(e) NULL)
+  if (is.null(out)) out <- tryCatch(stats::nobs(model), error = function(e) NULL)
+  if (is.null(out)) out <- tryCatch(model$nobs, error = function(e) NULL)
+  if (is.null(out) || length(out) == 0 || is.na(out[1])) return(NA_integer_)
+  as.integer(out[1])
+}
+
+term_stats <- function(model, term = "d_eav", label = NULL) {
+  est <- safe_coef(model, term)
+  se  <- safe_se(model, term)
+  tibble(
+    model = label %||% deparse(substitute(model)),
+    N = model_n(model),
+    estimate = est,
+    std_error = se,
+    upper_bound = est + 1.645 * se,
+    p_value = tryCatch(2 * pnorm(abs(est / se), lower.tail = FALSE), error = function(e) NA_real_)
+  )
+}
+
+p_equal_terms <- function(model, lhs = "neg_d_eav", rhs = "pos_d_eav") {
+  tryCatch(fixest::wald(model, paste0(lhs, " = ", rhs))$p, error = function(e) NA_real_)
+}
+
+lincom_sum <- function(model, terms, label = NULL) {
+  b <- stats::coef(model)
+  V <- tryCatch(stats::vcov(model), error = function(e) NULL)
+  if (is.null(V) || !all(terms %in% names(b)) || !all(terms %in% rownames(V))) {
+    return(tibble(
+      model = label %||% deparse(substitute(model)),
+      N = model_n(model),
+      lagged_magnitude = NA_real_,
+      std_error = NA_real_,
+      A_upper_bound = NA_real_,
+      lagged_p = NA_real_
+    ))
+  }
+  est <- sum(b[terms])
+  Vsub <- V[terms, terms, drop = FALSE]
+  se <- sqrt(sum(Vsub))
+  tibble(
+    model = label %||% deparse(substitute(model)),
+    N = model_n(model),
+    lagged_magnitude = est,
+    std_error = se,
+    A_upper_bound = est + 1.645 * se,
+    lagged_p = 2 * pnorm(abs(est / se), lower.tail = FALSE)
+  )
+}
+
+sample_index <- function(model, data) {
+  idx <- tryCatch(fixest::obs(model), error = function(e) NULL)
+  if (!is.null(idx)) return(idx)
+  # fallback: mark complete cases for variables used in the model is not perfect,
+  # but prevents hard failure if fixest::obs changes.
+  seq_len(nrow(data))
+}
+
+safe_first_stage_f <- function(model) {
+  # fixest exposes several IV fit statistics, but names differ across versions.
+  out <- tryCatch(fixest::fitstat(model, "ivf1"), error = function(e) NULL)
+  if (is.null(out)) return(NA_real_)
+  as.numeric(unlist(out))[1]
+}
+
+`%||%` <- function(x, y) if (is.null(x)) y else x
+
+
+safe_endogeneity_p <- function(model) {
+
+  out <- tryCatch(
+    fixest::fitstat(model, "ivwald1"),
+    error = function(e) NULL
+  )
+
+  if (is.null(out))
+    return(NA_real_)
+
+  as.numeric(unlist(out))[2]   # or whatever element corresponds to the p-value
+}
+```
+
+# Data preparation and shared helpers
+
+This setup chunk reads the raw files, constructs the variables, defines the model helpers, and creates the `results/tables/` folder. It is visible for transparency but folded by default.
+
+```{r}
+#| label: data-prep-and-helpers
+
+
+# Setup ----------------------------------------------------------------------
+# descriptive_stats_15_lags_cluster.R
+# Rough R translation of: descriptive stats_15_lags_cluster.do
+# Converted from Stata to R on 2026-03-06.
+# Updated on May 11th 2026 using 22_lags_cluster.do
+#
+# Notes:
+# - Stata's esttab output is translated to modelsummary output. You can
+# - Some table formatting is approximate rather than identical.
+```
+
+```{r}
+# ================================================================
+# 1. READ + MERGE DATA
+# ================================================================
+
+message(Sys.Date())
+message(format(Sys.time(), "%H:%M:%S"))
+
+
+
+# file DM used:  #"NTA_data_2024_10_14.csv"
+# email shows that he had questions about this file and then michael sent one for 10_16
+main_df <- read_csv("NTA_data_2024_10_14.csv")
+# 7470 obs
+main_df <- main_df |> 
+  mutate(uniqueid = ifelse(agency_num == "020140003", "New Trier", uniqueid))
+
+
+# main_df |> distinct(agency_group)
+#415 distinct agency_groups in the 10_14 file.
+
+# File MVH sent him:
+# main_df <- read_csv("NTA_data_2024_10_16.csv") |>
+#   arrange(type)
+
+
+# Most recent file AWM had on her computer:
+# main_df2 <- read_csv("NTA_data_2024_11_08.csv") |>
+# arrange(type)
+# # 7596 obs
+# 
+# main_df2 <- main_df2 |> mutate(uniqueid = if_else(agency_num=="020140003", "New Trier"))
+# 
+# anti_join(main_df, main_df2)
+
+
+agency_lookup <- read_dta("Necessary_Files/fips_all_agency_name.dta")
+
+# anti_join(main_df, agency_lookup)
+
+main_df <- main_df |>
+  left_join(agency_lookup, by = "agency_group")
+# 7470 observations before dropping NAs
+# 7416 after dropping NAs
+# Stata listed unmatched rows and dropped merge==1 rows.
+# In dplyr terms: drop observations from master that did not match.
+main_df <- main_df |>
+  filter(!is.na(fipsid))
+
+census_df <- read_dta("Necessary_Files/census_data.dta")
+
+# 3,509 observations didn't have the census data and get dropped unless missing data is filled in between census years.
+#anti_join(main_df, census_df)
+
+main_df <- main_df |>
+  left_join(census_df, by = c("fipsid", "year"))
+
+# ================================================================
+# 2. MERGE EQUALIZATION FACTORS + CLEAN NUMERIC FIELDS
+# ================================================================
+
+# Stata used a .dta called eq_factor after previously creating it from CSV.
+# Adjust extension if your stored file is actually .csv.
+
+eq_factor_path_csv <- file.path("Necessary_Files/eq_factor.csv")
+
+eq_factor <- read_csv(eq_factor_path_csv)
+
+main_df <- main_df |>
+  left_join(eq_factor, by = "year")
+
+string_num_vars <- c("assess_year_eav",  "assess_year_av", "av_true", "rate_smooth", "total_final_levy")
+
+main_df <- main_df |>
+  mutate(
+    across(
+      any_of(string_num_vars),
+      ~ readr::parse_number(as.character(.x), na = c("NA", "", ".")),
+      .names = "n_{.col}"
+    )
+  )
+
+# ================================================================
+# 3. PANEL SETUP + CONSTRUCTED VARIABLES
+# ================================================================
+
+main_df <- main_df |>
+  mutate(
+    n_agency_group = as.integer(factor(agency_group)),
+    n_uniqueid     = as.integer(factor(uniqueid))
+  ) |>
+  arrange(n_agency_group, year) |>
+  filter(!is.na(n_agency_group)) |>
+  group_by(n_agency_group) |>
+  arrange(year, .by_group = TRUE) |>
+  mutate(
+    lag_av = lag(av, 1),
+    lag2_av = lag(av, 2),
+    lag3_av = lag(av, 3),
+    lead1_av = lead(av, 1),
+    lead2_av = lead(av, 2),
+    lead3_av = lead(av, 3),
+    lag_eq_factor_final = lag(eq_factor_final, 1),
+    lag2_eq_factor_final = lag(eq_factor_final, 2),
+    lag3_eq_factor_final = lag(eq_factor_final, 3),
+    lag_reassess_year = lag(reassess_year, 1),
+    lag2_reassess_year = lag(reassess_year, 2)
+  ) |>
+  ungroup() |>
+  filter(year >= 2008)
+
+main_df <- main_df |>
+  mutate(
+    t = case_when(
+      reassess_year == 1 ~ 1,
+      lag_reassess_year == 1 ~ 2,
+      lag2_reassess_year == 1 ~ 3,
+    ),
+    r = case_when(
+      t == 1 ~ ((lead3_av / av)^(1 / 3)) - 1,
+      t == 2 ~ ((lead2_av / lag_av)^(1 / 3)) - 1,
+      t == 3 ~ ((lead1_av / lag2_av)^(1 / 3)) - 1,
+      TRUE ~ 0
+    ),
+    EstV = case_when(
+      t == 1 ~ av,
+      t == 2 ~ lag_av * (1 + r),
+      t == 3 ~ lag2_av * (1 + r)^2,
+      TRUE ~ 0
+    ),
+    ln_EstV = log(EstV),
+    d_av = 100 * log(av / lag_av)) |>
+  group_by(n_agency_group) |>
+  mutate(
+    d_eav = 100 * log((av * eq_factor_final) / (lag_av * lag(eq_factor_final))),
+    d_levy = 100 * log(total_final_levy / lag(total_final_levy)),
+    d_total_ig_revenue = 100 * log(total_ig_revenue / lag(total_ig_revenue)),
+    d_enrollment = 100 * log(enrollment / lag(enrollment)),
+    has_ig_data = if_else(is.na(d_total_ig_revenue), 0, 1),
+    type_2 = case_when(
+      type == "Muni" & home_rule_ind == 1 ~ "HR_muni",
+
+      ## Added this row below!!
+      type == "Muni" & home_rule_ind == 0 ~ "NonHR_muni",
+      TRUE ~ as.character(type)
+    )
+  ) |> ungroup()
+
+
+
+reg_df <- main_df |>
+  filter(year > 2008)
+
+
+reg_df <- reg_df |>
+  mutate(
+    # Keep municipal types separate in by-type models.
+    type_2 = case_when(
+      type == "Muni" & home_rule_ind == 1 ~ "HR_muni",
+      type == "Muni" & home_rule_ind == 0 ~ "NonHR_muni",
+      TRUE ~ as.character(type)
+    ),
+    # Use a non-missing home-rule flag for year-by-home-rule fixed effects.
+    home_rule_for_fe = replace_na(as.integer(home_rule_ind), 0L)
+  )
+
+
+gov_types <- c("Other", "Township", "HR_muni", "NonHR_muni", "School")
+gov_types_B <- c("HR_muni", "NonHR_muni", "School")
+minor_types <- c("ELEMENTARY", "SECONDARY")
+
+gof_omit = "IC|Log|Adj|RMSE|R|R2"
+```
+
+# Main paper tables
+
+## Table 1. Distribution of Percentage Changes in Levies and EAV
+
+```{r tbl1}
+# summarize d_levy and d_eav by type
+## Table 1. Distribution of Percentage Changes in Levies and EAV
+
+table1 <- reg_df |>
+  filter(year >= 2009) |>
+  mutate(
+    agency_type = case_when(
+      type == "Muni" ~ "All Munis",
+      type == "School" ~ "Schools",
+      type == "Township" ~ "Townships",
+      type == "Other" ~ "Other Districts"
+    )
+  ) |>
+  select(agency_type, d_levy, d_eav) |>
+  pivot_longer(
+    cols = c(d_levy, d_eav),
+    names_to = "stat",
+    values_to = "value"
+  ) |>
+  group_by(agency_type, stat) |>
+  summarize(
+    N = sum(!is.na(value)),
+    p5 = quantile(value, .05, na.rm = TRUE),
+    p25 = quantile(value, .25, na.rm = TRUE),
+    p50 = quantile(value, .50, na.rm = TRUE),
+    p75 = quantile(value, .75, na.rm = TRUE),
+    p95 = quantile(value, .95, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+table1_all <- reg_df |>
+  filter(year >= 2009) |>
+  mutate(
+    agency_type = case_when(
+      type == "Muni" ~ "All Munis",
+      type == "School" ~ "Schools",
+      type == "Township" ~ "Townships",
+      type == "Other" ~ "Other Districts"
+    )
+  ) |>
+  select(agency_type, d_levy, d_eav) |>
+  pivot_longer(
+    cols = c(d_levy, d_eav),
+    names_to = "stat",
+    values_to = "value"
+  ) |>
+  group_by(stat) |>
+  summarize(
+    N = sum(!is.na(value)),
+    p5 = quantile(value, .05, na.rm = TRUE),
+    p25 = quantile(value, .25, na.rm = TRUE),
+    p50 = quantile(value, .50, na.rm = TRUE),
+    p75 = quantile(value, .75, na.rm = TRUE),
+    p95 = quantile(value, .95, na.rm = TRUE),
+    .groups = "drop"
+  ) |> mutate(agency_type = "All", .after = )
+
+table1 |>
+  rbind(table1_all) |>
+  gt() |>
+  fmt_number(
+    columns = c(p5, p25, p50, p75, p95),
+    decimals = 1
+  ) |>
+  tab_header(
+    title = md("**Table 1. Distribution of Percentage Changes in Levies and EAV**")
+  )
+```
+
+## Table 2. All-agency OLS
+
+"At the bottom of table 2, we also include our estimated “upper bound” for ε_b—this tells us the maximum value of the elasticity that we fail to reject with 95 percent confidence—i.e. we can reject the hypothesis that ε_b is greater than the upper bound with 95 percent confidence. As shown in the table, even these upper bounds are quite small and always much less than 1."
+
+```{r}
+# ================================================================
+# MAIN OLS
+# ================================================================
+
+m_ols_twfe <- feols(
+  d_levy ~ d_eav |
+    n_uniqueid + year,
+  data = reg_df,
+#  cluster = vcov_uid
+)
+
+m_ols_hr <- feols(
+  d_levy ~ d_eav |
+    n_uniqueid + year^home_rule_for_fe,
+  data = reg_df,
+#  cluster = vcov_uid
+)
+
+m_ols_split <- feols(
+  d_levy ~ d_eav |
+    n_uniqueid + year,
+  data = reg_df,
+ # cluster = vcov_uid,
+  split = ~type_2
+)
+
+
+
+extra_rows <- tibble::tribble(
+  ~term, ~`OLS TWFE`, ~`OLS HR×Year`,
+  "Upper Bound",
+  round(m_ols_twfe$coefficients[["d_eav"]]  + 1.645 * m_ols_twfe$se[["d_eav"]],3),
+  round(m_ols_hr$coefficients[["d_eav"]] + 1.645 * m_ols_hr$se[["d_eav"]], 3)
+)
+
+safe_upper_bound <- function(model, terms = c("d_eav", "fit_d_eav"), z = 1.645, digits = 3) {
+
+  get_ub <- function(m) {
+    b <- coef(m)
+    se <- m$se
+
+    term <- terms[terms %in% names(b)][1]
+    if (is.na(term) || is.null(term)) return(NA_real_)
+
+    b[[term]] + z * se[[term]]
+  }
+
+  ub <- if (is.list(model) && !inherits(model, "fixest")) {
+    # split models case
+    sapply(model, get_ub)
+  } else {
+    # single model case
+    get_ub(model)
+  }
+
+  round(ub, digits)
+}
+
+extra_rows <- tibble::tribble(
+  ~term, ~`OLS TWFE`, ~`OLS HR×Year`,
+  "Upper Bound",
+  safe_upper_bound(m_ols_twfe),
+  safe_upper_bound(m_ols_hr)
+
+)
+
+models <- list(
+  "TWFE" = m_ols_twfe,
+  "TWFE + HR×Year" = m_ols_hr
+)
+
+modelsummary(
+  models,
+  stars = TRUE,
+    add_rows = extra_rows,
+  gof_omit = gof_omit,
+  coef_map = c(
+    d_eav = "Δ Equalized Assessed Value"
+  )
+)
+```
+
+```{r table2-betterway}
+# ================================================================
+# MAIN OLS
+# ================================================================
+
+m_ols_twfe <- feols(
+  d_levy ~ d_eav |
+    n_uniqueid + year,
+  data = reg_df,
+  cluster = vcov_uid
+)
+
+m_ols_hr <- feols(
+  d_levy ~ d_eav |
+    n_uniqueid + year^home_rule_for_fe,
+  data = reg_df,
+  cluster = vcov_uid
+)
+
+m_ols_split <- feols(
+  d_levy ~ d_eav |
+    n_uniqueid + year,
+  data = reg_df,
+  cluster = vcov_uid,
+  split = ~type_2
+)
+
+extra_rows <- tibble::tribble(
+  ~term, ~`OLS TWFE`, ~`OLS HR×Year`,
+  "Upper Bound",
+  safe_upper_bound(m_ols_twfe),
+  safe_upper_bound(m_ols_hr)
+
+)
+
+models <- list(
+  "TWFE" = m_ols_twfe,
+  "TWFE + HR×Year" = m_ols_hr
+)
+
+modelsummary(
+  models,
+  stars = TRUE,
+    add_rows = extra_rows,
+  gof_omit = gof_omit,
+  coef_map = c(
+    d_eav = "Δ Equalized Assessed Value"
+  )
+)
+```
+
+## Table 3. All-agency IV
+
+"In table 3 we treat the change in the tax base (d_eav) as endogenous and instrument for it using the timing of reassessments. For the timing of reassessments to be a valid instrument for the change in the tax base requires that (i) reassessments are a strong predictor of changes in EAV and (ii) reassessments do not influence the change in the levy except to the extent that they affect the change in the tax base."
+
+DFM Notes for Stata: "Montiel Olea, J. L. and C. E. Pueger (2013) A robust test for weak instruments, Journal of Business and Economic Statistics, Vol. 31, pp. 358369.
+
+weakivtest
+
+estat endogenous performs tests to determine whether endogenous regressors in the model are in fact exogenous. After GMM estimation, the C (difference-in-Sargan) statistic is reported. After 2SLS estimation with an unadjusted VCE, the Durbin (1954) and Wu-Hausman (Wu 1974; Hausman 1978) statistics are reported. After 2SLS estimation with a robust VCE, Wooldridge's (1995) robust score test and a robust regression-based test are reported. In all cases, if the test statistic is significant, then the variables being tested must be treated as endogenous. estat endogenous is not available aft erLIML estimation."
+
+p_exog is the p-value for the null hypothesis that d_eav is exogenous.
+
+- Small p-value (e.g., \< 0.05): Reject exogeneity → there is evidence that d_eav is endogenous, supporting the use of IV.\
+- Large p-value: Fail to reject exogeneity → the data do not provide evidence that IV is necessary.
+
+```{r}
+# ================================================================
+# MAIN IV
+# ================================================================
+
+m_iv_twfe <- feols(
+  d_levy ~ 1 |
+    d_eav ~ reassess_year,
+  data = reg_df,
+ # cluster = vcov_uid
+)
+
+m_iv_hr <- feols(
+  d_levy ~ factor(year):factor(home_rule_for_fe) |
+    d_eav ~ reassess_year,
+  data = reg_df,
+#  cluster = vcov_uid
+)
+
+library(AER)
+
+
+iv3 <- ivreg(
+  d_levy ~ d_eav |
+    reassess_year,
+  data = reg_df
+)
+
+s <- summary(iv3, diagnostics = TRUE)  # weak instrument test matches DFM 
+
+diag_tbl <- as.data.frame(s$diagnostics) |>
+  tibble::rownames_to_column("Test")
+
+modelsummary::datasummary_df(
+  diag_tbl,
+  title = "Instrument Diagnostic Tests  - No FE"
+)
+# p_exog = 0.006 ** There is statistically significant evidence that d_eav is endogenous.
+
+# weak instruments = 951.7 ***   reassessment year is extremely strongly correlated with changes in EAV
+
+# Wu-Hausman = 7.516  ** 
+
+fitstat(m_iv_hr, show_type = TRUE)
+fitstat(m_iv_hr, c("ivf1", "ivwald1", "ivf2"))
+
+
+
+models_iv <- list(
+  "IV TWFE" = m_iv_twfe,
+  "IV TWFE + HR×Year" = m_iv_hr
+)
+
+extra_rows <- tibble::tribble(
+  ~term, ~`IV TWFE`, ~`IV HR×Year`,
+  "First-stage F",
+  round(safe_first_stage_f(m_iv_twfe),1),
+  round(safe_first_stage_f(m_iv_hr),1),
+
+  "Endogeneity test p",
+  round(safe_endogeneity_p(m_iv_twfe),3),
+  round(safe_endogeneity_p(m_iv_hr),3),
+  
+  "Upper Bound",
+  round(safe_upper_bound(m_iv_twfe),3),
+  round(safe_upper_bound(m_iv_hr),3),)
+
+modelsummary(
+  models_iv,
+  add_rows = extra_rows,
+  stars = TRUE,
+  gof_omit = gof_omit,
+   coef_map = c(
+    fit_d_eav = "Δ Equalized Assessed Value"
+  )
+)
+```
+
+```{r}
+#| eval: false
+
+safe_iv_diagnostics <- function(iv_model) {
+  diag <- summary(iv_model, diagnostics = TRUE)$diagnostics
+
+  tibble::tibble(
+    weak_F = diag["Weak instruments", "statistic"],
+    weak_p = diag["Weak instruments", "p-value"],
+    wu_F   = diag["Wu-Hausman", "statistic"],
+    wu_p   = diag["Wu-Hausman", "p-value"]
+  )
+}
+```
+
+### Better version? with clustered SEs
+
+> p_exog should be the p-value from a cluster-robust endogeneity test of the null hypothesis that d_eav is exogenous.
+
+```{r}
+
+reg_df2 <- reg_df |>
+  filter(
+    is.finite(d_levy),
+    is.finite(d_eav),
+    !is.na(reassess_year),
+    !is.na(n_uniqueid),
+    !is.na(year),
+    !is.na(home_rule_for_fe)
+  ) |>
+  mutate(.row_id = row_number())
+
+fs <- feols(
+  d_eav ~ reassess_year | n_uniqueid + year^home_rule_for_fe,
+  data = reg_df2,
+  cluster = ~ n_uniqueid
+)
+
+kept_rows <- fixest::obs(fs)
+
+removed_rows <- reg_df2[-kept_rows, ]
+
+# Keep only rows actually used by the first-stage model
+reg_df2_used <- reg_df2[fixest::obs(fs), ]
+
+reg_df2_used <- reg_df2_used |>
+  mutate(fs_resid = resid(fs))
+
+endo_test <- feols(
+  d_levy ~ d_eav + fs_resid | n_uniqueid + year^home_rule_for_fe,
+  data = reg_df2_used,
+  cluster = ~ n_uniqueid
+)
+ct <- fixest::coeftable(endo_test)
+
+ct
+p_col <- grep("^Pr\\(", colnames(ct), value = TRUE)
+
+p_exog <- ct["fs_resid", p_col]
+
+p_exog
+
+fixest::wald(endo_test, keep = "^fs_resid$")
+```
+
+p_exog is the p-value from a cluster-robust control-function test of the null hypothesis that d_eav is exogenous. A small value means the first-stage residual predicts levy changes, which is evidence against treating d_eav as exogenous.
+
+```{r}
+
+m_iv_twfe <- feols(
+  d_levy ~ 1 |
+    n_uniqueid + year |
+    d_eav ~ reassess_year,
+  data = reg_df,
+  cluster = vcov_uid
+)
+
+m_iv_hr <- feols(
+  d_levy ~ factor(year):factor(home_rule_for_fe) |
+    n_uniqueid + year |
+    d_eav ~ reassess_year,
+  data = reg_df,
+  cluster = vcov_uid
+)
+
+
+iv3 <- ivreg(
+  d_levy ~ d_eav +
+    factor(interaction(year, home_rule_for_fe)) +
+    factor(n_uniqueid) |
+    reassess_year +
+    factor(interaction(year, home_rule_for_fe)) +
+    factor(n_uniqueid),
+  data = reg_df
+
+)
+
+
+
+s <- summary(iv3, diagnostics = TRUE)  # weak instrument test matches DFM 
+
+diag_tbl <- as.data.frame(s$diagnostics) |>
+  tibble::rownames_to_column("Test")
+
+modelsummary::datasummary_df(
+  diag_tbl,
+  title = "Instrument Diagnostic Tests - with FE"
+)
+# p_exog = 0.006 ** There is statistically significant evidence that d_eav is endogenous.
+
+# weak instruments = 951.7 ***   reassessment year is extremely strongly correlated with changes in EAV
+
+# Wu-Hausman = 7.516  ** 
+
+fitstat(m_iv_hr, show_type = TRUE)
+fitstat(m_iv_hr, c("ivf1", "ivwald1", "ivf2"))
+
+
+
+models_iv <- list(
+  "IV TWFE" = m_iv_twfe,
+  "IV TWFE + HR×Year" = m_iv_hr
+)
+
+extra_rows <- tibble::tribble(
+  ~term, ~`IV TWFE`, ~`IV HR×Year`,
+  "First-stage F",
+  round(safe_first_stage_f(m_iv_twfe),1),
+  round(safe_first_stage_f(m_iv_hr),1),
+
+  "Endogeneity test p",
+  round(safe_endogeneity_p(m_iv_twfe),3),
+  round(safe_endogeneity_p(m_iv_hr),3),
+  
+  "Upper Bound",
+  round(safe_upper_bound(m_iv_twfe),3),
+  round(safe_upper_bound(m_iv_hr),3),)
+
+modelsummary(
+  models_iv,
+  add_rows = extra_rows,
+  stars = TRUE,
+  gof_omit = gof_omit,
+   coef_map = c(
+    fit_d_eav = "Δ Equalized Assessed Value"
+  )
+)
+```
+
+# Table 4
+
+When munis are not split up into homerule and nonhomerule, then the coefficient is -0.016, not statistically significant., N = 1601.
+
+> DFM did not cluster standard errors when creating reg3_gov models. if i want my upper bound estimates to match his, then i need to tell R to use Stata's default option which is vcov = "iid"
+
+```{r}
+
+m_ols_hr_split <- feols(
+  d_levy ~ d_eav  |
+    n_uniqueid + year,
+  data = reg_df,
+ # cluster = vcov_uid,
+ voc= "iid",
+  split = ~type_2
+)
+
+safe_upper_bound_fixest <- function(m,
+                                    terms = c("d_eav", "fit_d_eav"),
+                                    z = 1.645) {
+  b <- coef(m)
+  se <- m$se
+
+  # find first available term
+  term <- terms[terms %in% names(b)][1]
+
+  if (is.na(term) || is.null(term)) {
+    return(NA_real_)
+  }
+
+  b[[term]] + z * se[[term]]
+}
+
+ub_vec <- sapply(m_ols_hr_split, safe_upper_bound_fixest)
+names(ub_vec) <- names(m_ols_hr_split)
+
+extra_rows <- data.frame(
+  term = "Upper Bound",
+  t(as.data.frame(ub_vec))
+)
+
+modelsummary(
+  m_ols_hr_split,
+  stars = TRUE,
+  add_rows = extra_rows,
+  gof_omit = gof_omit,
+  coef_map = c(
+    d_eav = "Δ Equalized Assessed Value"
+  )
+)
+```
+
+```{r tab4-bttr}
+
+m_ols_hr_split <- feols(
+  d_levy ~ d_eav  |
+    n_uniqueid + year,
+  data = reg_df,
+vcov = ~ uniqueid,  
+split = ~type_2
+)
+
+ub_vec <- sapply(m_ols_hr_split, safe_upper_bound_fixest)
+names(ub_vec) <- names(m_ols_hr_split)
+
+extra_rows <- data.frame(
+  term = "Upper Bound",
+  t(as.data.frame(ub_vec))
+)
+
+modelsummary(
+  m_ols_hr_split,
+  stars = TRUE,
+  add_rows = extra_rows,
+  gof_omit = gof_omit,
+  coef_map = c(
+    d_eav = "Δ Equalized Assessed Value"
+  )
+)
+```
+
+# Table 5
+
+When munis are not split up into homerule and nonhomerule, then the coefficient is -0.016, not statistically significant., N = 1601.
+
+> Standard errors should account for correlation at the level where the treatment or instrument varies.
+
+```{r}
+m_iv_hr_split <- feols(
+  d_levy ~ 1 |
+    n_uniqueid + year |
+    d_eav ~ reassess_year,
+  data = reg_df,
+
+  split = ~type_2
+)
+
+ub_vec <- sapply(m_iv_hr_split, safe_upper_bound_fixest)
+
+names(ub_vec) <- names(m_iv_hr_split)
+
+
+extra_rows <- data.frame(
+  term = "Upper Bound",
+  t(as.data.frame(ub_vec))
+)
+
+
+modelsummary(
+  m_iv_hr_split,
+  add_rows = extra_rows,
+  stars = TRUE,
+  gof_omit = gof_omit
+)
+```
+
+IV estimates are generally near zero and imprecise. With agency-clustered standard errors, the upper bounds remain modest in the preferred row-3 specification, including for non-home-rule municipalities.
+
+```{r tab5-bttr}
+
+m_iv_hr_split <- feols(
+  d_levy ~ 1 |
+    n_uniqueid + year |
+   
+    d_eav ~ reassess_year,
+  data = reg_df,
+ vcov = ~uniqueid,
+  split = ~type_2
+)
+
+ub_vec <- sapply(m_iv_hr_split, safe_upper_bound_fixest)
+
+names(ub_vec) <- names(m_iv_hr_split)
+
+
+extra_rows <- data.frame(
+  term = "Upper Bound",
+  t(as.data.frame(ub_vec))
+)
+
+
+modelsummary(
+  m_iv_hr_split,
+  add_rows = extra_rows,
+  stars = TRUE,
+  gof_omit = gof_omit
+)
+```
+
+# Table 6 & 7, Row 3. All-agency asymmetric models
+
+```{r}
+safe_upper_bound_two <- function(m, z = 1.645) {
+
+  b <- coef(m)
+  se <- m$se
+
+  terms <- c("pos_d_eav", "neg_d_eav", "fit_pos_d_eav", "fit_neg_d_eav")
+
+  present <- terms[terms %in% names(b)]
+
+  if (length(present) == 0) return(NA)
+
+  ub <- b[present] + z * se[present]
+
+  ub
+}
+```
+
+### TWFE specifications
+
+```{r}
+#| include: false
+
+#  d_eav:eav_growth is the difference between his neg_d_eav = 0.43) and pos_d_eav = 0.082*. just another way to estimate it.
+
+
+# my way of coding it
+reg_df <- reg_df |>
+  mutate(
+    eav_growth = case_when(
+      d_eav > 0 ~ "Increase",
+      d_eav < 0 ~ "Decrease",
+      TRUE ~ "No Change"))
+
+
+reg_B <- feols(d_levy ~ d_eav:eav_growth | year + n_uniqueid, data = reg_df, cluster = vcov_uid)
+reg_B |> summary()
+
+reg_B <- feols(d_levy ~ d_eav * eav_growth | year^home_rule_ind + n_uniqueid, data = reg_df, cluster = vcov_uid)
+reg_B |> summary()
+
+```
+
+## Table 6 & 7
+
+```{r}
+
+# DFM's way of coding it
+reg_df <- reg_df |>
+  mutate(
+    eav_growth = if_else(d_eav > 0, 1, 0),
+    pos_d_eav = d_eav * eav_growth,
+    neg_d_eav = d_eav * (1 - eav_growth),
+  )
+
+first_stage_asym <- feols(d_eav ~ reassess_year | year, data = reg_df)
+
+reg_df <- reg_df |>
+  mutate(
+    d_eav_hat = fitted(first_stage_asym),
+    pos_d_eav_hat = pos_d_eav * d_eav_hat,
+    neg_d_eav_hat = neg_d_eav * d_eav_hat
+  )
+
+
+
+```
+
+> DFM code clustered by unique id for ols assymetry in Table 6 but not IV assymetry. Did not cluster for table 7 TWFE
+
+> matches his results but might be wrong and should be clustered for table 7 row 3??
+
+```{r}
+
+asym_ols_3 <- feols(d_levy ~ neg_d_eav + pos_d_eav | year^home_rule_for_fe + n_uniqueid, data = reg_df , vcov = ~ uniqueid
+                    )
+
+safe_upper_bound_two(asym_ols_3)
+
+asym_iv_3 <- feols(d_levy ~ 1 | year^home_rule_for_fe + n_uniqueid | neg_d_eav + pos_d_eav ~ reassess_year + pos_d_eav_hat,
+  data = reg_df# , vcov = ~ uniqueid 
+)
+safe_upper_bound_two(asym_iv_3)
+
+modelsummary(list(asym_ols_3, asym_iv_3), stars = TRUE, title = "Table 6 in Paper, TWFE specifications", gof_omit = gof_omit)
+
+```
+
+### bttr vrsion
+
+In pooled IV models, point estimates suggest a larger response to EAV declines than to EAV increases, but this asymmetry is sensitive to the standard-error specification.
+
+```{r}
+asym_ols_3 <- feols(d_levy ~ neg_d_eav + pos_d_eav | year^home_rule_for_fe + n_uniqueid, data = reg_df , vcov = ~ uniqueid
+                    )
+
+safe_upper_bound_two(asym_ols_3)
+
+asym_iv_3 <- feols(d_levy ~ 1 | year^home_rule_for_fe + n_uniqueid | neg_d_eav + pos_d_eav ~ reassess_year + pos_d_eav_hat,
+  data = reg_df , vcov = ~ uniqueid 
+)
+safe_upper_bound_two(asym_iv_3)
+
+modelsummary(list(asym_ols_3, asym_iv_3), stars = TRUE, title = "Table 6 in Paper, TWFE specifications", gof_omit = gof_omit)
+
+```
+
+# Table 8 & 9, Row 3. Asymmetric models by agency type
+
+```{r}
+safe_upper_bound_fixest <- function(m, term) {
+  b <- coef(m)[term]
+  se <- m$se[term]
+  if (is.na(b) || is.na(se)) return(NA_real_)
+  b + 1.645 * se
+}
+
+safe_upper_bound_two <- function(m, z = 1.645) {
+
+  b <- coef(m)
+  se <- m$se
+
+  terms <- c("pos_d_eav", "neg_d_eav", "fit_pos_d_eav", "fit_neg_d_eav")
+
+  present <- terms[terms %in% names(b)]
+
+  if (length(present) == 0) return(NA)
+
+  ub <- b[present] + z * se[present]
+
+  ub
+  
+    data.frame(term = "Upper Bound", t(as.data.frame(ub)))
+
+}
+```
+
+## Tab 8. main row row3 TWFE
+
+> DFM used default Standard Errors
+
+```{r}
+row3_tab8_ols <- feols(d_levy ~ neg_d_eav + pos_d_eav | year + n_uniqueid, data = reg_df, # vcov = ~ uniqueid,
+                       fsplit = ~type_2)
+
+
+pos_ub <- sapply(row3_tab8_ols, safe_upper_bound, term = "pos_d_eav")
+neg_ub <- sapply(row3_tab8_ols, safe_upper_bound, term = "neg_d_eav")
+
+
+extra_rows <- rbind(
+  data.frame(
+    term = "Pos Upper Bound",
+    t(as.data.frame(pos_ub)),
+    check.names = FALSE
+  ),
+  data.frame(
+    term = "Neg Upper Bound",
+    t(as.data.frame(neg_ub)),
+    check.names = FALSE
+  )
+)
+
+modelsummary(list(row3_tab8_ols), gof_omit = gof_omit, add_rows = extra_rows, stars = TRUE)
+```
+
+### bttr vrsion?
+
+Manuscript implication of different SEs: the qualitative result survives: positive EAV responses are generally small. But schools and home-rule municipalities have somewhat larger upper bounds after clustering.
+
+```{r}
+
+# Helper: p-value from one coefficient
+coef_p <- function(model, term) {
+  ct <- fixest::coeftable(model)
+  p_col <- grep("^Pr\\(", colnames(ct), value = TRUE)
+
+  if (length(p_col) != 1) {
+    stop("Could not uniquely identify the p-value column.")
+  }
+
+  unname(ct[term, p_col])
+}
+
+# Helper: cluster-robust joint Wald test from model vcov
+joint_wald_p <- function(model, terms) {
+  b <- coef(model)
+
+  missing_terms <- setdiff(terms, names(b))
+  if (length(missing_terms) > 0) {
+    stop("Missing coefficient(s): ", paste(missing_terms, collapse = ", "))
+  }
+
+  b_sub <- b[terms]
+  V_sub <- vcov(model)[terms, terms, drop = FALSE]
+
+  stat <- as.numeric(t(b_sub) %*% qr.solve(V_sub, b_sub))
+  df <- length(terms)
+  p <- pchisq(stat, df = df, lower.tail = FALSE)
+
+  tibble(
+    statistic = stat,
+    df = df,
+    p.value = p
+  )
+}
+
+# 1. Build clean sample for asymmetric IV model
+asym_df <- reg_df |>
+  filter(
+    is.finite(d_levy),
+    is.finite(pos_d_eav),
+    is.finite(neg_d_eav),
+    !is.na(reassess_year),
+    !is.na(pos_d_eav_hat),
+    !is.na(n_uniqueid),
+    !is.na(year),
+    !is.na(home_rule_for_fe)
+  ) |>
+  mutate(.row_id = row_number())
+
+# 2. Optional but useful: estimate the actual asymmetric IV model first
+m_iv_asym <- feols(
+  d_levy ~ 1 |
+    n_uniqueid + year^home_rule_for_fe |
+    pos_d_eav + neg_d_eav ~ reassess_year + pos_d_eav_hat,
+  data = asym_df,
+  cluster = ~ n_uniqueid
+)
+
+# 3. Force control-function test to use the IV model sample
+asym_cf_df <- asym_df[fixest::obs(m_iv_asym), ]
+
+# 4. First stage for positive EAV changes
+fs_pos <- feols(
+  pos_d_eav ~ reassess_year + pos_d_eav_hat |
+    n_uniqueid + year^home_rule_for_fe,
+  data = asym_cf_df,
+  cluster = ~ n_uniqueid
+)
+
+# 5. First stage for negative EAV changes
+fs_neg <- feols(
+  neg_d_eav ~ reassess_year + pos_d_eav_hat |
+    n_uniqueid + year^home_rule_for_fe,
+  data = asym_cf_df,
+  cluster = ~ n_uniqueid
+)
+
+# 6. Add both first-stage residuals
+asym_cf_df <- asym_cf_df |>
+  mutate(
+    fs_pos_resid = resid(fs_pos),
+    fs_neg_resid = resid(fs_neg)
+  )
+
+# 7. Augmented structural equation
+endo_asym <- feols(
+  d_levy ~ pos_d_eav + neg_d_eav + fs_pos_resid + fs_neg_resid |
+    n_uniqueid + year^home_rule_for_fe,
+  data = asym_cf_df,
+  cluster = ~ n_uniqueid
+)
+
+# 8. Individual residual p-values
+p_pos_resid <- coef_p(endo_asym, "fs_pos_resid")
+p_neg_resid <- coef_p(endo_asym, "fs_neg_resid")
+
+p_pos_resid
+p_neg_resid
+
+# 9. Joint test: both residuals equal zero
+p_exog_joint <- joint_wald_p(
+  endo_asym,
+  terms = c("fs_pos_resid", "fs_neg_resid")
+)
+
+p_exog_joint
+```
+
+p_exog is the p-value from a cluster-robust control-function test of the null hypothesis that the positive and negative EAV change variables are jointly exogenous. A small p-value indicates evidence against treating them as exogenous.
+
+```{r bttr-tab8}
+row3_tab8_ols <- feols(d_levy ~ neg_d_eav + pos_d_eav | year + n_uniqueid, data = reg_df, 
+                       vcov = ~ uniqueid,
+                       fsplit = ~type_2)
+# 
+# library(marginaleffects)
+# aggregate(d_levy ~ neg_d_eav + pos_d_eav | year + n_uniqueid, vcov = ~ uniqueid, data = reg_df, FUN = mean)
+# 
+# mod <- feols(d_levy ~ neg_d_eav + pos_d_eav | year + n_uniqueid, data = reg_df)
+# 
+# hypotheses(mod, hypothesis = "b1 - b2 = 0")
+# 
+# library(car)
+# 
+# test_result <- hypotheses(
+#   row3_tab8_ols$`sample.var: type_2; sample: School`,
+#   "neg_d_eav = pos_d_eav"
+# )
+# test_result
+# 
+# test_result <- hypotheses(
+#   row3_tab8_ols$`sample.var: type_2; sample: NonHR_muni` ,
+#   "neg_d_eav = pos_d_eav"
+# )
+# test_result
+
+
+pos_ub <- sapply(row3_tab8_ols, safe_upper_bound, term = "pos_d_eav")
+neg_ub <- sapply(row3_tab8_ols, safe_upper_bound, term = "neg_d_eav")
+
+
+extra_rows <- rbind(
+  data.frame(
+    term = "Pos Upper Bound",
+    t(as.data.frame(pos_ub)),
+    check.names = FALSE
+  ),
+  data.frame(
+    term = "Neg Upper Bound",
+    t(as.data.frame(neg_ub)),
+    check.names = FALSE
+  )
+)
+
+modelsummary(list(row3_tab8_ols), gof_omit = gof_omit, add_rows = extra_rows, stars = TRUE)
+```
+
+## Table 9
+
+> DFM used default Standard Errors
+
+### Pos d_eav
+
+```{r}
+row3_tab9_iv_pos <- feols(d_levy ~ 1 | year + n_uniqueid | neg_d_eav + pos_d_eav ~ reassess_year + pos_d_eav_hat, data = reg_df, 
+                          #vcov = ~ uniqueid,
+                          fsplit = ~type_2)
+  
+pos_ub <- sapply(row3_tab9_iv_pos, safe_upper_bound, term = "fit_pos_d_eav")
+
+
+neg_ub <- sapply(row3_tab9_iv_pos, safe_upper_bound, term = "fit_neg_d_eav")
+
+
+extra_rows <- rbind(
+  data.frame(
+    term = "Pos Upper Bound",
+    t(as.data.frame(pos_ub)),
+    check.names = FALSE
+  ),
+  data.frame(
+    term = "Neg Upper Bound",
+    t(as.data.frame(neg_ub)),
+    check.names = FALSE
+  )
+)
+# 
+# extra_rows <- tibble::tribble(
+#   ~term, ~`Assym`, 
+#   # "First-stage F",
+#   # round(safe_first_stage_f(row3_tab9_iv),3),
+#   # round(safe_first_stage_f(row3_tab9_iv),3),
+#   # 
+#   #   "Endogeneity test p",
+#   # round(safe_endogeneity_p(row3_tab9_iv),3),
+#   # round(safe_endogeneity_p(row3_tab9_iv),3)# 
+# 
+#   "Pos Upper Bound",
+#   round(safe_upper_bound_fixest(row3_tab9_iv, "fit_pos_d_eav"),3),
+#   
+#   "Neg Upper Bound",
+#   round(safe_upper_bound_fixest(row3_tab9_iv, "fit_neg_d_eav"),3)
+#   )
+
+
+# function needs to be modified to allow for terms to be passed through it.
+
+# extra_rows_2 <- tibble::tribble(
+  # ~term, ~`Assym`, 
+  #  "First-stage F",
+  # round(safe_first_stage_f(row3_tab9_iv, "fit_pos_d_eav"),3),
+  # round(safe_first_stage_f(row3_tab9_iv, "fit_neg_d_eav"),3),
+# 
+#     "Endogeneity test p",
+#   round(safe_endogeneity_p(row3_tab9_iv, "fit_pos_d_eav"),3),
+#   round(safe_endogeneity_p(row3_tab9_iv, "fit_neg_d_eav"),3)
+# )
+
+modelsummary(list(row3_tab9_iv_pos), add_rows = extra_rows, gof_omit = gof_omit, stars = TRUE)
+
+
+```
+
+### Neg d_eav
+
+```{r}
+
+row3_tab9_iv_neg <- feols(d_levy ~ 1 | year + n_uniqueid | neg_d_eav + pos_d_eav ~ reassess_year + neg_d_eav_hat, data = reg_df,  
+                          fsplit = ~type_2)
+ 
+neg_ub <- sapply(row3_tab9_iv_neg, safe_upper_bound, term = "fit_neg_d_eav")
+
+pos_ub <- sapply(row3_tab9_iv_neg, safe_upper_bound, term = "fit_pos_d_eav")
+
+
+extra_rows <- rbind(
+  data.frame(
+    term = "Pos Upper Bound",
+    t(as.data.frame(pos_ub)),
+    check.names = FALSE
+  ),
+  data.frame(
+    term = "Neg Upper Bound",
+    t(as.data.frame(neg_ub)),
+    check.names = FALSE
+  )
+) 
+
+
+
+
+
+modelsummary(list(row3_tab9_iv_pos), add_rows = extra_rows, gof_omit = gof_omit, stars = TRUE)
+
+```
+
+#### bttr vrsion?
+
+Table 9 still supports a small positive-response story. The highest corrected row-3 upper bound is for “Other,” not non-home-rule municipalities.
+
+##### Pos d_eav
+
+```{r bttr-tab9}
+row3_tab9_iv_pos <- feols(d_levy ~ 1 | year + n_uniqueid | neg_d_eav + pos_d_eav ~ reassess_year + pos_d_eav_hat, data = reg_df, 
+                          vcov = ~ uniqueid,
+                          fsplit = ~type_2)
+  
+  
+pos_ub <- sapply(row3_tab9_iv_pos, safe_upper_bound, term = "fit_pos_d_eav")
+
+
+neg_ub <- sapply(row3_tab9_iv_pos, safe_upper_bound, term = "fit_neg_d_eav")
+
+
+extra_rows <- rbind(
+  data.frame(
+    term = "Pos Upper Bound",
+    t(as.data.frame(pos_ub)),
+    check.names = FALSE
+  ),
+  data.frame(
+    term = "Neg Upper Bound",
+    t(as.data.frame(neg_ub)),
+    check.names = FALSE
+  )
+)
+
+
+modelsummary(list(row3_tab9_iv_pos), add_rows = extra_rows, gof_omit = gof_omit, stars = TRUE)
+
+
+```
+
+##### Neg d_eav
+
+```{r}
+
+row3_tab9_iv_neg <- feols(d_levy ~ 1 | year + n_uniqueid | neg_d_eav + pos_d_eav ~ reassess_year + neg_d_eav_hat, data = reg_df,  vcov = ~ uniqueid,
+                          fsplit = ~type_2)
+ 
+neg_ub <- sapply(row3_tab9_iv_neg, safe_upper_bound, term = "fit_neg_d_eav")
+
+pos_ub <- sapply(row3_tab9_iv_neg, safe_upper_bound, term = "fit_pos_d_eav")
+
+
+extra_rows <- rbind(
+  data.frame(
+    term = "Pos Upper Bound",
+    t(as.data.frame(pos_ub)),
+    check.names = FALSE
+  ),
+  data.frame(
+    term = "Neg Upper Bound",
+    t(as.data.frame(neg_ub)),
+    check.names = FALSE
+  )
+) 
+
+
+modelsummary(list(row3_tab9_iv_neg), add_rows = extra_rows, gof_omit = gof_omit, stars = TRUE)
+
+```
+
+# Tab 10 & 11, Row 3
+
+p_stat is the p value for the hypothesis that lags of the elasticity of the levy with respect to d_eav sum to zero.
+
+Should have clustered standard errors by taxing agency group, but DFM uses default Stata SEs
+
+Upper bound is sum of coefficients for (d_eav + d_1_eav + d_2_eav)
+
+> DFM used default Standard Errors for `bytype` models! but clustered for all agencies together models
+
+```{r}
+# ================================================================
+# Lagged OLS models
+# ================================================================
+
+reg_df <- reg_df |>
+  group_by(n_agency_group) |>
+  arrange(year, .by_group = TRUE) |>
+  mutate(
+    d_2_eav = 100 * log((lag_av * lag_eq_factor_final) / (lag2_av * lag2_eq_factor_final)),
+    d_3_eav = 100 * log((lag2_av * lag2_eq_factor_final) / (lag3_av * lag3_eq_factor_final))
+  ) |>
+  ungroup()
+
+
+lag_all_ols_3 <- feols(d_levy ~ d_eav + d_2_eav + d_3_eav, data = reg_df, cluster = vcov_uid)
+
+lincom_sum(lag_all_ols_3, c("d_eav", "d_2_eav", "d_3_eav"))
+
+m3_ols <- feols(d_levy ~ d_eav + d_2_eav + d_3_eav | year + n_uniqueid, data = reg_df, cluster = vcov_uid)
+
+lincom_sum(m3_ols, c("d_eav", "d_2_eav", "d_3_eav"))
+
+modelsummary::modelsummary(list(lag_all_ols_3,m3_ols), gof_omit = gof_omit, stars = TRUE)
+
+
+
+m3_ols_bytype <- fixest::feols(d_levy ~ d_eav + d_2_eav + d_3_eav | year + n_uniqueid, data = reg_df, 
+                              
+                fsplit = ~type_2)
+
+modelsummary::modelsummary(m3_ols_bytype, gof_omit = gof_omit, stars = TRUE)
+
+
+lincom_sum(m3_ols_bytype[[1]], c("d_eav", "d_2_eav", "d_3_eav"))
+
+lincom_sum(m3_ols_bytype[[2]], c("d_eav", "d_2_eav", "d_3_eav"))
+
+
+lincom_sum(m3_ols_bytype[[3]], c("d_eav", "d_2_eav", "d_3_eav"))
+
+
+lincom_sum(m3_ols_bytype[[4]], c("d_eav", "d_2_eav", "d_3_eav"))
+
+
+lincom_sum(m3_ols_bytype[[5]], c("d_eav", "d_2_eav", "d_3_eav"))
+
+
+lincom_sum(m3_ols_bytype[[6]], c("d_eav", "d_2_eav", "d_3_eav"))
+
+
+
+
+```
+
+rejecting the hypothesis indicates that the variable `d_eav` has a sustained, non-zero cumulative impact over that period, rather than a purely temporary or offsetting effect
+
+## bttr way?
+
+cumulative lagged effects are larger than contemporaneous effects, but imprecise.
+
+We test whether the two lag coefficients sum to zero and estimate the cumulative effect of contemporaneous and lagged EAV changes. Cumulative effects are larger than contemporaneous effects, especially for schools, but the estimates are often imprecise and sensitive to the standard-error specification.
+
+```{r}
+m3_ols_bytype <- fixest::feols(d_levy ~ d_eav + d_2_eav + d_3_eav | year + n_uniqueid, data = reg_df, 
+                               cluster = vcov_uid,
+                fsplit = ~type_2)
+
+modelsummary::modelsummary(m3_ols_bytype, gof_omit = gof_omit, stars = TRUE)
+
+
+lincom_sum(m3_ols_bytype[[1]], c("d_eav", "d_2_eav", "d_3_eav"))
+
+lincom_sum(m3_ols_bytype[[2]], c("d_eav", "d_2_eav", "d_3_eav"))
+
+
+lincom_sum(m3_ols_bytype[[3]], c("d_eav", "d_2_eav", "d_3_eav"))
+
+
+lincom_sum(m3_ols_bytype[[4]], c("d_eav", "d_2_eav", "d_3_eav"))
+
+
+lincom_sum(m3_ols_bytype[[5]], c("d_eav", "d_2_eav", "d_3_eav"))
+
+
+lincom_sum(m3_ols_bytype[[6]], c("d_eav", "d_2_eav", "d_3_eav"))
+
+```
+
+# Appendix tables
+
+## Appendix 1
+
+![Source: Civic Federation Property Tax Primer](images/clipboard-758371181.png){fig-alt="Property Tax Process"}
+
+## Appendix 2: Instrument validity
+
+> DFM did not include fixed effects for his IV tests
+
+With two-way FE, your identifying variation becomes: deviations from unit-specific mean and year-specific shocks
+
+So the question becomes:conditional on unit and year shocks, does reassessment timing still move EAV, and only through EAV?
+
+We use these (exogenously determined) reassessment years as an “instrument” which purges observed changes in the tax base of the component that is predictable because of the re-assessment year.
+
+If you test the instrument in a different specification (say no fixed effects), you are asking a different question:
+
+- Without FE: “Is reassessment year correlated with raw variation in EAV?”\
+- With FE: “Is reassessment year correlated with within-unit deviations from trend in EAV?”
+
+The code below creates the instrument-validity table. The combined municipality column is labeled **All Munis**.
+
+```{r}
+#| label: instrument-validity-dfm-replicate
+
+
+
+instrument_df <- main_df |>
+  filter(year > 2008)
+
+table(instrument_df$year) # 2009 through 2023
+
+# Appendix A2 
+
+# all munis
+feols(d_eav ~ reassess_year,
+  data = instrument_df,
+  cluster = vcov_uid,
+  fsplit = ~type)
+
+fs <- feols(
+  d_eav ~ reassess_year,
+  data = reg_df,
+  cluster = vcov_uid
+)
+wald(fs, "reassess_year")
+
+fitstat(fs, "ivf1")
+
+# homerule and nonhomerule munis and drop other types.
+feols(d_eav ~ reassess_year,
+  data = instrument_df |> filter(type == "Muni"),
+  cluster = vcov_uid,
+  fsplit = ~home_rule_ind) |> modelsummary()
+
+
+
+all_instrument      <- feols(d_eav ~ reassess_year,
+  data = instrument_df, cluster = vcov_uid)
+
+muni_instrument    <- feols(d_eav ~ reassess_year,
+  data = filter(instrument_df, type == "Muni"),
+  cluster = vcov_uid)
+
+other_instrument    <- feols(d_eav ~ reassess_year,
+  data = filter(instrument_df, type == "Other"),
+  cluster = vcov_uid)
+
+school_instrument   <- feols(d_eav ~ reassess_year,
+  data = filter(instrument_df, type == "School"),
+  cluster = vcov_uid)
+
+township_instrument <- feols(d_eav ~ reassess_year,
+  data = filter(instrument_df, type == "Township"),
+  cluster = vcov_uid)
+# 
+# save_table(
+#   list(
+#     "All agencies" = all_instrument,
+#     "All Munis" = muni_instrument,
+#     "Other" = other_instrument,
+#     "Schools" = school_instrument,
+#     "Townships" = township_instrument
+#   ),
+#   file_stub = "instrument_validity_checks",
+#   title = "Table X: Predict assessments by reassessment year by type",
+# #   notes = "Cook County, Illinois data from 2008 through 2023"
+# # )
+# 
+# #| label: instrument-validity-display
+# 
+# 
+# display_model_table(
+#   "instrument_validity_checks",
+#   title = "Table 1. Reassessment year as predictor of EAV change",
+#   notes = "Cook County, Illinois data from 2008 through 2023"
+# )
+```
+
+```{r}
+#| tbl-cap: "**Table X: Predict assessments by reassessment year by type.** Cook County, Illinois data from 2008 through 2023"
+
+modelsummary(  list(
+    "All agencies" = all_instrument,
+    "All Munis" = muni_instrument,
+    "Other" = other_instrument,
+    "Schools" = school_instrument,
+    "Townships" = township_instrument), 
+    stars = TRUE, gof_omit = gof_omit
+)
+```
+
+### Better Version with fixed effects
+
+```{r}
+#| label: instrument-validity-create
+
+
+
+instrument_df <- main_df |>
+  filter(year > 2008)
+
+table(instrument_df$year) # 2009 through 2023
+
+# Appendix A2 
+
+# all munis
+feols(d_eav ~ reassess_year | year + uniqueid,
+  data = instrument_df,
+  cluster = vcov_uid,
+  fsplit = ~type)
+
+fs <- feols(
+  d_eav ~ reassess_year |
+    year^home_rule_for_fe + n_uniqueid,
+  data = reg_df,
+  cluster = vcov_uid
+)
+wald(fs, "reassess_year")
+
+fitstat(fs, "ivf1")
+
+# homerule and nonhomerule munis and drop other types.
+feols(d_eav ~ reassess_year | year + uniqueid,
+  data = instrument_df |> filter(type == "Muni"),
+  cluster = vcov_uid,
+  fsplit = ~home_rule_ind) |> modelsummary()
+
+
+
+all_instrument      <- feols(d_eav ~ reassess_year| year + uniqueid,
+  data = instrument_df, cluster = vcov_uid)
+
+muni_instrument    <- feols(d_eav ~ reassess_year| year + uniqueid,
+  data = filter(instrument_df, type == "Muni"),
+  cluster = vcov_uid)
+
+other_instrument    <- feols(d_eav ~ reassess_year | year + uniqueid,
+  data = filter(instrument_df, type == "Other"),
+  cluster = vcov_uid)
+
+school_instrument   <- feols(d_eav ~ reassess_year| year + uniqueid,
+  data = filter(instrument_df, type == "School"),
+  cluster = vcov_uid)
+
+township_instrument <- feols(d_eav ~ reassess_year| year + uniqueid,
+  data = filter(instrument_df, type == "Township"),
+  cluster = vcov_uid)
+# 
+# save_table(
+#   list(
+#     "All agencies" = all_instrument,
+#     "All Munis" = muni_instrument,
+#     "Other" = other_instrument,
+#     "Schools" = school_instrument,
+#     "Townships" = township_instrument
+#   ),
+#   file_stub = "instrument_validity_checks",
+#   title = "Table X: Predict assessments by reassessment year by type",
+# #   notes = "Cook County, Illinois data from 2008 through 2023"
+# # )
+# 
+# #| label: instrument-validity-display
+# 
+# 
+# display_model_table(
+#   "instrument_validity_checks",
+#   title = "Table 1. Reassessment year as predictor of EAV change",
+#   notes = "Cook County, Illinois data from 2008 through 2023"
+# )
+```
+
+```{r}
+#| tbl-cap: "**Table X: Predict assessments by reassessment year by type.** Cook County, Illinois data from 2008 through 2023"
+
+modelsummary(  list(
+    "All agencies" = all_instrument,
+    "All Munis" = muni_instrument,
+    "Other" = other_instrument,
+    "Schools" = school_instrument,
+    "Townships" = township_instrument), 
+    stars = TRUE, gof_omit = gof_omit
+)
+```
+
+These appendix outputs are created by the table chunks above and displayed here so readers do not have to search through the output folder.
+
+## Appendix 3
+
+### OLS by agency type point estimates
+
+```{r}
+# ================================================================
+# Tables 4/A2 and 5/A3. By agency type: OLS + IV summary rows
+# ================================================================
+
+run_type_v22 <- function(df, gov, iv = FALSE) {
+  d <- df |> filter(type_2 == gov)
+  if (!iv) {
+    m1 <- feols(d_levy ~ d_eav, data = d, cluster = vcov_uid)
+    m2 <- feols(d_levy ~ d_eav | year, data = d, cluster = vcov_uid)
+    m3 <- feols(d_levy ~ d_eav | year + n_uniqueid, data = d, cluster = vcov_uid)
+    return(list(m1 = m1, m2 = m2, m3 = m3))
+  }
+  m1 <- feols(d_levy ~ 1 | 0 | d_eav ~ reassess_year, data = d, cluster = vcov_uid)
+  m2 <- feols(d_levy ~ 1 | year | d_eav ~ reassess_year, data = d, cluster = vcov_uid)
+  m3 <- feols(d_levy ~ 1 | year + n_uniqueid | d_eav ~ reassess_year, data = d, cluster = vcov_uid)
+  list(m1 = m1, m2 = m2, m3 = m3)
+}
+
+run_type_B_v22 <- function(df, gov, iv = FALSE) {
+  d <- df |> filter(type_2 == gov)
+  if (!iv) {
+    m4 <- feols(d_levy ~ d_eav + d_total_ig_revenue | year + n_uniqueid, data = d, cluster = vcov_uid)
+    idx <- sample_index(m4, d)
+    m5 <- feols(d_levy ~ d_eav | year + n_uniqueid, data = d[idx, ], cluster = vcov_uid)
+    return(list(m4 = m4, m5 = m5))
+  }
+  m4 <- feols(d_levy ~ d_total_ig_revenue | year + n_uniqueid | d_eav ~ reassess_year, data = d, cluster = vcov_uid)
+  idx <- sample_index(m4, d)
+  m5 <- feols(d_levy ~ 1 | year + n_uniqueid | d_eav ~ reassess_year, data = d[idx, ], cluster = vcov_uid)
+  list(m4 = m4, m5 = m5)
+}
+
+school_extra_v22 <- function(df, iv = FALSE) {
+  d <- df |> filter(type_2 == "School")
+  if (!iv) {
+    return(feols(d_levy ~ d_eav + d_enrollment | year + n_uniqueid, data = d, cluster = vcov_uid))
+  }
+  feols(d_levy ~ d_enrollment | year + n_uniqueid | d_eav ~ reassess_year, data = d, cluster = vcov_uid)
+}
+
+make_by_type_summary <- function(models_A, models_B, school_extra, iv = FALSE) {
+  term <- if (iv) "fit_d_eav" else "d_eav"
+  rows <- list()
+  for (spec in paste0("m", 1:3)) {
+    rows[[spec]] <- map_dfr(gov_types, function(gov) {
+      term_stats(models_A[[gov]][[spec]], term, gov) |>
+        transmute(row = spec, agency = model, N, upper_bound, estimate, p_value)
+    })
+  }
+  for (spec in paste0("m", 4:5)) {
+    rows[[spec]] <- map_dfr(gov_types_B, function(gov) {
+      term_stats(models_B[[gov]][[spec]], term, gov) |>
+        transmute(row = spec, agency = model, N, upper_bound, estimate, p_value)
+    })
+  }
+  rows[["m6"]] <- term_stats(school_extra, term, "School") |>
+    transmute(row = "m6", agency = model, N, upper_bound, estimate, p_value)
+  bind_rows(rows)# |>
+    # mutate(row = recode(row,
+    #   m1 = "No controls",
+    #   m2 = "Year FE",
+    #   m3 = "Year + unit FE",
+    #   m4 = "IG revenue + year + unit FE",
+    #   m5 = "Same sample as IG row, no IG control",
+    #   m6 = "Enrollment + year + unit FE"
+    # ))
+}
+
+ols_type_A <- setNames(map(gov_types, ~ run_type_v22(reg_df, .x, iv = FALSE)), gov_types)
+ols_type_B <- setNames(map(gov_types_B, ~ run_type_B_v22(reg_df, .x, iv = FALSE)), gov_types_B)
+ols_school_extra <- school_extra_v22(reg_df, iv = FALSE)
+
+iv_type_A <- setNames(map(gov_types, ~ run_type_v22(reg_df, .x, iv = TRUE)), gov_types)
+iv_type_B <- setNames(map(gov_types_B, ~ run_type_B_v22(reg_df, .x, iv = TRUE)), gov_types_B)
+iv_school_extra <- school_extra_v22(reg_df, iv = TRUE)
+
+ols_by_type_summary <- make_by_type_summary(ols_type_A, ols_type_B, ols_school_extra, iv = FALSE)
+iv_by_type_summary <- make_by_type_summary(iv_type_A, iv_type_B, iv_school_extra, iv = TRUE)
+
+
+
+```
+
+```{r}
+#| label: table-a2-display
+
+
+display_df_table("v22_table_A2_OLS_by_type_point_estimates", title = "Table A2. By agency type OLS point estimates")
+```
+
+### IV by agency type point estimates
+
+```{r}
+#| label: table-a3-display
+
+
+display_df_table("v22_table_A3_IV_by_type_point_estimates", title = "Table A3. By agency type IV point estimates")
+```
+
+### Appendix 4
+
+OLS symmetry tests
+
+```{r}
+#| label: table-a4-display
+
+
+display_df_table("v22_table_A4_OLS_by_type_asym_p_equal", title = "Table A4. P-values for OLS symmetry tests")
+```
+
+## Appendix 5
+
+OLS asymmetric point estimates
+
+```{r}
+#| label: table-a5-display
+
+
+display_df_table("v22_table_A5_OLS_by_type_asym_point_estimates", title = "Table A5. OLS point estimates for positive EAV changes")
+```
+
+## IV symmetry tests
+
+gen pos_inst = reassess_year \* eav_growth gen neg_inst = reassess_year \* (1 - eav_growth) ivregress 2sls d_levy (neg_d_eav pos_d_eav = reassess_year pos_inst), vce(cluster n_uniqueid)
+
+reassess_year is your instrument eav_growth is exogenous (constructed from outcomes, but deterministic split)
+
+```{r}
+#| label: table-a6-display
+
+
+display_df_table("v22_table_A6_IV_by_type_asym_p_equal", title = "Table A6. P-values for IV symmetry tests")
+```
+
+## IV asymmetric point estimates
+
+```{r}
+
+reg_df <- reg_df %>%
+  mutate(
+    eav_growth = ifelse(d_eav > 0, 1, 0),
+    pos_d_eav = d_eav * eav_growth,
+    neg_d_eav = d_eav * (1 - eav_growth),
+
+    # correct instruments
+    pos_inst = reassess_year * eav_growth
+  )
+
+m3 <- feols(d_levy ~ 1 | year + n_uniqueid | d_eav ~ reassess_year, data = reg_df, cluster = vcov_uid)
+
+m3
+
+iv_model <- feols(
+  d_levy ~ 1 | n_uniqueid + year | pos_d_eav ~ reassess_year + pos_inst,
+  data = reg_df,
+  cluster = ~n_uniqueid
+)
+
+summary(iv_model)
+
+```
+
+```{r}
+#| label: table-a7-display
+
+
+display_df_table("v22_table_A7_IV_by_type_asym_point_estimates", title = "Table A7. IV point estimates for positive EAV changes")
+```
+
+## Lagged model p-values
+
+```{r}
+#| label: table-a8-display
+
+
+display_df_table("v22_table_A8_OLS_by_type_lagged_p_values", title = "Table A8. P-values for lagged effects")
+```
+
+## Lagged model point estimates
+
+```{r}
+#| label: table-a9-display
+
+
+display_df_table("v22_table_A9_OLS_by_type_lagged_point_estimates", title = "Table A9. Sum of current and lagged EAV coefficients")
+```
