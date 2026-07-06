@@ -47,7 +47,7 @@ missing_output <- function(path) {
 }
 
 display_model_table <- function(file_stub, title = NULL, notes = NULL, coef_map = NULL,
-                                gof_omit = "IC|Log|Adj|RMSE|Std.Errors", gof_function = NULL, add_rows = NULL) {
+                                gof_omit = "IC|Log|Adj|RMSE", gof_function = NULL, add_rows = NULL) {
   model_path <- fs::path(table_dir, paste0(file_stub, "_models.rds"))
 
   if (!fs::file_exists(model_path)) {
@@ -62,7 +62,7 @@ display_model_table <- function(file_stub, title = NULL, notes = NULL, coef_map 
     title = title,
     notes = notes,
     coef_map = coef_map,
-    stars = c("*" = .10, "**" = .05, "***" = .01),
+    stars = c("+" = 0.1, "*" = .05, "**" = .01, "***" = .001),
     gof_omit = gof_omit,
     add_rows = add_rows
   )
@@ -126,7 +126,7 @@ dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 
 
 save_table <- function(models, file_stub, title = NULL, notes = NULL,
-                       coef_map = NULL, gof_omit = "IC|Log|Adj|RMSE|Std.Errors",
+                       coef_map = NULL, gof_omit = "IC|Log|Adj|RMSE",
                        gof_function = NULL,
                        add_rows = NULL) {
 
@@ -239,26 +239,13 @@ sample_index <- function(model, data) {
 
 safe_first_stage_f <- function(model) {
   # fixest exposes several IV fit statistics, but names differ across versions.
-  out <- tryCatch(fixest::fitstat(model, "ivf1"), error = function(e) NULL)
+  out <- tryCatch(fixest::fitstat(model, "ivwald1"), error = function(e) NULL)
   if (is.null(out)) return(NA_real_)
   as.numeric(unlist(out))[1]
 }
 
 `%||%` <- function(x, y) if (is.null(x)) y else x
 
-
-
-agency_label <- function(x) {
-  recode(as.character(x),
-    HR_muni = "Home-rule municipalities",
-    NonHR_muni = "Non-home-rule municipalities",
-    Muni = "All Munis",
-    Other = "Other",
-    Township = "Townships",
-    School = "Schools",
-    .default = as.character(x)
-  )
-}
 
 ```
 
@@ -308,7 +295,7 @@ main_df <- read_csv("NTA_data_2024_10_14.csv")
 # arrange(type)
 
 
-agency_lookup <- read_dta("fips_all_agency_name.dta")
+agency_lookup <- read_dta("Necessary_Files/fips_all_agency_name.dta")
 
 # anti_join(main_df, agency_lookup)
 
@@ -321,7 +308,7 @@ main_df <- main_df |>
 main_df <- main_df |>
   filter(!is.na(fipsid))
 
-census_df <- read_dta("census_data.dta")
+census_df <- read_dta("Necessary_Files/census_data.dta")
 
 # 3,509 observations didn't have the census data and get dropped unless missing data is filled in between census years.
 #anti_join(main_df, census_df)
@@ -336,7 +323,7 @@ main_df <- main_df |>
 # Stata used a .dta called eq_factor after previously creating it from CSV.
 # Adjust extension if your stored file is actually .csv.
 
-eq_factor_path_dta <- file.path("eq_factor.dta")
+eq_factor_path_dta <- file.path("Necessary_Files/eq_factor.dta")
 eq_factor_path_csv <- file.path("Necessary_Files/eq_factor.csv")
 
 eq_factor <- if (file.exists(eq_factor_path_dta)) {
@@ -450,7 +437,7 @@ gov_types <- c("Other", "Township", "HR_muni", "NonHR_muni", "School")
 gov_types_B <- c("HR_muni", "NonHR_muni", "School")
 minor_types <- c("ELEMENTARY", "SECONDARY")
 
-gof_omit = "IC|Log|Adj|RMSE|Std.Errors"
+gof_omit = "IC|Log|Adj|RMSE"
 ```
 
 
@@ -490,7 +477,35 @@ table1 <- reg_df |>
     .groups = "drop"
   )
 
+table1_all <- reg_df |>
+  filter(year >= 2009) |>
+  mutate(
+    agency_type = case_when(
+      type == "Muni" ~ "All Munis",
+      type == "School" ~ "Schools",
+      type == "Township" ~ "Townships",
+      type == "Other" ~ "Other Districts"
+    )
+  ) |>
+  select(agency_type, d_levy, d_eav) |>
+  pivot_longer(
+    cols = c(d_levy, d_eav),
+    names_to = "stat",
+    values_to = "value"
+  ) |>
+  group_by(stat) |>
+  summarize(
+    N = sum(!is.na(value)),
+    p5 = quantile(value, .05, na.rm = TRUE),
+    p25 = quantile(value, .25, na.rm = TRUE),
+    p50 = quantile(value, .50, na.rm = TRUE),
+    p75 = quantile(value, .75, na.rm = TRUE),
+    p95 = quantile(value, .95, na.rm = TRUE),
+    .groups = "drop"
+  ) |> mutate(agency_type = "All", .after = )
+
 table1 |>
+  rbind(table1_all) |>
   gt() |>
   fmt_number(
     columns = c(p5, p25, p50, p75, p95),
@@ -569,7 +584,18 @@ display_df_table(
 
 "In table 3 we treat the change in the tax base (d_eav) as endogenous and instrument for it using the timing of reassessments. For the timing of reassessments to be a valid instrument for the change in the tax base requires that (i) reassessments are a strong predictor of changes in EAV and (ii) reassessments do not influence the change in the levy except to the extent that they affect the change in the tax base."
 
+DFM Notes for Stata: 
+"Montiel Olea, J. L. and C. E. Pueger (2013) A robust test for weak instruments, Journal of Business and Economic Statistics, Vol. 31, pp. 358369.
 
+weakivtest
+
+estat endogenous performs tests to determine whether endogenous regressors in the model are in fact exogenous.  After GMM estimation, the C (difference-in-Sargan) statistic is reported.  After 2SLS estimation with an unadjusted VCE, the Durbin (1954) and Wu-Hausman (Wu 1974; Hausman 1978) statistics are reported.  After 2SLS estimation with a robust VCE, Wooldridge's (1995) robust score test and a robust regression-based test are reported.  In all cases, if the test statistic is significant, then the variables being tested must be treated as endogenous.  estat endogenous is not available aft erLIML estimation."
+
+
+p_exog is the p-value for the null hypothesis that d_eav is exogenous.
+
+- Small p-value (e.g., < 0.05): Reject exogeneity → there is evidence that d_eav is endogenous, supporting the use of IV.    
+- Large p-value: Fail to reject exogeneity → the data do not provide evidence that IV is necessary.    
 ```{r}
 library(fixest)
 library(tibble)
@@ -601,7 +627,30 @@ all_iv_models_v22 <- list(
   all_iv_3
 )
 
+fs <- feols(
+  d_eav ~ reassess_year,
+  data = reg_df,
+  cluster = vcov_uid
+)
 
+wald(fs, "reassess_year")
+
+fitstat(all_iv_1, show_types = TRUE)
+fitstat(all_iv_1, c("ivf1", "ivwald1"))
+
+library(AER)
+
+iv <- ivreg(
+  d_levy ~ d_eav |
+    reassess_year,
+  data = reg_df
+)
+
+summary(iv, diagnostics = TRUE)
+```
+
+
+```{r}
 modelsummary(list(M1 = all_iv_1, M2 = all_iv_2, M3 = all_iv_3
   ),
     gof_omit = gof_omit,
@@ -629,7 +678,6 @@ We also report the F statistics from the first stage regressions to predict d_ea
 
 ```{r}
 
-
 rows_to_join <-  bind_rows(
     term_stats(all_iv_1, "fit_d_eav", "M1"),
     term_stats(all_iv_2, "fit_d_eav", "M2"),
@@ -639,7 +687,7 @@ rows_to_join <-  bind_rows(
       safe_first_stage_f(all_iv_2),
       safe_first_stage_f(all_iv_3)))
 
-rows_to_join |> select(-N)
+rows_to_join |> select(-N) 
 ```
 
 ```{r}
@@ -785,17 +833,17 @@ make_by_type_summary <- function(models_A, models_B, school_extra, iv = FALSE) {
   }
   rows[["m6"]] <- term_stats(school_extra, term, "School") |>
     transmute(row = "m6", agency = model, N, upper_bound, estimate, std_error, p_value)
-  bind_rows(rows) |>
-    mutate(
-      agency = agency_label(agency),
-      row = recode(row,
-      m1 = "No controls",
-      m2 = "Year FE",
-      m3 = "Year + unit FE",
-      m4 = "IG revenue + year + unit FE",
-      m5 = "Same sample as IG row, no IG control",
-      m6 = "Enrollment + year + unit FE"
-    ))
+  bind_rows(rows) # |>
+    # mutate(
+    #   agency = agency_label(agency),
+    #   row = recode(row,
+    #   m1 = "No controls",
+    #   m2 = "Year FE",
+    #   m3 = "Year + unit FE",
+    #   m4 = "IG revenue + year + unit FE",
+    #   m5 = "Same sample as IG row, no IG control",
+    #   m6 = "Enrollment + year + unit FE"
+    # ))
 }
 
 ols_type_A <- setNames(map(gov_types, ~ run_type_v22(reg_df, .x, iv = FALSE)), gov_types)
@@ -1213,17 +1261,17 @@ make_asym_by_type_summary <- function(models_A, models_B, school_extra, iv = FAL
   }
   rows[["m6"]] <- term_stats(school_extra, term_pos, "School") |>
     transmute(row = "m6", agency = model, N, upper_bound, estimate, std_error, p_value, p_equal = p_equal_terms(school_extra, term_neg, term_pos))
-  bind_rows(rows) |>
-    mutate(
-      agency = agency_label(agency),
-      row = recode(row,
-      m1 = "No controls",
-      m2 = "Year FE",
-      m3 = "Year + unit FE",
-      m4 = "IG revenue + year + unit FE",
-      m5 = "Same sample as IG row, no IG control",
-      m6 = "Enrollment + year + unit FE"
-    ))
+  bind_rows(rows) # |>
+    # mutate(
+    #   agency = agency_label(agency),
+    #   row = recode(row,
+    #   m1 = "No controls",
+    #   m2 = "Year FE",
+    #   m3 = "Year + unit FE",
+    #   m4 = "IG revenue + year + unit FE",
+    #   m5 = "Same sample as IG row, no IG control",
+    #   m6 = "Enrollment + year + unit FE"
+    # ))
 }
 
 asym_ols_type_A <- setNames(map(gov_types, ~ run_asym_type_v22(reg_df, .x, iv = FALSE)), gov_types)
@@ -1342,17 +1390,17 @@ make_lag_by_type_summary <- function(models_A, models_B, school_extra) {
   }
   rows[["m6"]] <- lincom_sum(school_extra, c("d_eav", "d_2_eav", "d_3_eav"), "School") |>
     transmute(row = "m6", agency = model, N, A_upper_bound, lagged_magnitude, std_error, lagged_p)
-  bind_rows(rows) |>
-    mutate(
-      agency = agency_label(agency),
-      row = recode(row,
-      m1 = "No controls",
-      m2 = "Year FE",
-      m3 = "Year + unit FE",
-      m4 = "IG revenue + year + unit FE",
-      m5 = "Same sample as IG row, no IG control",
-      m6 = "Enrollment + year + unit FE"
-    ))
+  bind_rows(rows) #|>
+    # mutate(
+    #   agency = agency_label(agency),
+    #   row = recode(row,
+    #   m1 = "No controls",
+    #   m2 = "Year FE",
+    #   m3 = "Year + unit FE",
+    #   m4 = "IG revenue + year + unit FE",
+    #   m5 = "Same sample as IG row, no IG control",
+    #   m6 = "Enrollment + year + unit FE"
+    # ))
 }
 
 lag_type_A <- setNames(map(gov_types, ~ run_lag_type_v22(reg_df, .x)), gov_types)
@@ -1556,15 +1604,15 @@ make_by_type_summary <- function(models_A, models_B, school_extra, iv = FALSE) {
   }
   rows[["m6"]] <- term_stats(school_extra, term, "School") |>
     transmute(row = "m6", agency = model, N, upper_bound, estimate, p_value)
-  bind_rows(rows) |>
-    mutate(row = recode(row,
-      m1 = "No controls",
-      m2 = "Year FE",
-      m3 = "Year + unit FE",
-      m4 = "IG revenue + year + unit FE",
-      m5 = "Same sample as IG row, no IG control",
-      m6 = "Enrollment + year + unit FE"
-    ))
+  bind_rows(rows)# |>
+    # mutate(row = recode(row,
+    #   m1 = "No controls",
+    #   m2 = "Year FE",
+    #   m3 = "Year + unit FE",
+    #   m4 = "IG revenue + year + unit FE",
+    #   m5 = "Same sample as IG row, no IG control",
+    #   m6 = "Enrollment + year + unit FE"
+    # ))
 }
 
 ols_type_A <- setNames(map(gov_types, ~ run_type_v22(reg_df, .x, iv = FALSE)), gov_types)
