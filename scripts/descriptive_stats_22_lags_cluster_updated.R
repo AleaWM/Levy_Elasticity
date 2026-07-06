@@ -49,7 +49,7 @@ main_df |> distinct(agency_group)
 # arrange(type)
 
 
-agency_lookup <- read_dta("fips_all_agency_name.dta")
+agency_lookup <- read_dta("Necessary_Files/fips_all_agency_name.dta")
 
 anti_join(main_df, agency_lookup)
 
@@ -62,7 +62,7 @@ main_df <- main_df |>
 main_df <- main_df |>
   filter(!is.na(fipsid))
 
-census_df <- read_dta("census_data.dta")
+census_df <- read_dta("Necessary_Files/census_data.dta")
 
 anti_join(main_df, census_df)
 
@@ -207,7 +207,10 @@ safe_lincom <- function(model, combo) {
 output_dir <- file.path("results", "tables")
 dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 
-save_table <- function(models, file_stub, title = NULL, notes = NULL, coef_map = NULL, gof_omit = "IC|Log|Adj|RMSE|Std.Errors") {
+save_table <- function(models, file_stub, title = NULL, notes = NULL, coef_map = NULL, gof_omit = "IC|Log|Adj|RMSE",  statistic = c("conf.int",
+                         "s.e. = {std.error}",
+                         "t = {statistic}",
+                         "p = {p.value}")) {
   out_file <- file.path(output_dir, paste0(file_stub, ".html"))
   modelsummary(
     models,
