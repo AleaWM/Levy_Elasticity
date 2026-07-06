@@ -26,7 +26,8 @@ library(modelsummary)
 
 # Tables are created by scripts/descriptive_stats_22_lags_cluster_updated.R
 # after running the model script locally.
-table_dir <- fs::path("results", "tables")
+#table_dir <- fs::path("results", "tables")
+table_dir <- fs::path("results", "tables_corrected_clustered")
 
 include_table <- function(file) {
   table_path <- fs::path(table_dir, file)
@@ -108,7 +109,7 @@ main_df <- read_csv("NTA_data_2024_10_14.csv")
 # arrange(type)
 
 
-agency_lookup <- read_dta("fips_all_agency_name.dta")
+agency_lookup <- read_dta("Necessary_Files/fips_all_agency_name.dta")
 
 # anti_join(main_df, agency_lookup)
 
@@ -121,7 +122,7 @@ main_df <- main_df |>
 main_df <- main_df |>
   filter(!is.na(fipsid))
 
-census_df <- read_dta("census_data.dta")
+census_df <- read_dta("Necessary_Files/census_data.dta")
 
 # 3,509 observations didn't have the census data and get dropped unless missing data is filled in between census years.
 #anti_join(main_df, census_df)
@@ -253,7 +254,7 @@ gov_types <- c("Other", "Township", "HR_muni", "NonHR_muni", "School")
 gov_types_B <- c("HR_muni", "NonHR_muni", "School")
 minor_types <- c("ELEMENTARY", "SECONDARY")
 
-gof_omit = "IC|Log|Adj|RMSE|Std.Errors"
+gof_omit = "IC|Log|Adj|RMSE"
 ```
 
 
