@@ -15,6 +15,14 @@ execute:
 freeze: auto
 ---
 
+$$
+\begin{aligned}
+d_{eav} &= 100 \times \log\left(\frac{av_{\text{current}}}{av_{\text{previous}}}\right) \\
+\log\left(\frac{av_{\text{current}}}{av_{\text{previous}}}\right)
+&= \log(av_{\text{current}}) - \log(av_{\text{previous}})
+\end{aligned}
+$$
+
 
 ```{r}
 #| label: display-helpers
