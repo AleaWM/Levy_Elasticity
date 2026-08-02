@@ -1,5 +1,4 @@
 # Setup ----------------------------------------------------------------------
-# descriptive_stats_15_lags_cluster.R
 # Rough R translation of: descriptive stats_15_lags_cluster.do
 # Converted from Stata to R on 2026-03-06.
 # Updated on May 11th 2026 using 22_lags_cluster.do
@@ -7,9 +6,7 @@
 # Notes:
 # - This keeps the overall model structure but applies corrected, consistent inference.
 # - Update the directory paths below before running.
-# - Stata's esttab output is translated to modelsummary output. You can
-#   swap to gt / flextable / tinytable if you want prettier tables.
-# - Some table formatting is approximate rather than byte-for-byte identical.
+# - Stata's esttab output is translated to modelsummary output. 
 
 suppressPackageStartupMessages({
   library(tidyverse)
