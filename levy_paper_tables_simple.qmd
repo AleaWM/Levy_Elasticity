@@ -1089,6 +1089,7 @@ reg_B <- feols(d_levy ~ d_eav:eav_growth | year + n_uniqueid, data = reg_df, clu
 reg_B |> summary()
 
 reg_B <- feols(d_levy ~ d_eav * eav_growth | year^home_rule_ind + n_uniqueid, data = reg_df, cluster = vcov_uid)
+
 reg_B |> summary()
 
 ```
@@ -1101,17 +1102,19 @@ reg_B |> summary()
 reg_df <- reg_df |>
   mutate(
     eav_growth = if_else(d_eav > 0, 1, 0),
-    pos_d_eav = d_eav * eav_growth,
-    neg_d_eav = d_eav * (1 - eav_growth),
+    pos_d_eav = d_eav * eav_growth,   # d_eav * 1 = d_eav if positive, d_eav * 0 = 0 if negative
+    neg_d_eav = d_eav * (1 - eav_growth),  # d_eav * (1-1) = 0 if positive, d_eav * (1-0) = d_eav if negative
   )
-
+table(reg_df$pos_d_eav, reg_df$year)
 first_stage_asym <- feols(d_eav ~ reassess_year | year, data = reg_df)
 
 reg_df <- reg_df |>
   mutate(
     d_eav_hat = fitted(first_stage_asym),
     pos_d_eav_hat = pos_d_eav * d_eav_hat,
-    neg_d_eav_hat = neg_d_eav * d_eav_hat
+    neg_d_eav_hat = neg_d_eav * d_eav_hat,
+    pos_d_eav_hat2 = if_else(d_eav_hat > 0, d_eav_hat, 0),
+neg_d_eav_hat2 = if_else(d_eav_hat <= 0, d_eav_hat, 0)
   )
 
 
@@ -1138,6 +1141,8 @@ modelsummary(list(asym_ols_3, asym_iv_3), stars = TRUE, title = "Table 6 in Pape
 
 ```
 
+
+
 ### bttr vrsion
 
 In pooled IV models, point estimates suggest a larger response to EAV declines than to EAV increases, but this asymmetry is sensitive to the standard-error specification.
@@ -1149,6 +1154,17 @@ asym_ols_3 <- feols(d_levy ~ neg_d_eav + pos_d_eav | year^home_rule_for_fe + n_u
 safe_upper_bound_two(asym_ols_3)
 
 asym_iv_3 <- feols(d_levy ~ 1 | year^home_rule_for_fe + n_uniqueid | neg_d_eav + pos_d_eav ~ reassess_year + pos_d_eav_hat,
+  data = reg_df , vcov = ~ uniqueid 
+)
+safe_upper_bound_two(asym_iv_3)
+
+modelsummary(list(asym_ols_3, asym_iv_3), stars = TRUE, title = "Table 6 in Paper, TWFE specifications", gof_omit = gof_omit)
+
+```
+
+
+```{r}
+asym_iv_3 <- feols(d_levy ~ 1 | year^home_rule_for_fe + n_uniqueid | neg_d_eav + pos_d_eav ~ reassess_year + pos_d_eav_hat2,
   data = reg_df , vcov = ~ uniqueid 
 )
 safe_upper_bound_two(asym_iv_3)
