@@ -1,0 +1,520 @@
+---
+title: "Levy Elasticity Paper Tables"
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: true
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+<style>
+/* Notes created by modelsummary/tinytable */
+table[id^="tinytable_"] tfoot td {
+  text-align: left !important;
+}
+
+/* Notes created by save_df_table() */
+.table-note {
+  text-align: left !important;
+  width: 100%;
+}
+</style>
+
+```{r}
+#| label: setup
+#| include: false
+
+library(htmltools)
+library(fs)
+
+table_dir <- fs::path("results", "tables_corrected_clustered_v7_4")
+
+include_table <- function(file) {
+  table_path <- fs::path(table_dir, file)
+
+  if (!fs::file_exists(table_path)) {
+    htmltools::HTML(
+      paste0(
+        '<div class="callout callout-style-default callout-warning">',
+        '<div class="callout-header"><strong>Missing table</strong></div>',
+        '<div class="callout-body"><code>',
+        htmltools::htmlEscape(as.character(table_path)),
+        '</code></div></div>'
+      )
+    )
+  } else {
+    htmltools::includeHTML(table_path)
+  }
+}
+```
+
+
+
+```{r}
+#| eval: false
+#| echo: true
+source("scripts/descriptive_stats_22_lags_cluster_corrected_v7_4_1.R")
+quarto::quarto_render("levy_paper_tables_v7_4.qmd")
+```
+
+# Main paper tables
+
+## Table 2. All-agency OLS models
+
+```{r}
+#| label: tbl-02-ols-all
+#| results: asis
+include_table("v22_table_02_OLS_all_agencies.html")
+```
+
+### Table 2 upper-bound summary
+
+```{r}
+#| label: tbl-02-ols-upper
+#| results: asis
+include_table("v22_table_02_OLS_all_agencies_upper_bounds.html")
+```
+
+## Table 3. All-agency IV models
+
+```{r}
+#| label: tbl-03-iv-all
+#| results: asis
+include_table("v22_table_03_IV_all_agencies.html")
+```
+
+### Table 3 upper-bound and diagnostic summary
+
+The coefficient test asks whether the IV estimate differs from zero.
+p_exog asks whether OLS treatment of EAV growth as exogenous appears defensible.
+The first-stage statistic asks whether reassessment year predicts EAV growth strongly enough to identify the IV coefficient.
+
+Failure to reject exogeneity also does not prove exogeneity, especially when the instrument is weak
+
+```{r}
+#| label: tbl-03-iv-upper
+#| results: asis
+include_table("v22_table_03_IV_all_agencies_upper_bounds.html")
+```
+
+## Table 4. OLS models by agency type
+
+
+> Comparing stars across columns does not show if agency types differ. It does not imply that the school and township coefficients differ significantly. A formal comparison requires a pooled interaction model or an appropriate cross-group Wald test. Text shouldn't say significant for schools and not significant for townships, for example.
+
+
+### Wide upper-bound table
+
+```{r}
+#| label: tbl-04-ols-type-wide
+#| results: asis
+include_table("v22_table_04_OLS_by_type_upper_bounds.html")
+```
+
+### Long upper-bound table
+
+```{r}
+#| label: tbl-04-ols-type-long
+#| results: asis
+include_table("v22_table_04_OLS_by_type_upper_bounds_long.html")
+```
+
+## Table 5. IV models by agency type
+
+Shows whether the IV coefficient differs from zero separately by agency type.
+
+
+The table should report, for every model:
+
+- a cluster-robust first-stage Wald/Kleibergen–Paap statistic;
+
+- first-stage partial R2, if practical;
+
+- a weak-IV-robust confidence interval or test when strength is questionable;
+
+- optionally the exogeneity-test p-value.
+
+
+### Wide upper-bound table
+
+```{r}
+#| label: tbl-05-iv-type-wide
+#| results: asis
+include_table("v22_table_05_IV_by_type_upper_bounds.html")
+```
+
+### Long upper-bound table
+
+```{r}
+#| label: tbl-05-iv-type-long
+#| results: asis
+include_table("v22_table_05_IV_by_type_upper_bounds_long.html")
+```
+
+
+### Table 5C. IV diagnostics by agency type
+
+```{r}
+#| label: tbl-05c-iv-type-diagnostics
+#| results: asis
+include_table(
+  "v22_table_05_C_IV_by_type_diagnostics.html"
+)
+```
+
+
+## Table 6. All-agency asymmetric OLS models
+
+```{r}
+#| label: tbl-06-asym-ols-all
+#| results: asis
+include_table("v22_table_06_OLS_all_agencies_asym.html")
+```
+
+### Table 6 positive and negative upper-bound summary
+
+```{r}
+#| label: tbl-06-asym-ols-upper
+#| results: asis
+include_table("v22_table_06_OLS_all_agencies_asym_upper_bounds.html")
+```
+
+### Table 6B. OLS upper bounds for positive and negative EAV changes
+
+```{r}
+#| label: tbl-06b-asym-ols-upper
+#| results: asis
+include_table("v22_table_06_B_OLS_all_agencies_asym_pos_neg_upper_bounds.html")
+```
+
+## Table 7. All-agency asymmetric IV models
+
+```{r}
+#| label: tbl-07-asym-iv-all
+#| results: asis
+include_table("v22_table_07_IV_all_agencies_asym.html")
+```
+
+### Table 7 positive and negative upper-bound summary
+
+```{r}
+#| label: tbl-07-asym-iv-upper
+#| results: asis
+include_table("v22_table_07_IV_all_agencies_asym_upper_bounds.html")
+```
+
+### Table 7B. IV upper bounds for positive and negative EAV changes
+
+```{r}
+#| label: tbl-07b-asym-iv-upper
+#| results: asis
+include_table("v22_table_07_B_IV_all_agencies_asym_pos_neg_upper_bounds.html")
+```
+
+### Table 7C. First-stage diagnostics
+
+```{r}
+#| label: tbl-07c-asym-iv-first-stage
+#| results: asis
+include_table("v22_table_07_C_IV_all_agencies_asym_first_stage.html")
+```
+
+### Table 7D. Alternative negative generated instrument
+
+```{r}
+#| label: tbl-07d-asym-iv-alt
+#| results: asis
+include_table("v22_table_07_D_IV_all_agencies_asym_alt_neg_instrument_pos_neg_upper_bounds.html")
+```
+
+## Table 8. Asymmetric OLS models by agency type
+
+### Wide upper-bound table
+
+```{r}
+#| label: tbl-08-asym-ols-type-wide
+#| results: asis
+include_table("v22_table_08_OLS_by_type_asym_upper_bounds.html")
+```
+
+### Long upper-bound table
+
+```{r}
+#| label: tbl-08-asym-ols-type-long
+#| results: asis
+include_table("v22_table_08_OLS_by_type_asym_upper_bounds_long.html")
+```
+
+### Table 8B wide positive and negative upper-bound table
+
+```{r}
+#| label: tbl-08b-asym-ols-type-wide
+#| results: asis
+include_table("v22_table_08_B_OLS_by_type_asym_pos_neg_upper_bounds.html")
+```
+
+### Table 8B long positive and negative upper-bound table
+
+```{r}
+#| label: tbl-08b-asym-ols-type-long
+#| results: asis
+include_table("v22_table_08_B_OLS_by_type_asym_pos_neg_upper_bounds_long.html")
+```
+
+## Table 9. Asymmetric IV models by agency type
+
+### Wide upper-bound table
+
+```{r}
+#| label: tbl-09-asym-iv-type-wide
+#| results: asis
+include_table("v22_table_09_IV_by_type_asym_upper_bounds.html")
+```
+
+### Long upper-bound table
+
+```{r}
+#| label: tbl-09-asym-iv-type-long
+#| results: asis
+include_table("v22_table_09_IV_by_type_asym_upper_bounds_long.html")
+```
+
+### Table 9B wide positive and negative upper-bound table
+
+```{r}
+#| label: tbl-09b-asym-iv-type-wide
+#| results: asis
+include_table("v22_table_09_B_IV_by_type_asym_pos_neg_upper_bounds.html")
+```
+
+### Table 9B long positive and negative upper-bound table
+
+```{r}
+#| label: tbl-09b-asym-iv-type-long
+#| results: asis
+include_table("v22_table_09_B_IV_by_type_asym_pos_neg_upper_bounds_long.html")
+```
+
+### Table 9C. First-stage diagnostics by agency type
+
+```{r}
+#| label: tbl-09c-asym-iv-type-first-stage
+#| results: asis
+include_table("v22_table_09_C_IV_by_type_asym_first_stage_long.html")
+```
+
+### Table 9D. Alternative negative generated instrument by agency type
+
+```{r}
+#| label: tbl-09d-asym-iv-type-alt
+#| results: asis
+include_table("v22_table_09_D_IV_by_type_asym_alt_neg_instrument_long.html")
+```
+
+## Table 10. All-agency OLS models with lagged EAV effects
+
+```{r}
+#| label: tbl-10-lag-ols-all
+#| results: asis
+include_table("v22_table_10_OLS_all_agencies_lagged.html")
+```
+
+### Table 10 cumulative current and lagged effects
+
+```{r}
+#| label: tbl-10-lag-sums
+#| results: asis
+include_table("v22_table_10_OLS_all_agencies_lagged_sums.html")
+```
+
+## Table 11. OLS models with lagged EAV effects by agency type
+
+### Wide upper-bound table
+
+```{r}
+#| label: tbl-11-lag-ols-type-wide
+#| results: asis
+include_table("v22_table_11_OLS_by_type_lagged_upper_bounds.html")
+```
+
+### Long upper-bound table
+
+```{r}
+#| label: tbl-11-lag-ols-type-long
+#| results: asis
+include_table("v22_table_11_OLS_by_type_lagged_upper_bounds_long.html")
+```
+
+# Appendix and diagnostic tables
+
+## Table A1. Instrument relevance
+
+The excluded variable F-test (often called the first-stage F-test) in an Instrumental Variable (IV) model is a diagnostic test used to check the strength of your instruments. It determines if your excluded instruments are sufficiently correlated with the endogenous explanatory variables to avoid weak instrument bias
+
+Interpreting the Test: 
+
+The Null Hypothesis (\(H_{0}\)): The excluded instruments are irrelevant (i.e., they do not jointly predict the endogenous variable in the first stage).
+
+Rule of Thumb: A standard rule of thumb is that the F-statistic should be greater than 10. If the F-test yields a value below 10, it generally indicates weak instruments, meaning your IV estimates may be biased and standard errors may be unreliable.
+
+Modern Standards: Modern econometric guidance (such as Lee et al., 2022) suggests targeting higher F-statistics (e.g., >104.7) to guarantee robustness at a 5% significance level.
+
+```{r}
+#| label: tbl-a1-instrument-validity
+#| results: asis
+include_table("instrument_validity_checks.html")
+```
+
+## Table A2. OLS point estimates by agency type
+
+### Wide point-estimate table
+
+```{r}
+#| label: tbl-a2-ols-type-points-wide
+#| results: asis
+include_table("v22_table_A2_OLS_by_type_point_estimates_wide.html")
+```
+
+### Long point-estimate table
+
+```{r}
+#| label: tbl-a2-ols-type-points-long
+#| results: asis
+include_table("v22_table_A2_OLS_by_type_point_estimates.html")
+```
+
+## Table A3. IV point estimates by agency type
+
+### Wide point-estimate table
+
+```{r}
+#| label: tbl-a3-iv-type-points-wide
+#| results: asis
+include_table("v22_table_A3_IV_by_type_point_estimates_wide.html")
+```
+
+### Long point-estimate table
+
+```{r}
+#| label: tbl-a3-iv-type-points-long
+#| results: asis
+include_table("v22_table_A3_IV_by_type_point_estimates.html")
+```
+
+## Table A4. OLS symmetry tests
+
+```{r}
+#| label: tbl-a4-ols-symmetry
+#| results: asis
+include_table("v22_table_A4_OLS_by_type_asym_p_equal.html")
+```
+
+## Table A5. OLS asymmetric point estimates for positive EAV changes
+
+### Wide point-estimate table
+
+```{r}
+#| label: tbl-a5-ols-asym-points-wide
+#| results: asis
+include_table("v22_table_A5_OLS_by_type_asym_point_estimates_wide.html")
+```
+
+### Long point-estimate table
+
+```{r}
+#| label: tbl-a5-ols-asym-points-long
+#| results: asis
+include_table("v22_table_A5_OLS_by_type_asym_point_estimates.html")
+```
+
+### Table A5B. OLS asymmetric point estimates for positive and negative EAV changes
+
+#### Wide point-estimate table
+
+```{r}
+#| label: tbl-a5b-ols-asym-points-pos-neg-wide
+#| results: asis
+include_table("v22_table_A5_B_OLS_by_type_asym_point_estimates_pos_neg_wide.html")
+```
+
+#### Long point-estimate table
+
+```{r}
+#| label: tbl-a5b-ols-asym-points-pos-neg-long
+#| results: asis
+include_table("v22_table_A5_B_OLS_by_type_asym_point_estimates_pos_neg.html")
+```
+
+## Table A6. IV symmetry tests
+
+```{r}
+#| label: tbl-a6-iv-symmetry
+#| results: asis
+include_table("v22_table_A6_IV_by_type_asym_p_equal.html")
+```
+
+## Table A7. IV asymmetric point estimates for positive EAV changes
+
+### Wide point-estimate table
+
+```{r}
+#| label: tbl-a7-iv-asym-points-wide
+#| results: asis
+include_table("v22_table_A7_IV_by_type_asym_point_estimates_wide.html")
+```
+
+### Long point-estimate table
+
+```{r}
+#| label: tbl-a7-iv-asym-points-long
+#| results: asis
+include_table("v22_table_A7_IV_by_type_asym_point_estimates.html")
+```
+
+### Table A7B. IV asymmetric point estimates for positive and negative EAV changes
+
+#### Wide point-estimate table
+
+```{r}
+#| label: tbl-a7b-iv-asym-points-pos-neg-wide
+#| results: asis
+include_table("v22_table_A7_B_IV_by_type_asym_point_estimates_pos_neg_wide.html")
+```
+
+#### Long point-estimate table
+
+```{r}
+#| label: tbl-a7b-iv-asym-points-pos-neg-long
+#| results: asis
+include_table("v22_table_A7_B_IV_by_type_asym_point_estimates_pos_neg.html")
+```
+
+## Table A8. P-values for cumulative current and lagged effects
+
+```{r}
+#| label: tbl-a8-lag-pvalues
+#| results: asis
+include_table("v22_table_A8_OLS_by_type_lagged_p_values.html")
+```
+
+## Table A9. Cumulative current and lagged point estimates
+
+### Wide point-estimate table
+
+```{r}
+#| label: tbl-a9-lag-points-wide
+#| results: asis
+include_table("v22_table_A9_OLS_by_type_lagged_point_estimates_wide.html")
+```
+
+### Long point-estimate table
+
+```{r}
+#| label: tbl-a9-lag-points-long
+#| results: asis
+include_table("v22_table_A9_OLS_by_type_lagged_point_estimates.html")
+```
