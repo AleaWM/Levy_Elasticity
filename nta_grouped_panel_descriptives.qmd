@@ -1,5 +1,5 @@
 ---
-title: "NTA Descriptive Stats for Levy Project Data"
+title: "NTA Descriptive Stats - Indexed Growth"
 warning: false
 format:
   html:
@@ -168,7 +168,7 @@ df %>%
 
 levy_table <- df %>% 
   group_by(year, type) %>%
-  summarize(total_final_levy = sum(total_final_levy, na.rm=TRUE) ) %>%
+  summarize(total_final_levy = median(total_final_levy, na.rm=TRUE) ) %>%
   filter(year == 2006 | year == 2023 ) %>% 
   filter(!is.na(total_final_levy)) %>%
   select(year, type, total_final_levy) %>% 
@@ -270,19 +270,21 @@ taxbase_table %>%
 ```
 
 ```{r}
-df %>% 
-  filter(year == 2006 | year == 2023) %>% 
- # filter(town == "Muni" ) %>% 
-  group_by(year, type) %>% 
-  summarize(eav = sum(cty_cook_eav, na.rm=TRUE),
-            median_eav = median(cty_cook_eav))
-
-
+df %>% group_by(year,type) %>%
+  summarize(cty_cook_eav = median(cty_cook_eav, na.rm=TRUE) ) %>%
+  filter(year == 2006 | year == 2023 ) %>% 
+  filter(!is.na(cty_cook_eav)) %>%
+  select(year, type, cty_cook_eav) %>% 
+  pivot_wider( id_cols = "type", names_from = "year", 
+               values_from = "cty_cook_eav") %>% 
+  mutate(pct_growth = (round((`2023`-`2006`)/`2006` * 100, digits = 1) ) ) %>%
+  arrange(desc(pct_growth)) %>% 
+    filter(!is.na(pct_growth))
 ```
 
 ### CAGR 
 
-First year is 2011, last year is 2022.
+First year is 2006, last year is 2022.
 
 ```{r}
 current_year <- 2023
