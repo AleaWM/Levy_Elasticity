@@ -592,6 +592,11 @@ reg_df <- reg_df |>
     neg_d_eav = d_eav * (1 - eav_growth)
   )
 
+# lines 585-588 in Stata code
+feols(d_levy ~ d_eav | year, data = reg_df)
+feols(d_levy ~ d_eav + pos_d_eav | year, data = reg_df)
+model <- feols(d_levy ~  pos_d_eav + neg_d_eav | year, data = reg_df)
+
 first_stage_asym <- feols(d_eav ~ reassess_year | year, data = reg_df)
 reg_df <- reg_df |>
   mutate(
