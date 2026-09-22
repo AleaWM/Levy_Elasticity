@@ -1,14 +1,6 @@
 ---
-title: "Levy Elasticity Paper Tables"
-format:
-  html:
-    toc: true
-    toc-depth: 3
-    code-fold: true
-execute:
-  echo: false
-  warning: false
-  message: false
+title: "Manuscript Materials"
+
 ---
 
 <style>
@@ -61,7 +53,6 @@ source("scripts/descriptive_stats_22_lags_cluster_corrected_v7_4_1.R")
 quarto::quarto_render("levy_paper_tables_v7_4.qmd")
 ```
 
-# Main paper tables
 
 ## Table 2. All-agency OLS models
 
