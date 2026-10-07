@@ -24,9 +24,11 @@ The findings clarify an important distinction in property tax politics: reassess
 
 # Scripts for building panel data
 
-- helper_combine_data_sources.R   (creates agency_raw_joined.csv)
+- `scripts/helper_combine_data_sources.R` creates `agency_raw_joined.csv`. This historical helper requires a missing reassessment schedule; see the repository README before rerunning it.
 
-- helper_recode_variables.R (creates panel_data_[insertdate].csv)
+- `scripts/helper_recode_variables.R` reads that joined file and writes `panel_data.csv`.
 
-- or see paper_replication code_2026_03_01.qmd for latest data set creation steps
+- See [Dataset Creation](paper_replication_code_2026_03_01.qmd) for the March 2026 construction branch. It writes `NTA_data_2026_03_01.RDS`, then reads the separate saved `replicate_2026_03_01.csv`; it does not actively produce the October 14 CSV used by the current analyses.
+
+The [Manuscript Materials](levy_paper_tables_v7_4.qmd) page displays saved HTML from `results/tables_corrected_clustered_v7_4/`. Its R producer is `scripts/descriptive_stats_22_lags_cluster_AWM_v7_4_1.R`. Rendering the page does not estimate models. The repository README records inputs, run commands, and execution blockers.
 
