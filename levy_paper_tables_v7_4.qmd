@@ -49,10 +49,12 @@ include_table <- function(file) {
 ```{r}
 #| eval: false
 #| echo: true
-source("scripts/descriptive_stats_22_lags_cluster_corrected_v7_4_1.R")
+source("scripts/descriptive_stats_22_lags_cluster_AWM_v7_4_1.R")
 quarto::quarto_render("levy_paper_tables_v7_4.qmd")
 ```
 
+
+This page displays saved HTML tables; the example above is not executed during rendering. Before rerunning the R producer, resolve its asymmetric first-stage reference to `nunique_id` (setup creates `n_uniqueid`) and verify that the complete run succeeds. Existing tables do not establish successful execution of the current script.
 
 ## Table 2. All-agency OLS models
 
