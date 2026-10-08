@@ -54,7 +54,7 @@ The active export writes `NTA_data_2026_03_01.RDS`; CSV exports are commented ou
 
 **Keep taxing agencies that are within Cook County**
 
--   Create `pct_in_Cook = cty_cook_eav / cty_total_eav` and keep values strictly greater than 0.90. Although the original design note proposed total EAV with the full levy, the construction below uses Cook EAV for `av` and `ln_eav`; this measurement choice remains to be reconciled.
+-   Create `pct_in_Cook = cty_cook_eav / cty_total_eav` and keep values strictly greater than 0.90. 
 
 ```{r setup, warning = FALSE, message=FALSE}
 #| code-fold: true
