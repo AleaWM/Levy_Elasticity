@@ -15,22 +15,27 @@ format:
 
 **Files needed for panel creation replication:**
 
--   agency_reassessmentyears.csv
--   cpi.csv
--   eq_factor.csv
--   panel_data_blindcoded.xlsx
+-   External SQLite database `ptaxsim-2023.0.0.db`; configure the connection block below for your machine.
+-   `Necessary_Files/agency_reassessmentyears.csv`
+-   `Necessary_Files/cpi.csv`
+-   `Necessary_Files/eq_factor.csv`
+-   `Necessary_Files/ptaxsim_taxing_agency_summaries_2006to2023.csv`
+-   `panel_data_blindcoding.xlsx`, sheet `TFL manual code`
+-   `replicate_2026_03_01.csv`, read for the later analysis after construction.
+
+The active export writes `NTA_data_2026_03_01.RDS`; CSV exports are commented out. The page then replaces the constructed in-memory panel with the saved `replicate_2026_03_01.csv`. It does not actively produce `NTA_data_2024_10_14.csv`, the current model input. The summary CSV read below uses `Necessary_files`; match the actual folder spelling `Necessary_Files` before running on a case-sensitive system.
 
 # Code Cleaning Steps
 
--   90% within Cook County 
--   Does not change home rule status during sample years 
+-   More than 90% of EAV within Cook County (`pct_in_Cook > 0.90`).
+-   Exclude the six named home-rule-changing agency IDs listed below; the code does not implement a general constant-status test.
 
 ### Slightly more detail on cleaning process:
 
 **Some taxing agencies are missing their cty_cook_eav & cty_total_eav even though they have a total_final_levy value** 
 
 -   Using the logic that the tax rate = levy / taxable EAV, then we can back out the EAV by  using the total_final_levy and total_final_rate variables. 
--   Taxable EAV = total_final_levy / (total_final_rate) / 100 
+-   Taxable EAV = `total_final_levy / (total_final_rate / 100)`.
 -   A Couple municipalities had missing levies and were manually entered by looking up the CAGR and historic levy amounts in the document
 
 **Remove taxing agencies that had a levy = \$0 for any year. Drop values for all years.**  
@@ -49,7 +54,7 @@ format:
 
 **Keep taxing agencies that are within Cook County**
 
--   Create variable `pct_in_Cook` = cty_cook_eav / cty_total_eav. Keep all taxing agencies that are 90% or more in Cook County. Use cty_total_eav in the models since we are using the full levy amount in the models
+-   Create `pct_in_Cook = cty_cook_eav / cty_total_eav` and keep values strictly greater than 0.90. Although the original design note proposed total EAV with the full levy, the construction below uses Cook EAV for `av` and `ln_eav`; this measurement choice remains to be reconciled.
 
 ```{r setup, warning = FALSE, message=FALSE}
 #| code-fold: true
@@ -538,7 +543,9 @@ df <- df %>%
 #df |> write_csv("replicate_2026_03_01.csv")
 
 # confirmed they have same obsevations
-df |> write_rds("NTA_data_2026_03_01.RDS")
+#df |> write_rds("NTA_data_2026_03_01.RDS")
+
+df |> write_csv("NTA_data_2026_10_02.cvs")
 
 ```
 
