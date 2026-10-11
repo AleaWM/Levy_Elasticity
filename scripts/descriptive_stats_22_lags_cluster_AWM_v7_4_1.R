@@ -38,9 +38,7 @@ fmt <- function(x, digits = 3) {
   ifelse(is.na(x), "", formatC(as.numeric(x), digits = digits, format = "f"))
 }
 
-# ================================================================
-# 1. READ + MERGE DATA
-# ================================================================
+# 1. READ + MERGE DATA ----
 
 message(Sys.Date())
 message(format(Sys.time(), "%H:%M:%S"))
@@ -51,7 +49,7 @@ message(format(Sys.time(), "%H:%M:%S"))
 # email shows that he had questions about this file and then michael sent one for 10_16
 # main_df <- read_csv("NTA_data_2024_10_14.csv")
 
-main_df |> distinct(agency_group)
+# Inspect agency groups after main_df is loaded, not before a fresh-session import.
 
 # File MVH sent him:
 # main_df <- read_csv("NTA_data_2024_10_16.csv") |>
@@ -62,7 +60,7 @@ main_df |> distinct(agency_group)
 # main_df <- read_csv("NTA_data_2024_11_08.csv") #|>
 # arrange(type)
 
-main_df <- read_csv("NTA_data_2026_10_02.csv")
+main_df <- read_csv("./NTA_2026_Pittsburg/NTA_data_2026_10_02.csv")
 
 agency_lookup <- read_dta("Necessary_Files/fips_all_agency_name.dta")
 
@@ -70,8 +68,8 @@ anti_join(main_df, agency_lookup)
 
 main_df <- main_df |>
   left_join(agency_lookup, by = "agency_group")
-# 7470 observations before dropping NAs
-# 7416 after dropping NAs
+# 6593 obs for NTA_data_2026_10_02.csv, as of October 9th 2026 (6592 after dropping NAs in next line of code)
+# 7470 observations before dropping NAs, 7416 after dropping NAs for 2024 dataset
 # Stata listed unmatched rows and dropped merge==1 rows.
 # In dplyr terms: drop observations from master that did not match.
 main_df <- main_df |>
@@ -84,9 +82,7 @@ anti_join(main_df, census_df)
 main_df <- main_df |>
   left_join(census_df, by = c("fipsid", "year"))
 
-# ================================================================
-# 2. MERGE EQUALIZATION FACTORS + CLEAN NUMERIC FIELDS
-# ================================================================
+# 2. MERGE EQUALIZATION FACTORS + CLEAN NUMERIC FIELDS ----
 
 # Stata used a .dta called eq_factor after previously creating it from CSV.
 # Adjust extension if your stored file is actually .csv.
@@ -116,9 +112,7 @@ main_df <- main_df |>
     )
   )
 
-# ================================================================
-# 3. PANEL SETUP + CONSTRUCTED VARIABLES
-# ================================================================
+# 3. PANEL SETUP + CONSTRUCTED VARIABLES ----
 
 main_df <- main_df |>
   mutate(
@@ -183,9 +177,7 @@ main_df <- main_df |>
     )
   ) |> ungroup()
 
-# ================================================================
-# 4. HELPERS
-# ================================================================
+# 4. HELPERS ----
 
 vcov_uid <- ~n_uniqueid
 
@@ -216,10 +208,8 @@ safe_lincom <- function(model, combo) {
   )
 }
 
-# ---- output folder ---------------------------------------------------------
-# These HTML outputs are intentionally written to a stable, Quarto-friendly
-# path for the replication site. The v7_2 folder name is retained so the
-# existing levy_paper_tables_v7_2.qmd file continues to work unchanged.
+# output folder ----
+
 output_dir <- file.path("results", "NTA_tables_10_02")
 dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 
@@ -282,9 +272,7 @@ make_wide_component_point_table <- function(df, value_col) {
     )
 }
 # Appendix A1 ---------------------------------------------------------------
-# ================================================================
-# 5. INSTRUMENT RELEVANCE CHECKS (not validity checks)
-# ================================================================
+# 5. INSTRUMENT RELEVANCE CHECKS (not validity checks) ----
 
 first_stage_F <- function(model, term = "reassess_year") {
   td <- broom::tidy(model)
@@ -418,6 +406,7 @@ instrument_add_rows <- tibble::tibble(
   )
 )
 
+## Table A1: Instrument relevance - export ----
 save_table(
   instrument_models,
   file_stub = "instrument_validity_checks",
@@ -453,35 +442,31 @@ save_table(
 #   notes = "Cook County, Illinois data from 2008 through 2023"
 # )
 
-# ================================================================
-# 6. BASE SAMPLE FOR OLS / IV
-# ================================================================
+# 6. BASE SAMPLE FOR OLS / IV ----
 
 reg_df <- main_df |>
   filter(year > 2008)
 
 
 
-# ================================================================
-# V22 MODEL UPDATES TRANSLATED FROM STATA
-# ================================================================
+# V22 MODEL UPDATES TRANSLATED FROM STATA ----
 # Source Stata comparison:
 # - descriptive stats_15_lags_cluster(2).do
 # - descriptive stats_22_lags_cluster.do
 #
 # Core v22 changes:
-# 1. Keep non-home-rule municipalities separate as type_2 == "NonHR_muni"; label combined municipal models as "All Munis".
-# 2. Use year-by-home-rule fixed effects in the all-agency models.
-# 3. Report upper bounds: estimate + 1.645 * clustered SE.
-# 4. Add same-sample rows for Census-control models.
-# 5. Add appendix-style point-estimate summaries with p-values and significance stars.
-# 6. v6 adds positive- and negative-EAV upper-bound summaries for asymmetric models and fixes F_pos/F_neg extraction by estimating explicit first stages on the IV sample.
+# 1. Keep non-home-rule municipalities separate as type_2 == "NonHR_muni"; label combined municipal models as "All Munis". ----
+# 2. Use year-by-home-rule fixed effects in the all-agency models. ----
+# 3. Report upper bounds: estimate + 1.645 * clustered SE. ----
+# 4. Add same-sample rows for Census-control models. ----
+# 5. Add appendix-style point-estimate summaries with p-values and significance stars. ----
+# 6. v6 adds positive- and negative-EAV upper-bound summaries for asymmetric models and fixes F_pos/F_neg extraction by estimating explicit first stages on the IV sample. ----
 
 suppressPackageStartupMessages({
   library(knitr)
 })
 
-# ---- output helpers --------------------------------------------------------
+# output helpers ----
 html_escape <- function(x) {
   x <- as.character(x)
   x <- gsub("&", "&amp;", x, fixed = TRUE)
@@ -539,6 +524,177 @@ save_df_table <- function(df, file_stub, title = NULL, digits = 3, notes = NULL)
   invisible(df_out)
 }
 
+# Table 1: Distribution of levy and EAV changes ----
+# Reuses the current merged panel and growth variables; no model-control filter.
+# Table 1 follows old_files/levy_paper_tables_simple.qmd, using R's default
+# quantile type 7 (not a claim of identical interpolation to Stata centile).
+descriptive_df <- reg_df |>
+  filter(between(year, 2009, 2023))
+stopifnot(
+  nrow(descriptive_df) > 0L,
+  !anyNA(descriptive_df$agency_group),
+  !anyDuplicated(descriptive_df[c("agency_group", "year")]),
+  all(descriptive_df$type %in% c("Muni", "Other", "School", "Township"))
+)
+
+table1_long <- descriptive_df |>
+  select(type, d_levy, d_eav) |>
+  pivot_longer(c(d_levy, d_eav), names_to = "variable", values_to = "value")
+table1_quantile <- function(x, probability) {
+  x <- x[is.finite(x)]
+  if (length(x) == 0L) return(NA_real_)
+  unname(quantile(x, probability, type = 7))
+}
+table1 <- bind_rows(table1_long, mutate(table1_long, type = "All")) |>
+  group_by(type, variable) |>
+  summarise(
+    N = sum(is.finite(value)),
+    p5 = table1_quantile(value, .05),
+    p25 = table1_quantile(value, .25),
+    p50 = table1_quantile(value, .50),
+    p75 = table1_quantile(value, .75),
+    p95 = table1_quantile(value, .95),
+    .groups = "drop"
+  ) |>
+  arrange(match(type, c("Muni", "Other", "School", "Township", "All")),
+          match(variable, c("d_levy", "d_eav"))) |>
+  rename(agency = type)
+write_csv(table1, file.path(output_dir, "v22_table_01_distribution.csv"))
+## Table 1: Distribution of levy and EAV changes - export distribution ----
+save_df_table(
+  table1, "v22_table_01_distribution",
+  "Table 1. Distribution of annual percentage changes in levies and EAV",
+  digits = 1,
+  notes = paste(
+    "2009-2023. Changes are 100 times annual log ratios.",
+    "N counts finite agency-year observations separately for each variable.",
+    "Percentiles use the untrimmed sample and R quantile type 7."
+  )
+)
+
+# Figure 1: Observed levy versus EAV changes ----
+# Six overlapping panels, matching the supplied historical figure's layout.
+# Reconstruction assumption: trim BOTH coordinates to +/-20 before fitting OLS.
+# Annual agency counts describe complete pairs BEFORE trimming, not plotted N.
+figure1_levels <- c("All local gov't types", "Muni", "Home Rule Muni",
+                    "Other", "School", "Township")
+figure1_pairs <- descriptive_df |>
+  filter(is.finite(d_eav), is.finite(d_levy))
+figure1_panels <- bind_rows(
+  mutate(figure1_pairs, panel = figure1_levels[1]),
+  mutate(figure1_pairs, panel = as.character(type)),
+  figure1_pairs |>
+    filter(type == "Muni", home_rule_ind == 1) |>
+    mutate(panel = "Home Rule Muni")
+) |>
+  mutate(panel = factor(panel, levels = figure1_levels))
+figure1_counts <- figure1_panels |>
+  distinct(panel, year, agency_group) |>
+  count(panel, year, name = "agencies") |>
+  complete(panel, year = 2009:2023, fill = list(agencies = 0L)) |>
+  group_by(panel) |>
+  summarise(annual_min = min(agencies), annual_max = max(agencies),
+            .groups = "drop") |>
+  mutate(label = paste0(
+    panel, "\nn=", annual_min,
+    if_else(annual_min == annual_max, "", paste0("-", annual_max)),
+    " per year (before trimming)"
+  ))
+figure1_plot_data <- figure1_panels |>
+  filter(between(d_eav, -20, 20), between(d_levy, -20, 20))
+figure1_audit <- figure1_plot_data |>
+  group_by(panel) |>
+  summarise(plotted_N = n(), unique_agencies = n_distinct(agency_group),
+            .groups = "drop") |>
+  right_join(figure1_counts, by = "panel") |>
+  mutate(
+    plotted_N = replace_na(plotted_N, 0L),
+    unique_agencies = replace_na(unique_agencies, 0L),
+    label = paste0(panel, "\nN = ", format(unique_agencies, big.mark = ",", trim = TRUE),
+                   " unique agencies")
+  )
+write_csv(figure1_audit, file.path(output_dir, "v22_figure_01_counts.csv"))
+figure1 <- ggplot(figure1_plot_data, aes(d_eav, d_levy)) +
+  geom_point(color = "#2185FF", size = 0.65, alpha = 0.85) +
+  geom_smooth(method = "lm", formula = y ~ x, se = FALSE,
+              color = "red", linewidth = 0.6, fullrange = TRUE) +
+  geom_abline(intercept = 0, slope = 1, color = "#A38B38", linewidth = 0.6) +
+  facet_wrap(~panel, ncol = 3, drop = FALSE,
+             labeller = labeller(panel = setNames(figure1_audit$label,
+                                                  figure1_audit$panel))) +
+  scale_x_continuous(limits = c(-20, 20), breaks = seq(-20, 20, 10)) +
+  scale_y_continuous(breaks = seq(-20, 20, 10)) +
+  coord_cartesian(ylim = c(-20, 20)) +
+  labs(
+    title = "Observed % change levy wrt % change in assessments",
+    subtitle = "No controls: 2009 through 2023",
+    x = "% change EAV", y = "% change levy",
+    caption = paste(
+      "Changes are 100 times log ratios. Both coordinates restricted to [-20,20].",
+      "Red: OLS fitted on the displayed sample. Brown: levy growth equals EAV growth.",
+      "Above/below the diagonal: the levy/EAV ratio rises/falls. N counts unique agencies represented after trimming.",
+      sep = "\n"
+    )
+  ) +
+  theme_bw(base_size = 12) +
+  theme(strip.background = element_blank(), panel.grid.minor = element_blank(),
+        plot.caption = element_text(hjust = 0), plot.title.position = "plot")
+ggsave(file.path(output_dir, "v22_figure_01_observed_changes.png"),
+       figure1, width = 13, height = 8, dpi = 300, bg = "white")
+ggsave(file.path(output_dir, "v22_figure_01_observed_changes.pdf"),
+       figure1, width = 13, height = 8, bg = "white")
+
+## Figure 1: Clean presentation version - export ----
+# Same observations and OLS specification; presentation changes only.
+# Keep explanatory text outside this image; panel labels count unique agencies after trimming.
+figure1_clean_labels <- setNames(
+  c("All agencies", "Municipalities", "Home-rule municipalities",
+    "Other districts", "Schools", "Townships"),
+  figure1_levels
+)
+figure1_clean_labels <- setNames(
+  paste0(figure1_clean_labels[as.character(figure1_audit$panel)],
+         "\nN = ", format(figure1_audit$unique_agencies, big.mark = ",", trim = TRUE),
+         " unique agencies"),
+  as.character(figure1_audit$panel)
+)
+figure1_clean <- ggplot(figure1_plot_data, aes(d_eav, d_levy)) +
+  geom_abline(intercept = 0, slope = 1, color = "#A4ADB5",
+              linewidth = 0.5, linetype = "longdash") +
+  geom_hline(yintercept = 0, color = "#D7DEE3", linewidth = 0.3) +
+  geom_vline(xintercept = 0, color = "#D7DEE3", linewidth = 0.3) +
+  geom_point(color = "#247C87", size = 0.7, alpha = 0.35, stroke = 0) +
+  geom_smooth(method = "lm", formula = y ~ x, se = FALSE,
+              color = "#CC6849", linewidth = 0.85, fullrange = TRUE) +
+  facet_wrap(~panel, ncol = 3, drop = FALSE,
+             labeller = labeller(panel = figure1_clean_labels)) +
+  scale_x_continuous(limits = c(-20, 20), breaks = seq(-20, 20, 10),
+                     expand = expansion(mult = 0.03)) +
+  scale_y_continuous(breaks = seq(-20, 20, 10),
+                     expand = expansion(mult = 0.03)) +
+  coord_fixed(ratio = 1, ylim = c(-20, 20)) +
+  labs(x = "Annual change in EAV (%)", y = "Annual change in levy (%)",
+       title = NULL, subtitle = NULL, caption = NULL) +
+  theme_minimal(base_size = 12, base_family = "sans") +
+  theme(
+    text = element_text(color = "#293740"),
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_line(color = "#EDF0F2", linewidth = 0.3),
+    strip.text = element_text(face = "bold", size = 11,
+                              margin = margin(b = 12, t = 6)),
+    axis.text = element_text(color = "#66747D", size = 10),
+    axis.title.x = element_text(margin = margin(t = 12)),
+    axis.title.y = element_text(margin = margin(r = 12)),
+    panel.spacing = grid::unit(1.3, "lines"),
+    plot.margin = margin(16, 20, 16, 16),
+    legend.position = "none"
+  )
+ggsave(file.path(output_dir, "v22_figure_01_observed_changes_clean.png"),
+       figure1_clean, width = 12, height = 8.5, dpi = 300, bg = "white")
+ggsave(file.path(output_dir, "v22_figure_01_observed_changes_clean.pdf"),
+       figure1_clean, width = 12, height = 8.5, bg = "white")
+
+# Model table and sample helpers ----
 make_wide_stat_table <- function(df, value_col) {
   value_col <- rlang::ensym(value_col)
   df |>
@@ -559,7 +715,7 @@ sample_index <- function(model, data) {
 `%||%` <- function(x, y) if (is.null(x)) y else x
 
 
-# ---- corrected inference helpers -------------------------------------------
+# corrected inference helpers ----
 # These helpers are used by the corrected manuscript tables. They keep standard
 # errors clustered by taxing agency and add derived statistics to modelsummary.
 # Coefficient p-values are retained so manuscript-facing summary tables can
@@ -1093,7 +1249,7 @@ regf_vec <- function(models) {
   vapply(models, safe_first_stage_f, numeric(1))
 }
 
-# ---- asymmetric-model helpers ----------------------------------------------
+# asymmetric-model helpers ----
 # These helpers are used for Tables 6--9 B/C/D outputs. The point is to report
 # coefficient estimates, clustered SEs, and positive/negative upper bounds.
 # Coefficient-level p-values are retained for stars on displayed estimates;
@@ -1344,7 +1500,7 @@ make_wide_component_stat_table <- function(df, value_col) {
 }
 
 
-# ---- v22 data recodes ------------------------------------------------------
+# v22 data recodes ----
 reg_df <- reg_df |>
   mutate(
     # Keep municipal types separate in by-type models.
@@ -1389,9 +1545,7 @@ gov_types <- c("HR_muni", "NonHR_muni", "Other", "Township", "School")
 gov_types_B <- c("HR_muni", "NonHR_muni", "School")
 minor_types <- c("ELEMENTARY", "SECONDARY")
 
-# ================================================================
-# Table 2. All-agency OLS, v22 specification
-# ================================================================
+# Table 2. All-agency OLS, v22 specification ----
 
 all_ols_1 <- feols(d_levy ~ d_eav,
   data = reg_df, cluster = vcov_uid)
@@ -1413,6 +1567,7 @@ all_ols_add_rows <- add_rows_from_named(
   digits = c(N = 0, upper_bound = 3)
 )
 
+## Table 2: All-agency OLS - export OLS all agencies ----
 save_table(
   all_ols_models_v22,
   file_stub = "v22_table_02_OLS_all_agencies",
@@ -1427,6 +1582,7 @@ save_table(
   gof_omit = ".*"
 )
 
+## Table 2: All-agency OLS - export OLS all agencies upper bounds ----
 save_df_table(
   bind_rows(
     term_stats(all_ols_1, "d_eav", "M1"),
@@ -1443,9 +1599,7 @@ save_df_table(
   "Table 2: Upper bounds for all-agency OLS"
 )
 
-# ================================================================
-# Table 3. All-agency IV, v22 specification
-# ================================================================
+# Table 3. All-agency IV, v22 specification ----
 
 all_iv_1 <- feols(d_levy ~ 1 | 0 | d_eav ~ reassess_year,
   data = reg_df, cluster = vcov_uid)
@@ -1483,6 +1637,7 @@ all_iv_add_rows <- add_rows_from_named(
   digits = c(N = 0, upper_bound = 3, p_exog = 3, regF = 1)
 )
 
+## Table 3: All-agency IV - export IV all agencies ----
 save_table(
   all_iv_models_v22,
   file_stub = "v22_table_03_IV_all_agencies",
@@ -1498,6 +1653,7 @@ save_table(
   gof_omit = ".*"
 )
 
+## Table 3: All-agency IV - export IV all agencies upper bounds ----
 save_df_table(
   bind_rows(
     term_stats(all_iv_1, "fit_d_eav", "M1"),
@@ -1516,9 +1672,7 @@ save_df_table(
   "Table 3: Upper bounds for all-agency IV"
 )
 
-# ================================================================
-# Tables 4/A2 and 5/A3. By agency type: OLS + IV summary rows
-# ================================================================
+# Tables 4/A2 and 5/A3. By agency type: OLS + IV summary rows ----
 
 run_type_v22 <- function(df, gov, iv = FALSE) {
   d <- df |> filter(type_2 == gov)
@@ -1703,17 +1857,20 @@ iv_by_type_summary <- iv_by_type_summary |>
     by = c("row", "agency")
   )
 
+## Table 4: OLS by agency type - export OLS by type upper bounds long ----
 save_df_table(
   ols_by_type_summary |>
     select(row, agency, N, estimate = estimate_with_stars, std_error, p_value, upper_bound = upper_bound_with_details),
   "v22_table_04_OLS_by_type_upper_bounds_long",
   "Table 4: By agency type OLS upper-bound estimates"
 )
+## Table 4: OLS by agency type - export OLS by type upper bounds ----
 save_df_table(
   make_wide_stat_table(ols_by_type_summary, upper_bound_with_details),
   "v22_table_04_OLS_by_type_upper_bounds",
   "Table 4: By agency type OLS upper-bound estimates"
 )
+## Table A2: OLS point estimates by agency type - export OLS by type point estimates ----
 save_df_table(
   ols_by_type_summary |>
     select(row, agency, N, estimate = estimate_with_stars, std_error, p_value),
@@ -1721,6 +1878,7 @@ save_df_table(
   "Table A2: By agency type OLS point estimates"
 )
 
+## Table A2: OLS point estimates by agency type - export OLS by type point estimates wide ----
 save_df_table(
   make_wide_point_table(
     ols_by_type_summary,
@@ -1729,6 +1887,7 @@ save_df_table(
   "v22_table_A2_OLS_by_type_point_estimates_wide",
   "Table A2: By agency type OLS point estimates"
 )
+## Table 5: IV by agency type - export IV by type upper bounds long ----
 save_df_table(
   iv_by_type_summary |>
     select(
@@ -1746,6 +1905,7 @@ save_df_table(
   "Table 5: By agency type IV upper-bound estimates"
 )
 
+## Table 5: IV by agency type - export C: IV by type diagnostics ----
 save_df_table(
   iv_by_type_diagnostics,
   "v22_table_05_C_IV_by_type_diagnostics",
@@ -1755,11 +1915,13 @@ save_df_table(
     "p_exog is the cluster-robust control-function test of the null that d_eav is exogenous."
   )
 )
+## Table 5: IV by agency type - export IV by type upper bounds ----
 save_df_table(
   make_wide_stat_table(iv_by_type_summary, upper_bound_with_details),
   "v22_table_05_IV_by_type_upper_bounds",
   "Table 5: By agency type IV upper-bound estimates"
 )
+## Table A3: IV point estimates by agency type - export IV by type point estimates ----
 save_df_table(
   iv_by_type_summary |>
     select(row, agency, N, estimate = estimate_with_stars, std_error, p_value),
@@ -1767,6 +1929,7 @@ save_df_table(
   "Table A3: By agency type IV point estimates"
 )
 
+## Table A3: IV point estimates by agency type - export IV by type point estimates wide ----
 save_df_table(
   make_wide_point_table(
     iv_by_type_summary,
@@ -1776,9 +1939,7 @@ save_df_table(
   "Table A3: By agency type IV point estimates"
 )
 
-# ================================================================
-# Tables 6/A4/A5 and 7/A6/A7. Asymmetric OLS + IV
-# ================================================================
+# Tables 6/A4/A5 and 7/A6/A7. Asymmetric OLS + IV ----
 
 reg_df <- reg_df |>
   mutate(
@@ -1814,6 +1975,8 @@ reg_df <- reg_df |>
     # neg_d_eav_hat = neg_d_eav * d_eav_hat   # DFM would have had this, if he had done a negative change in EAV variable
     # NOTE: pos_d_eav_hat = pos_d_eav * d_eav_hat =  eav_growth * d_eav * d_eav_hat = d_eav * d_eav_hat when the tax base increased from the previous year, and is 0 otherwise
     # where EAV_growth is 1 if positive, 0 otherwise, pos_
+    # pos_d_eav_hat = eav_growth * d_eav_hat, # after discussing with DFM, new stata way
+    # neg_d_eav_hat = (1 - eav_growth) * d_eav_hat, # stata way   # technically negative or no change
 
     pos_d_eav_hat = if_else(d_eav_hat > 0, d_eav_hat, 0),
     neg_d_eav_hat = if_else(d_eav_hat <= 0, d_eav_hat, 0)   # technically negative or no change
@@ -1845,6 +2008,7 @@ asym_ols_add_rows <- add_rows_from_named(
   digits = c(N = 0, p_equal = 3, pos_upper_bound = 3, neg_upper_bound = 3)
 )
 
+## Table 6: All-agency asymmetric OLS - export OLS all agencies asym ----
 save_table(
   asym_ols_models_v22,
   file_stub = "v22_table_06_OLS_all_agencies_asym",
@@ -1865,12 +2029,14 @@ asym_ols_all_pos_neg_bounds <- bind_rows(
   mutate(p_equal = asym_ols_p_equal[model]) |>
   select(model, component, N, estimate = estimate_with_stars, std_error, p_value, upper_bound = upper_bound_with_details, p_equal)
 
+## Table 6: All-agency asymmetric OLS - export OLS all agencies asym upper bounds ----
 save_df_table(
   asym_ols_all_pos_neg_bounds,
   "v22_table_06_OLS_all_agencies_asym_upper_bounds",
   "Table 6: Upper bounds for positive and negative EAV changes"
 )
 
+## Table 6: All-agency asymmetric OLS - export B: OLS all agencies asym pos neg upper bounds ----
 save_df_table(
   asym_ols_all_pos_neg_bounds,
   "v22_table_06_B_OLS_all_agencies_asym_pos_neg_upper_bounds",
@@ -1989,6 +2155,7 @@ asym_iv_add_rows <- add_rows_from_named(
   )
 )
 
+## Table 7: All-agency asymmetric IV - export IV all agencies asym ----
 save_table(
   asym_iv_models_v22,
   file_stub = "v22_table_07_IV_all_agencies_asym",
@@ -2033,18 +2200,21 @@ asym_iv_all_pos_neg_bounds <- bind_rows(
     p_equal
   )
 
+## Table 7: All-agency asymmetric IV - export IV all agencies asym upper bounds ----
 save_df_table(
   asym_iv_all_pos_neg_bounds,
   "v22_table_07_IV_all_agencies_asym_upper_bounds",
   "Table 7: Upper bounds for positive and negative EAV changes, IV"
 )
 
+## Table 7: All-agency asymmetric IV - export B: IV all agencies asym pos neg upper bounds ----
 save_df_table(
   asym_iv_all_pos_neg_bounds,
   "v22_table_07_B_IV_all_agencies_asym_pos_neg_upper_bounds",
   "Table 7B: IV upper bounds for positive and negative EAV changes"
 )
 
+## Table 7: All-agency asymmetric IV - export C: IV all agencies asym first stage ----
 save_df_table(
   asym_iv_all_pos_neg_bounds |>
     distinct(
@@ -2126,6 +2296,7 @@ asym_iv_alt_SW_pos <- vapply(
   numeric(1)
 )
 
+## Table 7: All-agency asymmetric IV - export D: IV all agencies asym alt neg instrument pos neg upper bounds ----
 save_df_table(
   bind_rows(
     asym_component_stats(asym_iv_alt_1, "M1", iv = TRUE),
@@ -2237,18 +2408,22 @@ asym_iv_school_extra <- asym_school_extra_v22(reg_df, iv = TRUE)
 asym_ols_by_type_summary <- make_asym_by_type_summary(asym_ols_type_A, asym_ols_type_B, asym_ols_school_extra, iv = FALSE)
 asym_iv_by_type_summary <- make_asym_by_type_summary(asym_iv_type_A, asym_iv_type_B, asym_iv_school_extra, iv = TRUE)
 
+## Table 8: Asymmetric OLS by agency type - export OLS by type asym upper bounds long ----
 save_df_table(
   asym_ols_by_type_summary |>
     select(row, agency, N, estimate = estimate_with_stars, std_error, p_value, upper_bound = upper_bound_with_details, p_equal),
   "v22_table_08_OLS_by_type_asym_upper_bounds_long",
   "Table 8: OLS upper-bound estimates allowing for asymmetry"
 )
+## Table 8: Asymmetric OLS by agency type - export OLS by type asym upper bounds ----
 save_df_table(
   make_wide_stat_table(asym_ols_by_type_summary, upper_bound_with_details),
   "v22_table_08_OLS_by_type_asym_upper_bounds",
   "Table 8: OLS upper-bound estimates allowing for asymmetry"
 )
+## Table A4: OLS symmetry tests - export OLS by type asym p equal ----
 save_df_table(asym_ols_by_type_summary |> select(row, agency, p_equal), "v22_table_A4_OLS_by_type_asym_p_equal", "Table A4: P-values for OLS symmetry tests")
+## Table A5: Asymmetric OLS point estimates - export OLS by type asym point estimates ----
 save_df_table(
   asym_ols_by_type_summary |>
     select(row, agency, N, estimate = estimate_with_stars, std_error, p_value),
@@ -2256,6 +2431,7 @@ save_df_table(
   "Table A5: OLS point estimates for positive EAV changes"
 )
 
+## Table A5: Asymmetric OLS point estimates - export OLS by type asym point estimates wide ----
 save_df_table(
   make_wide_point_table(
     asym_ols_by_type_summary,
@@ -2265,18 +2441,22 @@ save_df_table(
   "Table A5: OLS point estimates for positive EAV changes"
 )
 
+## Table 9: Asymmetric IV by agency type - export IV by type asym upper bounds long ----
 save_df_table(
   asym_iv_by_type_summary |>
     select(row, agency, N, estimate = estimate_with_stars, std_error, p_value, upper_bound = upper_bound_with_details, p_equal),
   "v22_table_09_IV_by_type_asym_upper_bounds_long",
   "Table 9: IV upper-bound estimates allowing for asymmetry"
 )
+## Table 9: Asymmetric IV by agency type - export IV by type asym upper bounds ----
 save_df_table(
   make_wide_stat_table(asym_iv_by_type_summary, upper_bound_with_details),
   "v22_table_09_IV_by_type_asym_upper_bounds",
   "Table 9: IV upper-bound estimates allowing for asymmetry"
 )
+## Table A6: IV symmetry tests - export IV by type asym p equal ----
 save_df_table(asym_iv_by_type_summary |> select(row, agency, p_equal), "v22_table_A6_IV_by_type_asym_p_equal", "Table A6: P-values for IV symmetry tests")
+## Table A7: Asymmetric IV point estimates - export IV by type asym point estimates ----
 save_df_table(
   asym_iv_by_type_summary |>
     select(row, agency, N, estimate = estimate_with_stars, std_error, p_value),
@@ -2284,6 +2464,7 @@ save_df_table(
   "Table A7: IV point estimates for positive EAV changes"
 )
 
+## Table A7: Asymmetric IV point estimates - export IV by type asym point estimates wide ----
 save_df_table(
   make_wide_point_table(
     asym_iv_by_type_summary,
@@ -2294,7 +2475,7 @@ save_df_table(
 )
 
 
-# ---- Additional asymmetric outputs: positive and negative EAV upper bounds ----
+# Additional asymmetric outputs: positive and negative EAV upper bounds ----
 # These keep the original Table 8/9 files intact but add companion B/C/D files
 # that show upper bounds for both sides of the asymmetric specification.
 
@@ -2502,17 +2683,20 @@ asym_ols_by_type_pos_neg_summary <- make_asym_by_type_pos_neg_summary(reg_df, iv
 asym_iv_by_type_pos_neg_summary <- make_asym_by_type_pos_neg_summary(reg_df, iv = TRUE, instruments = asym_iv_instruments)
 asym_iv_by_type_pos_neg_alt_summary <- make_asym_by_type_pos_neg_summary(reg_df, iv = TRUE, instruments = asym_iv_alt_instruments)
 
+## Table 8: Asymmetric OLS by agency type - export B: OLS by type asym pos neg upper bounds long ----
 save_df_table(
   asym_ols_by_type_pos_neg_summary |>
     select(row, agency, component, N, estimate = estimate_with_stars, std_error, p_value, upper_bound = upper_bound_with_details, p_equal),
   "v22_table_08_B_OLS_by_type_asym_pos_neg_upper_bounds_long",
   "Table 8B: OLS upper bounds for positive and negative EAV changes by agency type"
 )
+## Table 8: Asymmetric OLS by agency type - export B: OLS by type asym pos neg upper bounds ----
 save_df_table(
   make_wide_component_stat_table(asym_ols_by_type_pos_neg_summary, upper_bound_with_details),
   "v22_table_08_B_OLS_by_type_asym_pos_neg_upper_bounds",
   "Table 8B: OLS upper bounds for positive and negative EAV changes by agency type"
 )
+## Table A5: Asymmetric OLS point estimates - export B: OLS by type asym point estimates pos neg ----
 save_df_table(
   asym_ols_by_type_pos_neg_summary |>
     select(row, agency, component, N, estimate = estimate_with_stars, std_error, p_value, upper_bound = upper_bound_with_details, p_equal),
@@ -2520,6 +2704,7 @@ save_df_table(
   "Table A5B: OLS asymmetric point estimates for positive and negative EAV changes"
 )
 
+## Table A5: Asymmetric OLS point estimates - export B: OLS by type asym point estimates pos neg wide ----
 save_df_table(
   make_wide_component_point_table(
     asym_ols_by_type_pos_neg_summary,
@@ -2531,6 +2716,7 @@ save_df_table(
     "for positive and negative EAV changes"
   )
 )
+## Table 9: Asymmetric IV by agency type - export B: IV by type asym pos neg upper bounds long ----
 save_df_table(
   asym_iv_by_type_pos_neg_summary |>
     select(
@@ -2552,11 +2738,13 @@ save_df_table(
   "v22_table_09_B_IV_by_type_asym_pos_neg_upper_bounds_long",
   "Table 9B: IV upper bounds for positive and negative EAV changes by agency type"
 )
+## Table 9: Asymmetric IV by agency type - export B: IV by type asym pos neg upper bounds ----
 save_df_table(
   make_wide_component_stat_table(asym_iv_by_type_pos_neg_summary, upper_bound_with_details),
   "v22_table_09_B_IV_by_type_asym_pos_neg_upper_bounds",
   "Table 9B: IV upper bounds for positive and negative EAV changes by agency type"
 )
+## Table 9: Asymmetric IV by agency type - export C: IV by type asym first stage long ----
 save_df_table(
   asym_iv_by_type_pos_neg_summary |>
     distinct(
@@ -2572,6 +2760,7 @@ save_df_table(
   "v22_table_09_C_IV_by_type_asym_first_stage_long",
   "Table 9C: First-stage and conditional weak-identification diagnostics by agency type"
 )
+## Table A7: Asymmetric IV point estimates - export B: IV by type asym point estimates pos neg ----
 save_df_table(
   asym_iv_by_type_pos_neg_summary |>
     select(
@@ -2594,6 +2783,7 @@ save_df_table(
   "Table A7B: IV asymmetric point estimates for positive and negative EAV changes"
 )
 
+## Table A7: Asymmetric IV point estimates - export B: IV by type asym point estimates pos neg wide ----
 save_df_table(
   make_wide_component_point_table(
     asym_iv_by_type_pos_neg_summary,
@@ -2606,6 +2796,7 @@ save_df_table(
   )
 )
 
+## Table 9: Asymmetric IV by agency type - export D: IV by type asym alt neg instrument long ----
 save_df_table(
   asym_iv_by_type_pos_neg_alt_summary |>
     select(
@@ -2628,9 +2819,7 @@ save_df_table(
   "Table 9D: Alternative asymmetric IV by agency type using neg_d_eav_hat"
 )
 
-# ================================================================
-# Tables 10/11/A8/A9. Lagged OLS models
-# ================================================================
+# Tables 10/11/A8/A9. Lagged OLS models ----
 
 reg_df <- reg_df |>
   group_by(n_agency_group) |>
@@ -2690,6 +2879,7 @@ lag_all_add_rows <- add_rows_from_named(
   )
 )
 
+## Table 10: All-agency lagged OLS - export OLS all agencies lagged ----
 save_table(
   lag_all_models_v22,
   file_stub = "v22_table_10_OLS_all_agencies_lagged",
@@ -2703,6 +2893,7 @@ save_table(
   gof_omit = ".*"
 )
 
+## Table 10: All-agency lagged OLS - export OLS all agencies lagged sums ----
 save_df_table(
   bind_rows(
     lincom_sum(lag_all_ols_1, c("d_eav", "d_2_eav", "d_3_eav"), "M1"),
@@ -2822,6 +3013,7 @@ lag_school_extra <- lag_school_extra_v22(reg_df)
 
 lag_by_type_summary <- make_lag_by_type_summary(lag_type_A, lag_type_B, lag_school_extra)
 
+## Table 11: Lagged OLS by agency type - export OLS by type lagged upper bounds long ----
 save_df_table(
   lag_by_type_summary |>
     select(
@@ -2836,11 +3028,13 @@ save_df_table(
   "v22_table_11_OLS_by_type_lagged_upper_bounds_long",
   "Table 11: OLS upper-bound estimates allowing for two lags of d_eav"
 )
+## Table 11: Lagged OLS by agency type - export OLS by type lagged upper bounds ----
 save_df_table(
   make_wide_stat_table(lag_by_type_summary, A_upper_bound_with_details),
   "v22_table_11_OLS_by_type_lagged_upper_bounds",
   "Table 11: OLS upper-bound estimates allowing for two lags of d_eav"
 )
+## Table A8: Lagged OLS tests - export OLS by type lagged p values ----
 save_df_table(
   lag_by_type_summary |>
     select(
@@ -2853,6 +3047,7 @@ save_df_table(
   "v22_table_A8_OLS_by_type_lagged_p_values",
   "Table A8: Cumulative-effect and joint lag-exclusion tests"
 )
+## Table A9: Cumulative lagged OLS estimates - export OLS by type lagged point estimates ----
 save_df_table(
   lag_by_type_summary |>
     select(row, agency, lagged_magnitude = lagged_estimate_with_stars, std_error, lagged_p),
@@ -2860,6 +3055,7 @@ save_df_table(
   "Table A9: Sum of current and lagged EAV coefficients"
 )
 
+## Table A9: Cumulative lagged OLS estimates - export OLS by type lagged point estimates wide ----
 save_df_table(
   make_wide_point_table(
     lag_by_type_summary,
@@ -2871,6 +3067,7 @@ save_df_table(
 
 message("Finished corrected clustered manuscript tables. Output folder: ", output_dir)
 
+# Table 4: Agency-type slope equality test ----
 # For Table 4, estimate all agency-type slopes in one pooled regression, then test whether two slopes are equal.
 m_ols_type_compare <- feols(
   d_levy ~
