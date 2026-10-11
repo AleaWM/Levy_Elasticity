@@ -27,12 +27,12 @@ set matsize 2000
 cd "C:/Users/aleaw/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/Levy Elasticity Research/Levy_Elasticity"
 local levy_root "`c(pwd)'"
 local levy_inputs "`levy_root'/Necessary_Files"
-local levy_output "`levy_root'/results/stata_v7_4_1_old_dataset_ivreg2"
+local levy_output "`levy_root'/results/NTA_2026_tables_fromStata"
 
 cap mkdir "`levy_root'/results"
 cap mkdir "`levy_output'"
 capture log close levy_replicate
-log using "`levy_output'/replicate_run_v7_4_1_olddataset.log", text replace name(levy_replicate)
+log using "`levy_output'/NTA_2026_tables_fromStata.log", text replace name(levy_replicate)
 which esttab
 which estadd
 adopath ++ "`levy_root'/scripts/stata_vendor"
