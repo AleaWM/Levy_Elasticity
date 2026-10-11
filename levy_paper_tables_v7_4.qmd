@@ -1,6 +1,5 @@
 ---
-title: "Manuscript Materials"
-
+title: "Manuscript Material"
 ---
 
 <style>
@@ -23,7 +22,7 @@ table[id^="tinytable_"] tfoot td {
 library(htmltools)
 library(fs)
 
-table_dir <- fs::path("results", "tables_corrected_clustered_v7_4")
+table_dir <- fs::path("results", "NTA_tables_10_02")
 
 include_table <- function(file) {
   table_path <- fs::path(table_dir, file)
@@ -39,7 +38,13 @@ include_table <- function(file) {
       )
     )
   } else {
-    htmltools::includeHTML(table_path)
+    # Quarto supplies Bootstrap; standalone table imports override the site navbar.
+    table_html <- paste(readLines(table_path, warn = FALSE, encoding = "UTF-8"), collapse = "\n")
+    table_html <- gsub(
+      '<link\\b[^>]*https://cdn[.]jsdelivr[.]net/npm/bootstrap@[^>]*>',
+      "", table_html, ignore.case = TRUE, perl = TRUE
+    )
+    htmltools::HTML(table_html)
   }
 }
 ```
@@ -54,7 +59,58 @@ quarto::quarto_render("levy_paper_tables_v7_4.qmd")
 ```
 
 
-This page displays saved HTML tables; the example above is not executed during rendering. Before rerunning the R producer, resolve its asymmetric first-stage reference to `nunique_id` (setup creates `n_uniqueid`) and verify that the complete run succeeds. Existing tables do not establish successful execution of the current script.
+
+## Table 1. Distribution of annual changes in levies and EAV
+
+
+
+```{r}
+#| label: tbl-01-distribution
+#| results: asis
+include_table("v22_table_01_distribution.html")
+```
+
+## Figure 1. Observed levy changes and EAV changes
+
+Each point represents an agency-year. Both growth rates are restricted to ±20 (100 times annual log ratios). Red lines fit OLS with an intercept to the displayed observations; brown lines show equal levy and EAV growth. Each panel's N counts unique agencies (distinct agency_group values) with at least one observation remaining after trimming during 2009–2023. An agency is counted once within each panel regardless of how many years it contributes. Home-rule municipalities are also included in the municipal and all-agency panels, so counts across panels should not be added together.
+
+```{r}
+#| label: fig-01-observed-changes
+#| echo: false
+#| out-width: "100%"
+#| fig-alt: "Six panels plotting levy growth against EAV growth for all agencies, municipalities, home-rule municipalities, other districts, schools, and townships, with OLS and equal-growth reference lines."
+figure_path <- fs::path(table_dir, "v22_figure_01_observed_changes.png")
+if (fs::file_exists(figure_path)) {
+  knitr::include_graphics(as.character(figure_path))
+} else {
+  htmltools::div(
+    class = "callout callout-warning",
+    htmltools::strong("Figure 1 has not been generated."),
+    htmltools::p("Run the v7.4.1 R producer to create the saved figure before rendering this page.")
+  )
+}
+```
+
+### Figure 1 — clean presentation
+
+This version shows the same observations and fits, with equal axis scales and the explanatory text outside the image. Teal points represent agency-years, terracotta lines show OLS fits, and dashed gray diagonals mark equal levy and EAV growth. The years and sample restrictions are the same as above.
+
+```{r}
+#| label: fig-01-observed-changes-clean
+#| echo: false
+#| out-width: "100%"
+#| fig-alt: "Clean six-panel comparison of levy and EAV growth, with teal observations, terracotta fitted lines, and dashed gray equal-growth diagonals."
+figure_clean_path <- fs::path(table_dir, "v22_figure_01_observed_changes_clean.png")
+if (fs::file_exists(figure_clean_path)) {
+  knitr::include_graphics(as.character(figure_clean_path))
+} else {
+  htmltools::div(
+    class = "callout callout-warning",
+    htmltools::strong("The clean version of Figure 1 has not been generated."),
+    htmltools::p("Run the v7.4.1 R producer to create the saved figure before rendering this page.")
+  )
+}
+```
 
 ## Table 2. All-agency OLS models
 
