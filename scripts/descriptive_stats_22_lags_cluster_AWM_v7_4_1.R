@@ -1038,6 +1038,8 @@ p_equal_terms <- function(model, lhs = "neg_d_eav", rhs = "pos_d_eav") {
 }
 
 lincom_sum <- function(model, terms, label = NULL) {
+  # Extract N before tibble's model label masks the fitted model argument.
+  model_N <- model_n(model)
   out <- linear_combo_test(model, setNames(rep(1, length(terms)), terms), rhs = 0)
   estimate <- out$estimate[[1]]
   std_error <- out$std_error[[1]]
@@ -1046,7 +1048,7 @@ lincom_sum <- function(model, terms, label = NULL) {
 
   tibble(
     model = label %||% deparse(substitute(model)),
-    N = model_n(model),
+    N = model_N,
     lagged_magnitude = estimate,
     std_error = std_error,
     A_upper_bound = upper_bound,
@@ -2947,6 +2949,7 @@ make_one_lag_summary <- function(model, spec, agency) {
   )
 
   joint <- lag_joint_test(model)
+  lag_sum_p <- lag_only_p(model)
 
   cumulative |>
     transmute(
@@ -2959,6 +2962,7 @@ make_one_lag_summary <- function(model, spec, agency) {
       lagged_p,
       lagged_estimate_with_stars,
       A_upper_bound_with_details,
+      p_lags = lag_sum_p,
       joint_lag_F = unname(joint[["joint_lag_F"]]),
       joint_lag_p = unname(joint[["joint_lag_p"]])
     )
@@ -3041,11 +3045,13 @@ save_df_table(
       row,
       agency,
       cumulative_effect_p = lagged_p,
+      p_lags,
       joint_lag_F,
       joint_lag_p
     ),
   "v22_table_A8_OLS_by_type_lagged_p_values",
-  "Table A8: Cumulative-effect and joint lag-exclusion tests"
+  "Table A8: Cumulative-effect, lag-sum, and joint lag-exclusion tests",
+  notes = "cumulative_effect_p tests H0: beta_current + beta_lag1 + beta_lag2 = 0. p_lags tests H0: beta_lag1 + beta_lag2 = 0 (excludes the current coefficient). joint_lag_F and joint_lag_p test H0: beta_lag1 = beta_lag2 = 0. Tests use agency-clustered covariance estimates; the lag-sum test includes covariance between the two lag estimates."
 )
 ## Table A9: Cumulative lagged OLS estimates - export OLS by type lagged point estimates ----
 save_df_table(
