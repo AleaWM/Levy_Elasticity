@@ -1,35 +1,15 @@
 version 14.0
 set matsize 2000
-* ============================================================================
-* v7.4.1 ALIGNMENT NOTES (changes from DFM base)
-* - Standard errors are clustered by taxing agency (n_uniqueid) in every model.
-* - M1/M2/M3 retain the R fixed-effect design: all-agency M2/M3 use
-*   year-by-home-rule and agency FE; by-type M2/M3 use year and agency FE.
-* - Same-sample M5 rows are retained through e(sample) indicators.
-* - Relevance checks use the respective model FE and agency-clustered VCE.
-* - The existing generated-instrument formula is retained: eav_growth*d_eav_hat.
-* - IV uses ivreg2 with agency clustering, small, partial(), endog(), ffirst.
-*   small counts partialled-out nuisance regressors in the finite-sample correction;
-*   coefficient tests use G-1 df. Upper bounds retain b + 1.645*SE.
-* - p_exog is the clustered endogeneity C-test p-value; regF/F_neg/F_pos
-*   are excluded-instrument F tests. SW_neg/SW_pos are conditional F tests.
-*   idp and widstat report KP underidentification p and KP rk Wald F.
-* - Exactly identified models have no overidentification test. Diagnostics
-*   need not equal fixest results; no singleton/sample policy is changed here.
-* ============================================================================
-* ============================================================================
-* Levy Elasticity v7.4.1-aligned Stata update - DFM paths
-* Based on descriptive_stats_22_lags_cluster_v7_4_1_updated.do.
-* Uses the active Box paths in DFM's original do-file (location="box").
-* Analysis code and alignment fixes are retained from the updated version.
-* Equalization factors are read from DFM's original eq_factor.dta.
-* Requires estout, ivreg2 and ranktest. Run the complete do-file.
-* If missing, install once: ssc install estout; ssc install ivreg2;
-* ssc install ranktest (run each installation command separately).
-* The diagnostic helper is embedded below; no project helper file is needed.
-* Tables go to output\DFM_AWM_aligned; original output tables are preserved.
-* Reruns replace tables only within this separate subfolder.
-* ============================================================================
+* DFM manuscript tables: updated October 14, 2026.
+* Original model-by-model organization and DFM Box directories retained.
+* Run this entire file: Table 1, Figure 1, Tables 2-11 and existing appendices.
+* Put NTA_data_2026_10_02.csv in the existing "data from Micheal" folder.
+* Required packages: estout, ivreg2, ranktest (install once with ssc install).
+* All regressions use agency-clustered inference; IV uses ivreg2.
+* The nonlinear instrument is the positive part of predicted EAV growth.
+* Samples/coefficients follow the current R analysis. Stata finite-sample
+* corrections and IV diagnostics can differ from R; retain Stata's own inference.
+* Output goes to the existing DFM_AWM_aligned subfolder; reruns replace it.
 set more off
 * Check dependencies before reading inputs or replacing output.
 foreach cmd in esttab estadd ivreg2 ranktest {
@@ -68,17 +48,43 @@ program define levy_iv_diagnostics, eclass
     }
 end
 
+* Match R's complete-case and fixed-effect singleton samples.
+capture program drop levy_sample
+program define levy_sample
+    syntax varlist(numeric) [if], [FE(varlist numeric)]
+    capture drop model_sample
+    marksample touse
+    gen byte model_sample = `touse'
+    markout model_sample n_uniqueid `fe'
+    local changed=1
+    while `changed' {
+        local changed=0
+        foreach f of local fe {
+            tempvar n
+            bysort `f': egen long `n'=total(model_sample)
+            quietly count if model_sample & `n'==1
+            if r(N)>0 {
+                local changed=1
+                quietly replace model_sample=0 if `n'==1
+            }
+            drop `n'
+        }
+    }
+    sort n_agency_group year
+end
+
 clear
 cd "C:\Users\dmerrim\Box\Super Cool RA Tree Fort & Club House\LevyEAV Elasticity\elasticity of levy\data from Micheal"
-import delimited "NTA_data_2024_10_14.csv"
+import delimited "NTA_data_2026_10_02.csv", varnames(1) case(preserve)
+rename triad_name triad
 sort type
-merge m:1 agency_group using "C:\Users\dmerrim\Box\Super Cool RA Tree Fort & Club House\LevyEAV Elasticity\elasticity of levy\willamete university data\fips_all_agency_name.dta"
+merge m:1 agency_group using "C:\Users\dmerrim\Box\Super Cool RA Tree Fort & Club House\LevyEAV Elasticity\elasticity of levy\willamete university data\fips_all_agency_name.dta", keep(master match)
 list agency_group year agency_name if _merge==1
 drop if _merge==1
 sort fipsid year
 list agency_group agency_name if fipsid==.   
 drop if fipsid==.
-merge 1:1 fipsid year using "C:\Users\dmerrim\Box\Super Cool RA Tree Fort & Club House\LevyEAV Elasticity\elasticity of levy\data from census\census_data.dta", generate(merge_2)
+merge m:1 fipsid year using "C:\Users\dmerrim\Box\Super Cool RA Tree Fort & Club House\LevyEAV Elasticity\elasticity of levy\data from census\census_data.dta", generate(merge_2) keep(master match)
 tab merge_2 year, missing
 list name if merge_2==1 & year==2012
 list name year agency_group if agency_group=="School District 89" | agency_group=="School District 88" 
@@ -102,14 +108,18 @@ tab year
 *exit
 ***************************************************************************************
 * Read the equalization-factor Stata dataset used by DFM.
-merge m:1 year using "C:\Users\dmerrim\Box\Super Cool RA Tree Fort & Club House\LevyEAV Elasticity\elasticity of levy\post nta\eq_factor", generate(_merge2)
+merge m:1 year using "C:\Users\dmerrim\Box\Super Cool RA Tree Fort & Club House\LevyEAV Elasticity\elasticity of levy\post nta\eq_factor", generate(_merge2) keep(master match)
+foreach v in av total_ig_revenue enrollment eq_factor_final {
+    capture confirm numeric variable `v'
+    if _rc destring `v', replace ignore("NA,")
+}
 desc total_final_levy
 *******************************************************************
 * there are some "NA" values of total_final_levy so it is imported as a string
 ***************************************************************
 
 
-local s_vars "assess_year_av av_true rate_smooth total_final_levy"
+local s_vars "total_final_levy"
         foreach x of local s_vars {
 		capture confirm numeric variable `x'
         if !_rc {
@@ -165,17 +175,19 @@ sort n_agency_group year
 count
 drop if n_agency_group==.
 count
+isid n_agency_group year
+by n_agency_group: assert year==year[_n-1]+1 if _n>1
 xtset n_agency_group year
 **************************************************************
 * create a few variables I will need later
 ************************************************************
-gen lag_av=l1.av
-gen lag2_av=l2.av
-gen lag3_av=l3.av
+gen double lag_av=l1.av
+gen double lag2_av=l2.av
+gen double lag3_av=l3.av
 
-gen lag_eq_factor_final=l1.eq_factor_final
-gen lag2_eq_factor_final=l2.eq_factor_final
-gen lag3_eq_factor_final=l3.eq_factor_final
+gen double lag_eq_factor_final=l1.eq_factor_final
+gen double lag2_eq_factor_final=l2.eq_factor_final
+gen double lag3_eq_factor_final=l3.eq_factor_final
 **************************************************************
 **# Bookmark #2
 * back to the main program see section on lagged effects to sse 
@@ -191,6 +203,7 @@ replace t=3 if l2.reassess_year==1
 tab t reassess_year, missing
 tab year if t==0
 
+capture drop r
 gen r=0
 replace r=((f3.av/av)^(1/3))-1 if t==1 /* note f3.av is a three year lead of av*/
 replace r=((f2.av/l1.av)^(1/3))-1 if t==2
@@ -223,30 +236,38 @@ xtdescribe
 tab type
 tab year
 
-gen d_av=100*(log(av/l1.av))
-gen d_eav=100*log((av*eq_factor_final)/(l1.av*l1.eq_factor_final))
-gen d_levy=100*(log(n_total_final_levy/l1.n_total_final_levy))
+gen double d_av=100*(log(av/l1.av))
+gen double d_eav=100*log((av*eq_factor_final)/(l1.av*l1.eq_factor_final))
+gen double d_levy=100*(log(n_total_final_levy/l1.n_total_final_levy))
 
 ***************************************************************
-* checking whether reassessment year is a VALID INSTRUMENT
+* checking instrument relevance: reassessment year predicts EAV growth
 ***************************************************************
 encode(uniqueid), gen(n_uniqueid)
+egen long year_hr_a1 = group(year home_rule_ind)
+gen byte home_rule_for_fe = cond(missing(home_rule_ind),0,home_rule_ind)
+egen long year_hr = group(year home_rule_for_fe)
 tab year
-regress d_eav reassess_year i.year##i.home_rule_ind i.n_uniqueid, vce(cluster n_uniqueid)
+levy_sample d_eav reassess_year, fe(year_hr_a1 n_uniqueid)
+regress d_eav reassess_year i.year##i.home_rule_ind i.n_uniqueid if model_sample, vce(cluster n_uniqueid)
 	estimates store all_instrument
-regress d_eav reassess_year i.year i.n_uniqueid if type=="Muni", vce(cluster n_uniqueid)
+levy_sample d_eav reassess_year if type=="Muni", fe(year n_uniqueid)
+regress d_eav reassess_year i.year i.n_uniqueid if model_sample, vce(cluster n_uniqueid)
 	estimates store muni_instrument
-regress d_eav reassess_year i.year i.n_uniqueid if type=="Other", vce(cluster n_uniqueid)
+levy_sample d_eav reassess_year if type=="Other", fe(year n_uniqueid)
+regress d_eav reassess_year i.year i.n_uniqueid if model_sample, vce(cluster n_uniqueid)
 	estimates store other_instrument
-regress d_eav reassess_year i.year i.n_uniqueid if type=="School", vce(cluster n_uniqueid)
+levy_sample d_eav reassess_year if type=="School", fe(year n_uniqueid)
+regress d_eav reassess_year i.year i.n_uniqueid if model_sample, vce(cluster n_uniqueid)
 	estimates store school_instrument
-regress d_eav reassess_year i.year i.n_uniqueid if type=="Township", vce(cluster n_uniqueid)
+levy_sample d_eav reassess_year if type=="Township", fe(year n_uniqueid)
+regress d_eav reassess_year i.year i.n_uniqueid if model_sample, vce(cluster n_uniqueid)
 	estimates store township_instrument
 
 cap mkdir "C:\Users\dmerrim\Box\Cook County Property Tax Project 2023\Folder Fiefdoms\merriman scribbles\post nta\output\DFM_AWM_aligned"
 cd "C:\Users\dmerrim\Box\Cook County Property Tax Project 2023\Folder Fiefdoms\merriman scribbles\post nta\output\DFM_AWM_aligned"
 esttab all_instrument muni_instrument other_instrument school_instrument township_instrument  using "instrument validity checks", replace ///
-	cells(b(star fmt(%9.3f)) se(par)) stats(F r2 N, fmt(%4.3f %4.3f %9.0g) labels(F R-squared N)) ///
+	star(* 0.10 ** 0.05 *** 0.01) cells(b(star fmt(%9.3f)) se(par)) stats(F r2 N, fmt(%4.3f %4.3f %9.0g) labels(F R-squared N)) ///
 	varlabels(_cons Constant) ///
 	mtitles(All Muni Other School Township) ///
 	postfoot("Cook county, Illinois data from 2008 through 2023") title(Table A1: Predict assessments by reassessment year by type)
@@ -259,8 +280,8 @@ esttab all_instrument muni_instrument other_instrument school_instrument townshi
 *********************************************************************
 *control variables
 *************************************************************
-gen d_total_ig_revenue=100*(log(total_ig_revenue/l1.total_ig_revenue))
-gen d_enrollment=100*(log(enrollment/l1.enrollment))
+gen double d_total_ig_revenue=100*(log(total_ig_revenue/l1.total_ig_revenue))
+gen double d_enrollment=100*(log(enrollment/l1.enrollment))
 gen has_ig_data=1
 replace has_ig_data=0 if d_total_ig_revenue==.
 
@@ -288,19 +309,167 @@ count if d_total_ig_revenue==.
 ****************************************************************************************************************************************************************
 drop if year<=2008
 
-reg d_levy d_eav, vce(cluster n_uniqueid) 
+* Table 1 and Figure 1: generated here from the same analysis panel.
+local outdir "."
+preserve
+confirm variable agency_group year type home_rule_ind d_levy d_eav
+isid agency_group year
+keep if inrange(year,2009,2023)
+assert inlist(type,"Muni","Other","School","Township")
+tempfile panel table_data figure_audit
+save `panel'
+
+* Table 1: no +/-20 trimming and no joint complete-case restriction.
+tempname tabpost
+postfile `tabpost' str12 agency str8 variable long N double(p5 p25 p50 p75 p95) using `table_data'
+foreach group in Muni Other School Township All {
+    local condition "1"
+    if "`group'"!="All" local condition `"type=="`group'""'
+    foreach v in d_levy d_eav {
+        quietly count if `condition' & !missing(`v')
+        if r(N)==0 {
+            post `tabpost' ("`group'") ("`v'") (0) (.) (.) (.) (.) (.)
+        }
+        else {
+            local nvalues=r(N)
+            * R quantile(type=7): linear interpolation at h=1+(N-1)*p.
+            tempvar selected
+            gen byte `selected'=(`condition') & !missing(`v')
+            gsort -`selected' `v'
+            foreach p in 5 25 50 75 95 {
+                local h=1+(`nvalues'-1)*`p'/100
+                local lo=floor(`h')
+                local hi=ceil(`h')
+                local q`p'=`v'[`lo']+(`h'-`lo')*(`v'[`hi']-`v'[`lo'])
+            }
+            post `tabpost' ("`group'") ("`v'") (`nvalues') (`q5') (`q25') (`q50') (`q75') (`q95')
+            drop `selected'
+
+        }
+    }
+}
+postclose `tabpost'
+use `table_data', clear
+assert _N==10
+export delimited using `"`outdir'/v22_table_01_distribution.csv"', replace
+tempname html
+file open `html' using `"`outdir'/v22_table_01_distribution.html"', write replace text
+file write `html' "<!doctype html><html><head><meta charset='utf-8'><title>Table 1</title></head><body>" _n
+file write `html' "<h2>Table 1. Distribution of annual percentage changes in levies and EAV</h2><table border='1'><tr><th>Agency</th><th>Variable</th><th>N</th><th>p5</th><th>p25</th><th>p50</th><th>p75</th><th>p95</th></tr>" _n
+forvalues i=1/10 {
+    file write `html' "<tr><td>" (agency[`i']) "</td><td>" (variable[`i']) "</td><td>" %12.0fc (N[`i']) "</td>"
+    foreach v in p5 p25 p50 p75 p95 {
+        file write `html' "<td>" %9.1f (`v'[`i']) "</td>"
+    }
+    file write `html' "</tr>" _n
+}
+file write `html' "</table><p>2009-2023. Changes are 100 times log ratios. N counts nonmissing agency-years separately for each variable. Percentiles use the untrimmed sample and R type-7 interpolation.</p></body></html>" _n
+file close `html'
+
+* Figure 1: untrimmed complete-pair annual agency counts; trimmed plotted N.
+use `panel', clear
+tempname figpost
+postfile `figpost' str24 panel long annual_min annual_max plotted_N unique_agencies double(intercept slope) using `figure_audit'
+local graphs ""
+local clean_graphs ""
+forvalues g=1/6 {
+    local condition "1"
+    local title "All local gov't types"
+    if `g'==2 {
+        local condition `"type=="Muni""'
+        local title "Muni"
+    }
+    if `g'==3 {
+        local condition `"type=="Muni" & home_rule_ind==1"'
+        local title "Home Rule Muni"
+    }
+    if `g'>=4 {
+        local title : word `=`g'-3' of Other School Township
+        local condition `"type=="`title'""'
+    }
+    local nmin=.
+    local nmax=0
+    forvalues y=2009/2023 {
+        quietly count if (`condition') & year==`y' & !missing(d_levy,d_eav)
+        local nmin=min(`nmin',r(N))
+        local nmax=max(`nmax',r(N))
+    }
+    local plotted "(`condition') & inrange(d_eav,-20,20) & inrange(d_levy,-20,20)"
+    tempvar agency_tag
+    egen byte `agency_tag'=tag(agency_group) if `plotted'
+    quietly count if `agency_tag'==1
+    local nunique=r(N)
+    drop `agency_tag'
+    local subtitle "N = `nunique' unique agencies"
+    quietly regress d_levy d_eav if `plotted'
+    post `figpost' ("`title'") (`nmin') (`nmax') (e(N)) (`nunique') (_b[_cons]) (_b[d_eav])
+    tempname plot
+    twoway (scatter d_levy d_eav if `plotted', mcolor(blue) msize(tiny)) ///
+        (lfit d_levy d_eav if `plotted', lcolor(red) range(-20 20)) ///
+        (function y=x, range(-20 20) lcolor(olive)), ///
+        title("`title'") subtitle("`subtitle'", size(small)) ///
+        xtitle("% change EAV") ytitle("% change levy") ///
+        xlabel(-20(10)20, grid) ylabel(-20(10)20, grid) legend(off) ///
+        graphregion(color(white)) name(`plot', replace) nodraw
+    local graphs "`graphs' `plot'"
+    local clean_title "`title'"
+    if `g'==1 local clean_title "All agencies"
+    if `g'==2 local clean_title "Municipalities"
+    if `g'==3 local clean_title "Home-rule municipalities"
+    if `g'==4 local clean_title "Other districts"
+    if `g'==5 local clean_title "Schools"
+    if `g'==6 local clean_title "Townships"
+    tempname clean_plot
+    twoway (function y=x, range(-20 20) lcolor(gs10) lpattern(longdash)) ///
+        (scatter d_levy d_eav if `plotted', mcolor(teal) msize(tiny)) ///
+        (lfit d_levy d_eav if `plotted', lcolor(cranberry) range(-20 20)), ///
+        title("`clean_title'", size(medsmall)) subtitle("`subtitle'", size(small)) ///
+        xtitle("Annual change in EAV (%)", size(small)) ytitle("Annual change in levy (%)", size(small)) ///
+        xlabel(-20(10)20, grid) ylabel(-20(10)20, grid) legend(off) aspectratio(1) ///
+        graphregion(color(white)) plotregion(color(white)) name(`clean_plot', replace) nodraw
+    local clean_graphs "`clean_graphs' `clean_plot'"
+
+}
+postclose `figpost'
+tempname combined
+graph combine `graphs', cols(3) xcommon ycommon ///
+    title("Observed % change levy wrt % change in assessments" "No controls: 2009 through 2023", size(medium)) ///
+    note("Changes are 100 times log ratios. Both coordinates restricted to [-20,20]." ///
+    "Red: OLS fitted on the displayed sample. Brown: levy growth equals EAV growth." ///
+    "Above/below the diagonal: the levy/EAV ratio rises/falls. N counts unique agencies after trimming.", size(vsmall)) ///
+    graphregion(color(white)) xsize(13) ysize(8) name(`combined', replace) nodraw
+graph display `combined'
+graph export `"`outdir'/v22_figure_01_observed_changes.png"', name(`combined') width(3900) replace
+graph export `"`outdir'/v22_figure_01_observed_changes.pdf"', name(`combined') replace
+tempname clean_combined
+graph combine `clean_graphs', cols(3) xcommon ycommon graphregion(color(white)) ///
+    xsize(12) ysize(8.5) name(`clean_combined', replace) nodraw
+graph display `clean_combined'
+graph export `"`outdir'/v22_figure_01_observed_changes_clean.png"', name(`clean_combined') width(3600) replace
+graph export `"`outdir'/v22_figure_01_observed_changes_clean.pdf"', name(`clean_combined') replace
+graph drop `graphs' `clean_graphs' `combined' `clean_combined'
+
+use `figure_audit', clear
+export delimited using `"`outdir'/v22_figure_01_counts.csv"', replace
+restore
+
+
+levy_sample d_levy d_eav
+reg d_levy d_eav if model_sample, vce(cluster n_uniqueid) 
      estadd scalar upper_bound=_b[d_eav]+(1.645 * _se[d_eav])
 	estimates store all_ols_1
-reg d_levy d_eav i.year##i.home_rule_ind, vce(cluster n_uniqueid)
+levy_sample d_levy d_eav, fe(year_hr)
+reg d_levy d_eav i.year##i.home_rule_for_fe if model_sample, vce(cluster n_uniqueid)
     estadd scalar upper_bound=_b[d_eav]+(1.645 * _se[d_eav])
 	estimates store all_ols_2
-reg d_levy d_eav i.year##i.home_rule_ind i.n_uniqueid, vce(cluster n_uniqueid)
+levy_sample d_levy d_eav, fe(year_hr n_uniqueid)
+reg d_levy d_eav i.year##i.home_rule_for_fe i.n_uniqueid if model_sample, vce(cluster n_uniqueid)
    estadd scalar upper_bound=_b[d_eav]+(1.645 * _se[d_eav])
 	estimates store all_ols_3
 
 	
 	esttab all_ols_1 all_ols_2 all_ols_3 using "OLS all agencies", replace ///
-	cells(b(star fmt(%9.3f)) se(par)) stats(r2 N upper_bound, fmt(%4.3f %9.0g %9.3f) labels(R-squared)) ///
+	star(* 0.10 ** 0.05 *** 0.01) cells(b(star fmt(%9.3f)) se(par)) stats(r2 N upper_bound, fmt(%4.3f %9.0g %9.3f) labels(R-squared)) ///
 	varlabels(_cons Constant)  ///
 	mtitles(M1 M2 M3) keep(d_eav) ///
 	postfoot("Cook county, Illinois data from 2008 through 2023" "Columns 2 and 3 include two sets of year dummies. One for home rule governments" "and another for non-home rule governments, columns 3 includes unit dummies") ///
@@ -312,7 +481,8 @@ reg d_levy d_eav i.year##i.home_rule_ind i.n_uniqueid, vce(cluster n_uniqueid)
 * Do not use homoskedastic Stock-Yogo cutoffs for clustered KP/SW statistics.
 ******************************************************************************
 
-ivreg2 d_levy (d_eav = reassess_year), cluster(n_uniqueid) small partial(_cons) endog(d_eav) ffirst
+levy_sample d_levy d_eav reassess_year
+ivreg2 d_levy (d_eav = reassess_year) if model_sample, cluster(n_uniqueid) small partial(_cons) endog(d_eav) ffirst
 levy_iv_diagnostics
 	estadd scalar upper_bound=_b[d_eav]+(1.645 * _se[d_eav])
 estimates store all_iv_1
@@ -335,7 +505,8 @@ estimates store all_iv_1
 *************************************************************
 * Interpret diagnostics from the current run; historical values are not reused.
 
-ivreg2  d_levy i.year##i.home_rule_ind (d_eav = reassess_year), cluster(n_uniqueid) small partial(i.year##i.home_rule_ind) endog(d_eav) ffirst
+levy_sample d_levy d_eav reassess_year, fe(year_hr)
+ivreg2  d_levy i.year##i.home_rule_for_fe (d_eav = reassess_year) if model_sample, cluster(n_uniqueid) small partial(i.year##i.home_rule_for_fe) endog(d_eav) ffirst
 levy_iv_diagnostics
 	estadd scalar upper_bound=_b[d_eav]+(1.645 * _se[d_eav])
 	estimates store all_iv_2
@@ -344,14 +515,15 @@ levy_iv_diagnostics
 * i.n_agency_group is very similiar to i.n_uniqueid
 display "estimate r2= " (1-(992006.71/(992006.71+39904.284)))
 
-ivreg2  d_levy i.year##i.home_rule_ind  i.n_uniqueid (d_eav = reassess_year), cluster(n_uniqueid) small partial(i.year##i.home_rule_ind i.n_uniqueid) endog(d_eav) ffirst
+levy_sample d_levy d_eav reassess_year, fe(year_hr n_uniqueid)
+ivreg2  d_levy i.year##i.home_rule_for_fe  i.n_uniqueid (d_eav = reassess_year) if model_sample, cluster(n_uniqueid) small partial(i.year##i.home_rule_for_fe i.n_uniqueid) endog(d_eav) ffirst
 levy_iv_diagnostics
 	estadd scalar upper_bound=_b[d_eav]+(1.645 * _se[d_eav])
 	estimates store all_iv_3
 	
-esttab all_iv_1 all_iv_2 all_iv_3 using "IV all agencies", replace stats(N upper_bound p_exog regF, fmt(%9.0g %9.3f %9.3f %9.1f) labels(N)) cells(b(star fmt(%9.3f)) se(par)) ///
+esttab all_iv_1 all_iv_2 all_iv_3 using "IV all agencies", replace stats(N upper_bound p_exog regF, fmt(%9.0g %9.3f %9.3f %9.1f) labels(N)) star(* 0.10 ** 0.05 *** 0.01) cells(b(star fmt(%9.3f)) se(par)) ///
 keep(d_eav) postfoot("Cook county, Illinois data from 2008 through 2023" "Columns 2 and 3 include two sets of year dummies. One for home rule governments" "and another for non-home rule governments, columns 3 includes unit dummies" ///
-"p_exog is Stata's robust regression-based endogeneity-test p value." "regF is Stata's reported first-stage statistic; it need not numerically equal fixest's clustered diagnostic.") title(Table 3: All agencies IV Predict levy using d_eav)
+"p_exog is ivreg2's clustered endogeneity C-test p value." "regF is Stata's reported first-stage statistic; it need not numerically equal fixest's clustered diagnostic.") title(Table 3: All agencies IV Predict levy using d_eav)
 
 
 tab uniqueid, missing
@@ -390,17 +562,20 @@ foreach gov in `gov_types' {
 	count 
  
     * Run and store regressions
-   regress d_levy d_eav, vce(cluster n_uniqueid)
+levy_sample d_levy d_eav
+   regress d_levy d_eav if model_sample, vce(cluster n_uniqueid)
 		estadd scalar upper_bound=_b[d_eav]+(1.645 * _se[d_eav])
 		estadd scalar point_est=_b[d_eav]
 		estimates store reg1_`gov'
 		
-   regress d_levy d_eav i.year, vce(cluster n_uniqueid)
+levy_sample d_levy d_eav, fe(year)
+   regress d_levy d_eav i.year if model_sample, vce(cluster n_uniqueid)
 		estadd scalar upper_bound=_b[d_eav]+(1.645 * _se[d_eav])
 		estadd scalar point_est=_b[d_eav]
 		estimates store reg2_`gov'	
 		
-	regress d_levy d_eav i.year i.n_uniqueid , vce(cluster n_uniqueid)
+levy_sample d_levy d_eav, fe(year n_uniqueid)
+	regress d_levy d_eav i.year i.n_uniqueid if model_sample, vce(cluster n_uniqueid)
 		estadd scalar upper_bound=_b[d_eav]+(1.645 * _se[d_eav])
 		estadd scalar point_est=_b[d_eav]
 		estimates store reg3_`gov'	
@@ -429,13 +604,15 @@ foreach gov in `gov_types_B' {
     keep if type_2 == "`gov'"
 	count 
 
-regress d_levy d_eav d_total_ig_revenue i.year i.n_uniqueid, vce(cluster n_uniqueid)
+levy_sample d_levy d_eav d_total_ig_revenue, fe(year n_uniqueid)
+regress d_levy d_eav d_total_ig_revenue i.year i.n_uniqueid if model_sample, vce(cluster n_uniqueid)
 		estadd scalar upper_bound=_b[d_eav]+(1.645 * _se[d_eav])
 		estadd scalar point_est=_b[d_eav]
 		estimates store reg4_`gov'
 	gen byte used_in_reg_x = e(sample)
 
-regress d_levy d_eav i.year i.n_uniqueid if used_in_reg_x==1, vce(cluster n_uniqueid)
+levy_sample d_levy d_eav if used_in_reg_x==1, fe(year n_uniqueid)
+regress d_levy d_eav i.year i.n_uniqueid if model_sample, vce(cluster n_uniqueid)
 		estadd scalar upper_bound=_b[d_eav]+(1.645 * _se[d_eav])
 		estadd scalar point_est=_b[d_eav]
 		estimates store reg5_`gov'
@@ -443,17 +620,18 @@ regress d_levy d_eav i.year i.n_uniqueid if used_in_reg_x==1, vce(cluster n_uniq
 		restore
 }
 
-regress d_levy d_eav d_enrollment i.year i.n_uniqueid if type_2=="School", vce(cluster n_uniqueid)
+levy_sample d_levy d_eav d_enrollment if type_2=="School", fe(year n_uniqueid)
+regress d_levy d_eav d_enrollment i.year i.n_uniqueid if model_sample, vce(cluster n_uniqueid)
 estadd scalar upper_bound=_b[d_eav]+(1.645 * _se[d_eav])
 estimates store reg6_school
 
-esttab reg1_Other reg1_Township reg1_HR_muni reg1_NonHR_muni reg1_School using "ols_regressions", replace cells(none) stats(N upper_bound, fmt(%5.0fc %9.3f)) mtitles(Other Township HR_muni NonHR_muni School ) ///
+esttab reg1_Other reg1_Township reg1_HR_muni reg1_NonHR_muni reg1_School using "ols_regressions", replace star(* 0.10 ** 0.05 *** 0.01) cells(none) stats(N upper_bound, fmt(%5.0fc %9.3f)) mtitles(Other Township HR_muni NonHR_muni School ) ///
  nolines title(Table 4 By agency type: OLS upper bounds estimate of ε_b )
-esttab reg2_Other reg2_Township reg2_HR_muni reg2_NonHR_muni reg2_School  using "ols_regressions", append cells(none) stats(upper_bound, fmt(%9.3f))  nomtitles nolines nonumbers
-esttab reg3_Other reg3_Township reg3_HR_muni reg3_NonHR_muni reg3_School  using "ols_regressions", append cells(none) stats(upper_bound, fmt(%9.3f))  nomtitles nolines nonumbers
-esttab blank1 blank2 reg4_HR_muni reg4_NonHR_muni reg4_School  using "ols_regressions", append cells(none) stats(N upper_bound, fmt(%5.0fc %9.3f)) nomtitles nolines nonumbers
-esttab blank1 blank2 reg5_HR_muni reg5_NonHR_muni reg5_School  using "ols_regressions", append cells(none) stats(N upper_bound, fmt(%5.0fc %9.3f)) nomtitles nolines nonumbers
-esttab blank1 blank2 blank3 blank4 reg6_school  using "ols_regressions", append cells(none) stats(N upper_bound, fmt(%5.0fc %9.3f)) nomtitles nolines nonumbers ///
+esttab reg2_Other reg2_Township reg2_HR_muni reg2_NonHR_muni reg2_School  using "ols_regressions", append star(* 0.10 ** 0.05 *** 0.01) cells(none) stats(upper_bound, fmt(%9.3f))  nomtitles nolines nonumbers
+esttab reg3_Other reg3_Township reg3_HR_muni reg3_NonHR_muni reg3_School  using "ols_regressions", append star(* 0.10 ** 0.05 *** 0.01) cells(none) stats(upper_bound, fmt(%9.3f))  nomtitles nolines nonumbers
+esttab blank1 blank2 reg4_HR_muni reg4_NonHR_muni reg4_School  using "ols_regressions", append star(* 0.10 ** 0.05 *** 0.01) cells(none) stats(N upper_bound, fmt(%5.0fc %9.3f)) nomtitles nolines nonumbers
+esttab blank1 blank2 reg5_HR_muni reg5_NonHR_muni reg5_School  using "ols_regressions", append star(* 0.10 ** 0.05 *** 0.01) cells(none) stats(N upper_bound, fmt(%5.0fc %9.3f)) nomtitles nolines nonumbers
+esttab blank1 blank2 blank3 blank4 reg6_school  using "ols_regressions", append star(* 0.10 ** 0.05 *** 0.01) cells(none) stats(N upper_bound, fmt(%5.0fc %9.3f)) nomtitles nolines nonumbers ///
 postfoot("Cook county, Illinois data from 2008 through 2023. Cell entries record the upper bound which is the maximum value of the elasticity"  ///
 "that we fail to reject with 95 percent confidence. N is the number of non-missing observations in rows immediately below. Row 1 is based on " ///
 "an ols regression on d_eav with no controls. Rows 2 and 3 are based on OLS regressions that also include year dummies; row 3 includes unit dummies." ///
@@ -464,22 +642,22 @@ postfoot("Cook county, Illinois data from 2008 through 2023. Cell entries record
 
 
 esttab reg1_Other reg1_Township reg1_HR_muni reg1_NonHR_muni reg1_School ///
-    using "ols_regressions_appendix_point", replace cells(b(star fmt(%9.3f))) collabels("b") noobs noconstant keep(d_eav) mtitles(Other Township HR_muni NonHR_muni School) ///
+    using "ols_regressions_appendix_point", replace star(* 0.10 ** 0.05 *** 0.01) cells(b(star fmt(%9.3f))) collabels("b") noobs noconstant keep(d_eav) mtitles(Other Township HR_muni NonHR_muni School) ///
     nolines title(Table A2 By agency type: OLS point estimate of ε_b)
 
-esttab reg2_Other reg2_Township reg2_HR_muni reg2_NonHR_muni reg2_School using "ols_regressions_appendix_point", append cells(b(star fmt(%9.3f))) noobs noconstant keep(d_eav) ///
+esttab reg2_Other reg2_Township reg2_HR_muni reg2_NonHR_muni reg2_School using "ols_regressions_appendix_point", append star(* 0.10 ** 0.05 *** 0.01) cells(b(star fmt(%9.3f))) noobs noconstant keep(d_eav) ///
     nomtitles nolines nonumbers  collabels(none)
 
-esttab reg3_Other reg3_Township reg3_HR_muni reg3_NonHR_muni reg3_School using "ols_regressions_appendix_point", append cells(b(star fmt(%9.3f))) noobs noconstant keep(d_eav) ///
+esttab reg3_Other reg3_Township reg3_HR_muni reg3_NonHR_muni reg3_School using "ols_regressions_appendix_point", append star(* 0.10 ** 0.05 *** 0.01) cells(b(star fmt(%9.3f))) noobs noconstant keep(d_eav) ///
     nomtitles nolines nonumbers  collabels(none)
 
-esttab blank1 blank2 reg4_HR_muni reg4_NonHR_muni reg4_School using "ols_regressions_appendix_point", append cells(b(star fmt(%9.3f))) noobs noconstant keep(d_eav) ///
+esttab blank1 blank2 reg4_HR_muni reg4_NonHR_muni reg4_School using "ols_regressions_appendix_point", append star(* 0.10 ** 0.05 *** 0.01) cells(b(star fmt(%9.3f))) noobs noconstant keep(d_eav) ///
     nomtitles nolines nonumbers  collabels(none)
 
-esttab blank1 blank2 reg5_HR_muni reg5_NonHR_muni reg5_School using "ols_regressions_appendix_point", append cells(b(star fmt(%9.3f))) noobs noconstant keep(d_eav) ///
+esttab blank1 blank2 reg5_HR_muni reg5_NonHR_muni reg5_School using "ols_regressions_appendix_point", append star(* 0.10 ** 0.05 *** 0.01) cells(b(star fmt(%9.3f))) noobs noconstant keep(d_eav) ///
     nomtitles nolines nonumbers  collabels(none)
 
-esttab blank1 blank2 blank3 blank4 reg6_school using "ols_regressions_appendix_point", append cells(b(star fmt(%9.3f))) noobs noconstant keep(d_eav) ///
+esttab blank1 blank2 blank3 blank4 reg6_school using "ols_regressions_appendix_point", append star(* 0.10 ** 0.05 *** 0.01) cells(b(star fmt(%9.3f))) noobs noconstant keep(d_eav) ///
     nomtitles nolines nonumbers  collabels(none) ///
 postfoot("Cook county, Illinois data from 2008 through 2023. Cell entries record a point estimate of the elasticity Row 1 is based on " ///
 "an ols regression on d_eav with no controls. Rows 2 and 3 are based on OLS regressions that also include year dummies; row 3 includes unit dummies." ///
@@ -498,17 +676,20 @@ postfoot("Cook county, Illinois data from 2008 through 2023. Cell entries record
     keep if type_2 == "`gov'"
     
     * Run and store regressions
-ivreg2 d_levy (d_eav = reassess_year), cluster(n_uniqueid) small partial(_cons) endog(d_eav) ffirst
+levy_sample d_levy d_eav reassess_year
+ivreg2 d_levy (d_eav = reassess_year) if model_sample, cluster(n_uniqueid) small partial(_cons) endog(d_eav) ffirst
 levy_iv_diagnostics
 		estadd scalar upper_bound=_b[d_eav]+(1.645 * _se[d_eav])
 		estimates store ivreg7_`gov'
 		
-ivreg2 d_levy i.year (d_eav = reassess_year), cluster(n_uniqueid) small partial(i.year) endog(d_eav) ffirst
+levy_sample d_levy d_eav reassess_year, fe(year)
+ivreg2 d_levy i.year (d_eav = reassess_year) if model_sample, cluster(n_uniqueid) small partial(i.year) endog(d_eav) ffirst
 levy_iv_diagnostics
 		estadd scalar upper_bound=_b[d_eav]+(1.645 * _se[d_eav])
 		estimates store ivreg8_`gov'
 		
-ivreg2 d_levy i.year i.n_uniqueid (d_eav = reassess_year), cluster(n_uniqueid) small partial(i.year i.n_uniqueid) endog(d_eav) ffirst
+levy_sample d_levy d_eav reassess_year, fe(year n_uniqueid)
+ivreg2 d_levy i.year i.n_uniqueid (d_eav = reassess_year) if model_sample, cluster(n_uniqueid) small partial(i.year i.n_uniqueid) endog(d_eav) ffirst
 levy_iv_diagnostics
 		estadd scalar upper_bound=_b[d_eav]+(1.645 * _se[d_eav])
 		estimates store ivreg9_`gov'
@@ -529,13 +710,15 @@ foreach gov in `gov_types_B' {
     keep if type_2 == "`gov'"
 	count 
 
-ivreg2 d_levy d_total_ig_revenue i.year i.n_uniqueid (d_eav = reassess_year), cluster(n_uniqueid) small partial(i.year i.n_uniqueid) endog(d_eav) ffirst
+levy_sample d_levy d_total_ig_revenue d_eav reassess_year, fe(year n_uniqueid)
+ivreg2 d_levy d_total_ig_revenue i.year i.n_uniqueid (d_eav = reassess_year) if model_sample, cluster(n_uniqueid) small partial(i.year i.n_uniqueid) endog(d_eav) ffirst
 levy_iv_diagnostics
 		estadd scalar upper_bound=_b[d_eav]+(1.645 * _se[d_eav])
 		estimates store ivreg10_`gov'
 	gen byte used_in_reg_x = e(sample)
 
-ivreg2 d_levy i.year i.n_uniqueid (d_eav = reassess_year) if used_in_reg_x==1, cluster(n_uniqueid) small partial(i.year i.n_uniqueid) endog(d_eav) ffirst
+levy_sample d_levy d_eav reassess_year if used_in_reg_x==1, fe(year n_uniqueid)
+ivreg2 d_levy i.year i.n_uniqueid (d_eav = reassess_year) if model_sample, cluster(n_uniqueid) small partial(i.year i.n_uniqueid) endog(d_eav) ffirst
 levy_iv_diagnostics
 		estadd scalar upper_bound=_b[d_eav]+(1.645 * _se[d_eav])
 		estimates store ivreg11_`gov'
@@ -543,18 +726,19 @@ levy_iv_diagnostics
 		restore
 }
 
-ivreg2 d_levy d_enrollment i.year i.n_uniqueid (d_eav = reassess_year) if type_2=="School", cluster(n_uniqueid) small partial(i.year i.n_uniqueid) endog(d_eav) ffirst
+levy_sample d_levy d_enrollment d_eav reassess_year if type_2=="School", fe(year n_uniqueid)
+ivreg2 d_levy d_enrollment i.year i.n_uniqueid (d_eav = reassess_year) if model_sample, cluster(n_uniqueid) small partial(i.year i.n_uniqueid) endog(d_eav) ffirst
 levy_iv_diagnostics
 	estadd scalar upper_bound=_b[d_eav]+(1.645 * _se[d_eav])
 	estimates store ivreg12_School
 	
-esttab ivreg7_Other ivreg7_Township ivreg7_HR_muni ivreg7_NonHR_muni ivreg7_School using "iv_regressions", replace cells(none) stats(N upper_bound, fmt(%5.0fc %9.3f)) mtitles(Other Township HR_muni NonHR_muni School ) ///
+esttab ivreg7_Other ivreg7_Township ivreg7_HR_muni ivreg7_NonHR_muni ivreg7_School using "iv_regressions", replace star(* 0.10 ** 0.05 *** 0.01) cells(none) stats(N upper_bound, fmt(%5.0fc %9.3f)) mtitles(Other Township HR_muni NonHR_muni School ) ///
 nolines title(Table 5: By agency type: IV upper bounds estimate of ε_b)
-esttab ivreg8_Other ivreg8_Township ivreg8_HR_muni ivreg8_NonHR_muni ivreg8_School  using "iv_regressions", append cells(none) stats(upper_bound, fmt(%9.3f))  nomtitles nolines nonumbers
-esttab ivreg9_Other ivreg9_Township ivreg9_HR_muni ivreg9_NonHR_muni ivreg9_School  using "iv_regressions", append cells(none) stats(upper_bound, fmt(%9.3f))  nomtitles nolines nonumbers
-esttab blank1 blank2 ivreg10_HR_muni ivreg10_NonHR_muni ivreg10_School  using "iv_regressions", append cells(none) stats(N upper_bound, fmt(%5.0fc %9.3f)) nomtitles nolines nonumbers
-esttab blank1 blank2 ivreg11_HR_muni ivreg11_NonHR_muni ivreg11_School  using "iv_regressions", append cells(none) stats(N upper_bound, fmt(%5.0fc %9.3f)) nomtitles nolines nonumbers 
-esttab blank1 blank2 blank3 blank4 ivreg12_School  using "iv_regressions", append cells(none) stats(N upper_bound, fmt(%5.0fc %9.3f)) nomtitles nolines nonumbers ///
+esttab ivreg8_Other ivreg8_Township ivreg8_HR_muni ivreg8_NonHR_muni ivreg8_School  using "iv_regressions", append star(* 0.10 ** 0.05 *** 0.01) cells(none) stats(upper_bound, fmt(%9.3f))  nomtitles nolines nonumbers
+esttab ivreg9_Other ivreg9_Township ivreg9_HR_muni ivreg9_NonHR_muni ivreg9_School  using "iv_regressions", append star(* 0.10 ** 0.05 *** 0.01) cells(none) stats(upper_bound, fmt(%9.3f))  nomtitles nolines nonumbers
+esttab blank1 blank2 ivreg10_HR_muni ivreg10_NonHR_muni ivreg10_School  using "iv_regressions", append star(* 0.10 ** 0.05 *** 0.01) cells(none) stats(N upper_bound, fmt(%5.0fc %9.3f)) nomtitles nolines nonumbers
+esttab blank1 blank2 ivreg11_HR_muni ivreg11_NonHR_muni ivreg11_School  using "iv_regressions", append star(* 0.10 ** 0.05 *** 0.01) cells(none) stats(N upper_bound, fmt(%5.0fc %9.3f)) nomtitles nolines nonumbers 
+esttab blank1 blank2 blank3 blank4 ivreg12_School  using "iv_regressions", append star(* 0.10 ** 0.05 *** 0.01) cells(none) stats(N upper_bound, fmt(%5.0fc %9.3f)) nomtitles nolines nonumbers ///
 postfoot("Cook county, Illinois data from 2008 through 2023. Cell entries record the upper bound which is the maximum value of the elasticity"  ///
 "that we fail to reject with 95 percent confidence. N is the number of non-missing observations in rows immediately below. Row 1 is based on " ///
 "an iv regression on d_eav with no controls. Rows 2 and 3 are based on iv regressions that also include year dummies; row 3 includes unit dummies." ///
@@ -568,17 +752,17 @@ postfoot("Cook county, Illinois data from 2008 through 2023. Cell entries record
 ******************************************************************************
 
 esttab ivreg7_Other ivreg7_Township ivreg7_HR_muni ivreg7_NonHR_muni ivreg7_School ///
-    using "iv_regressions_appendix_point", replace cells(b(star fmt(%9.3f))) collabels("b") noobs noconstant keep(d_eav) mtitles(Other Township HR_muni NonHR_muni School) ///
+    using "iv_regressions_appendix_point", replace star(* 0.10 ** 0.05 *** 0.01) cells(b(star fmt(%9.3f))) collabels("b") noobs noconstant keep(d_eav) mtitles(Other Township HR_muni NonHR_muni School) ///
     nolines title(Table A3 By agency type: IV point estimate of ε_b)
-esttab ivreg8_Other ivreg8_Township ivreg8_HR_muni ivreg8_NonHR_muni ivreg8_School using "iv_regressions_appendix_point", append cells(b(star fmt(%9.3f)) se(par fmt(%9.3f))) noobs noconstant keep(d_eav) ///
+esttab ivreg8_Other ivreg8_Township ivreg8_HR_muni ivreg8_NonHR_muni ivreg8_School using "iv_regressions_appendix_point", append star(* 0.10 ** 0.05 *** 0.01) cells(b(star fmt(%9.3f)) se(par fmt(%9.3f))) noobs noconstant keep(d_eav) ///
     nomtitles nolines nonumbers  collabels(none)
-esttab ivreg9_Other ivreg9_Township ivreg9_HR_muni ivreg9_NonHR_muni ivreg9_School using "iv_regressions_appendix_point", append cells(b(star fmt(%9.3f)) se(par fmt(%9.3f))) noobs noconstant keep(d_eav) ///
+esttab ivreg9_Other ivreg9_Township ivreg9_HR_muni ivreg9_NonHR_muni ivreg9_School using "iv_regressions_appendix_point", append star(* 0.10 ** 0.05 *** 0.01) cells(b(star fmt(%9.3f)) se(par fmt(%9.3f))) noobs noconstant keep(d_eav) ///
     nomtitles nolines nonumbers  collabels(none)
-esttab blank1 blank2 ivreg10_HR_muni ivreg10_NonHR_muni ivreg10_School using "iv_regressions_appendix_point", append cells(b(star fmt(%9.3f)) se(par fmt(%9.3f))) noobs noconstant keep(d_eav) ///
+esttab blank1 blank2 ivreg10_HR_muni ivreg10_NonHR_muni ivreg10_School using "iv_regressions_appendix_point", append star(* 0.10 ** 0.05 *** 0.01) cells(b(star fmt(%9.3f)) se(par fmt(%9.3f))) noobs noconstant keep(d_eav) ///
     nomtitles nolines nonumbers  collabels(none)
-esttab blank1 blank2 ivreg11_HR_muni ivreg11_NonHR_muni ivreg11_School using "iv_regressions_appendix_point", append cells(b(star fmt(%9.3f)) se(par fmt(%9.3f))) noobs noconstant keep(d_eav) ///
+esttab blank1 blank2 ivreg11_HR_muni ivreg11_NonHR_muni ivreg11_School using "iv_regressions_appendix_point", append star(* 0.10 ** 0.05 *** 0.01) cells(b(star fmt(%9.3f)) se(par fmt(%9.3f))) noobs noconstant keep(d_eav) ///
     nomtitles nolines nonumbers  collabels(none)
-esttab blank1 blank2 blank3 blank4 ivreg12_School using "iv_regressions_appendix_point", append cells(b(star fmt(%9.3f)) se(par fmt(%9.3f))) noobs noconstant keep(d_eav) ///
+esttab blank1 blank2 blank3 blank4 ivreg12_School using "iv_regressions_appendix_point", append star(* 0.10 ** 0.05 *** 0.01) cells(b(star fmt(%9.3f)) se(par fmt(%9.3f))) noobs noconstant keep(d_eav) ///
     nomtitles nolines nonumbers  collabels(none) ///
 postfoot("Cook county, Illinois data from 2008 through 2023. Cell entries record a point estimate of the elasticity Row 1 is based on " ///
 "an iv regression on d_eav with no controls. Rows 2 and 3 are based on iv regressions that also include year dummies; row 3 includes unit dummies." ///
@@ -595,12 +779,15 @@ postfoot("Cook county, Illinois data from 2008 through 2023. Cell entries record
 gen eav_growth=0
 replace eav_growth=1 if d_eav>0
 tab eav_growth
-gen pos_d_eav=d_eav*eav_growth
-gen neg_d_eav=d_eav*(1-eav_growth)
+gen double pos_d_eav=d_eav*eav_growth
+gen double neg_d_eav=d_eav*(1-eav_growth)
 
-reg d_levy d_eav , vce(cluster n_uniqueid)
-reg d_levy d_eav pos_d_eav, vce(cluster n_uniqueid)
-reg d_levy pos_d_eav neg_d_eav, vce(cluster n_uniqueid)
+levy_sample d_levy d_eav
+reg d_levy d_eav if model_sample, vce(cluster n_uniqueid)
+levy_sample d_levy d_eav pos_d_eav
+reg d_levy d_eav pos_d_eav if model_sample, vce(cluster n_uniqueid)
+levy_sample d_levy pos_d_eav neg_d_eav
+reg d_levy pos_d_eav neg_d_eav if model_sample, vce(cluster n_uniqueid)
 
 test pos_d_eav=neg_d_eav
 
@@ -612,24 +799,27 @@ test pos_d_eav=neg_d_eav
 drop if year<=2008
 
 
-reg d_levy pos_d_eav neg_d_eav, vce(cluster n_uniqueid)
+levy_sample d_levy pos_d_eav neg_d_eav
+reg d_levy pos_d_eav neg_d_eav if model_sample, vce(cluster n_uniqueid)
 		test neg_d_eav = pos_d_eav
 		estadd scalar upper_bound=_b[pos_d_eav]+(1.645 * _se[pos_d_eav])
 		estadd scalar p_equal = r(p)
 		estimates store reg_13
-reg d_levy pos_d_eav neg_d_eav i.year##i.home_rule_ind, vce(cluster n_uniqueid)
+levy_sample d_levy pos_d_eav neg_d_eav, fe(year_hr)
+reg d_levy pos_d_eav neg_d_eav i.year##i.home_rule_for_fe if model_sample, vce(cluster n_uniqueid)
 		test neg_d_eav = pos_d_eav
 		estadd scalar upper_bound=_b[pos_d_eav]+(1.645 * _se[pos_d_eav])
 		estadd scalar p_equal = r(p)
 		estimates store reg_14
-reg d_levy pos_d_eav neg_d_eav i.year##i.home_rule_ind i.n_uniqueid, vce(cluster n_uniqueid)
+levy_sample d_levy pos_d_eav neg_d_eav, fe(year_hr n_uniqueid)
+reg d_levy pos_d_eav neg_d_eav i.year##i.home_rule_for_fe i.n_uniqueid if model_sample, vce(cluster n_uniqueid)
 		test neg_d_eav = pos_d_eav
 		estadd scalar upper_bound=_b[pos_d_eav]+(1.645 * _se[pos_d_eav])
 		estadd scalar p_equal = r(p)
 		estimates store reg_15
 
 	esttab reg_13 reg_14 reg_15 using "OLS all agencies_asym", replace ///
-	cells(b(star fmt(%9.3f)) se(par)) stats(r2 N p_equal upper_bound, fmt(%4.3f %9.0fc %4.3f %9.3f) labels(R-squared)) ///
+	star(* 0.10 ** 0.05 *** 0.01) cells(b(star fmt(%9.3f)) se(par)) stats(r2 N p_equal upper_bound, fmt(%4.3f %9.0fc %4.3f %9.3f) labels(R-squared)) ///
 	mtitles(M1 M2 M3) keep(pos_d_eav neg_d_eav) ///
 	postfoot("Cook county, Illinois data from 2008 through 2023. Columns 2 and 3 include two sets of year dummies. One for home rule governments" "and another for non-home rule governments, columns 3 includes unit dummies" ///
 	"p_equal is the p value for the hypothesis that the elasticity of the levy with respect" "to d_eav is symmetric. Upper bound is the maximum value of the elasticity" ///
@@ -648,14 +838,17 @@ reg d_levy pos_d_eav neg_d_eav i.year##i.home_rule_ind i.n_uniqueid, vce(cluster
 * of predicted d_eav. DFM base used pos_d_eav*d_eav_hat; do not restore it.
 * This auxiliary first stage follows R's year-FE construction. Its fitted
 * values are used only to form the generated instrument; see diagnostic note.
-reg d_eav reassess_year i.year, vce(cluster n_uniqueid)
-predict double d_eav_hat, xb
-gen pos_d_eav_hat = eav_growth*d_eav_hat
+levy_sample d_eav reassess_year, fe(year)
+reg d_eav reassess_year i.year if model_sample, vce(cluster n_uniqueid)
+predict double d_eav_hat if e(sample), xb
+gen double pos_d_eav_hat = cond(d_eav_hat>0,d_eav_hat,0) if !missing(d_eav_hat)
 
-ivreg2 d_levy (d_eav pos_d_eav= reassess_year pos_d_eav_hat) , cluster(n_uniqueid) small partial(_cons) endog(d_eav pos_d_eav) ffirst
+levy_sample d_levy d_eav pos_d_eav reassess_year pos_d_eav_hat
+ivreg2 d_levy (d_eav pos_d_eav= reassess_year pos_d_eav_hat) if model_sample, cluster(n_uniqueid) small partial(_cons) endog(d_eav pos_d_eav) ffirst
 levy_iv_diagnostics
 
-ivreg2 d_levy (neg_d_eav pos_d_eav= reassess_year pos_d_eav_hat), cluster(n_uniqueid) small partial(_cons) endog(neg_d_eav pos_d_eav) ffirst
+levy_sample d_levy neg_d_eav pos_d_eav reassess_year pos_d_eav_hat
+ivreg2 d_levy (neg_d_eav pos_d_eav= reassess_year pos_d_eav_hat) if model_sample, cluster(n_uniqueid) small partial(_cons) endog(neg_d_eav pos_d_eav) ffirst
 levy_iv_diagnostics
  		test neg_d_eav = pos_d_eav
 		estadd scalar upper_bound=_b[pos_d_eav]+(1.645 * _se[pos_d_eav])
@@ -668,13 +861,15 @@ levy_iv_diagnostics
 *  these tell me about the strength of my instruments
 ***************************************************************
 
-ivreg2  d_levy i.year##i.home_rule_ind  (neg_d_eav pos_d_eav= reassess_year pos_d_eav_hat), cluster(n_uniqueid) small partial(i.year##i.home_rule_ind) endog(neg_d_eav pos_d_eav) ffirst
+levy_sample d_levy neg_d_eav pos_d_eav reassess_year pos_d_eav_hat, fe(year_hr)
+ivreg2  d_levy i.year##i.home_rule_for_fe  (neg_d_eav pos_d_eav= reassess_year pos_d_eav_hat) if model_sample, cluster(n_uniqueid) small partial(i.year##i.home_rule_for_fe) endog(neg_d_eav pos_d_eav) ffirst
 levy_iv_diagnostics
 		test neg_d_eav = pos_d_eav
 		estadd scalar upper_bound=_b[pos_d_eav]+(1.645 * _se[pos_d_eav])
 		estadd scalar p_equal = r(p)
 		estimates store reg_17
-ivreg2  d_levy  i.year##i.home_rule_ind  i.n_uniqueid (neg_d_eav pos_d_eav= reassess_year pos_d_eav_hat), cluster(n_uniqueid) small partial(i.year##i.home_rule_ind i.n_uniqueid) endog(neg_d_eav pos_d_eav) ffirst
+levy_sample d_levy neg_d_eav pos_d_eav reassess_year pos_d_eav_hat, fe(year_hr n_uniqueid)
+ivreg2  d_levy  i.year##i.home_rule_for_fe  i.n_uniqueid (neg_d_eav pos_d_eav= reassess_year pos_d_eav_hat) if model_sample, cluster(n_uniqueid) small partial(i.year##i.home_rule_for_fe i.n_uniqueid) endog(neg_d_eav pos_d_eav) ffirst
 levy_iv_diagnostics
 		test neg_d_eav = pos_d_eav
 		estadd scalar upper_bound=_b[pos_d_eav]+(1.645 * _se[pos_d_eav])
@@ -682,10 +877,10 @@ levy_iv_diagnostics
 		estimates store reg_18
 		
 esttab reg_16 reg_17 reg_18 using "iv all agencies_asym", replace ///
-	cells(b(star fmt(%9.3f)) se(par)) stats(F_neg F_pos N p_equal upper_bound, fmt(%9.1fc  %9.1fc  %5.0fc %9.3f %9.3f))  ///
+	star(* 0.10 ** 0.05 *** 0.01) cells(b(star fmt(%9.3f)) se(par)) stats(F_neg F_pos SW_neg SW_pos N p_exog p_equal upper_bound, fmt(%9.1fc %9.1fc %9.1fc %9.1fc %5.0fc %9.3f %9.3f %9.3f))  ///
 	mtitles(M1 M2 M3) keep(pos_d_eav neg_d_eav) order(pos_d_eav neg_d_eav) ///
 	postfoot("Cook county, Illinois data from 2008 through 2023. Columns 2 and 3 include two sets of year dummies. One for home rule governments" "and another for non-home rule governments, columns 3 includes unit dummies" ///
-	"F_pos and F_neg are first stage F statistics for corresponding d_eav variables. p_equal is the p value for the hypothesis that the elasticity" ///
+	"SW_neg and SW_pos are conditional first-stage F statistics; p_exog is the clustered endogeneity C-test." "F_pos and F_neg are first stage F statistics for corresponding d_eav variables. p_equal is the p value for the hypothesis that the elasticity" ///
 	"of the levy with respect to d_eav is symmetric. Upper bound is the maximum value of the elasticity that we fail to reject with 95 percent confidence") ///
 	title(Table 7: All agencies IV Predict levy using d_eav allowing for asymmetry)
 
@@ -729,14 +924,16 @@ foreach gov in `gov_types_B' {
     keep if type_2 == "`gov'"
 	count 
 
-regress d_levy neg_d_eav pos_d_eav d_total_ig_revenue i.year i.n_uniqueid, vce(cluster n_uniqueid)
+levy_sample d_levy neg_d_eav pos_d_eav d_total_ig_revenue, fe(year n_uniqueid)
+regress d_levy neg_d_eav pos_d_eav d_total_ig_revenue i.year i.n_uniqueid if model_sample, vce(cluster n_uniqueid)
 	test neg_d_eav = pos_d_eav
 		estadd scalar p_equal = r(p)
 		estadd scalar upper_bound=_b[pos_d_eav]+(1.645 * _se[pos_d_eav])
 		estimates store reg22_`gov'
 		gen byte used_in_reg_x = e(sample)
 
-regress d_levy neg_d_eav pos_d_eav i.year i.n_uniqueid if used_in_reg_x==1, vce(cluster n_uniqueid)
+levy_sample d_levy neg_d_eav pos_d_eav if used_in_reg_x==1, fe(year n_uniqueid)
+regress d_levy neg_d_eav pos_d_eav i.year i.n_uniqueid if model_sample, vce(cluster n_uniqueid)
 		test neg_d_eav = pos_d_eav
 		estadd scalar p_equal = r(p)
 		estadd scalar upper_bound=_b[pos_d_eav]+(1.645 * _se[pos_d_eav])
@@ -745,20 +942,21 @@ regress d_levy neg_d_eav pos_d_eav i.year i.n_uniqueid if used_in_reg_x==1, vce(
 		restore
 }
 
-regress d_levy neg_d_eav pos_d_eav d_enrollment i.year i.n_uniqueid if type_2=="School", vce(cluster n_uniqueid)
+levy_sample d_levy neg_d_eav pos_d_eav d_enrollment if type_2=="School", fe(year n_uniqueid)
+regress d_levy neg_d_eav pos_d_eav d_enrollment i.year i.n_uniqueid if model_sample, vce(cluster n_uniqueid)
 		test neg_d_eav = pos_d_eav
 		estadd scalar p_equal = r(p)
 		estadd scalar upper_bound=_b[pos_d_eav]+(1.645 * _se[pos_d_eav])
 		estimates store reg24_School
 
 * Create table with all results
-esttab reg19_Other reg19_Township reg19_HR_muni reg19_NonHR_muni reg19_School using "asym_ols_regressions", replace cells(none) stats(N upper_bound, fmt(%5.0fc %9.3f)) mtitles(Other Township HR_muni NonHR_muni School ) ///
+esttab reg19_Other reg19_Township reg19_HR_muni reg19_NonHR_muni reg19_School using "asym_ols_regressions", replace star(* 0.10 ** 0.05 *** 0.01) cells(none) stats(N upper_bound, fmt(%5.0fc %9.3f)) mtitles(Other Township HR_muni NonHR_muni School ) ///
  nolines title(Table 8: By agency type: OLS upper bounds estimate of ε_b allowing for asymmetry)
-esttab reg20_Other reg20_Township reg20_HR_muni reg20_NonHR_muni reg20_School using "asym_ols_regressions", append cells(none) stats(upper_bound, fmt(%9.3f)) nomtitles nolines nonumbers
-esttab reg21_Other reg21_Township reg21_HR_muni reg21_NonHR_muni reg21_School using "asym_ols_regressions", append cells(none) stats(upper_bound, fmt(%9.3f)) nomtitles nolines nonumbers 
-esttab blank1 blank2 reg22_HR_muni reg22_NonHR_muni reg22_School  using "asym_ols_regressions", append cells(none) stats(N upper_bound, fmt(%5.0fc %9.3f)) nomtitles nolines nonumbers
-esttab blank1 blank2 reg23_HR_muni reg23_NonHR_muni reg23_School  using "asym_ols_regressions", append cells(none) stats(upper_bound, fmt(%9.3f)) nomtitles nolines nonumbers
-esttab blank1 blank2 blank3 blank4 reg24_School  using "asym_ols_regressions", append cells(none) stats(upper_bound, fmt(%9.3f)) nomtitles nolines nonumbers ///
+esttab reg20_Other reg20_Township reg20_HR_muni reg20_NonHR_muni reg20_School using "asym_ols_regressions", append star(* 0.10 ** 0.05 *** 0.01) cells(none) stats(upper_bound, fmt(%9.3f)) nomtitles nolines nonumbers
+esttab reg21_Other reg21_Township reg21_HR_muni reg21_NonHR_muni reg21_School using "asym_ols_regressions", append star(* 0.10 ** 0.05 *** 0.01) cells(none) stats(upper_bound, fmt(%9.3f)) nomtitles nolines nonumbers 
+esttab blank1 blank2 reg22_HR_muni reg22_NonHR_muni reg22_School  using "asym_ols_regressions", append star(* 0.10 ** 0.05 *** 0.01) cells(none) stats(N upper_bound, fmt(%5.0fc %9.3f)) nomtitles nolines nonumbers
+esttab blank1 blank2 reg23_HR_muni reg23_NonHR_muni reg23_School  using "asym_ols_regressions", append star(* 0.10 ** 0.05 *** 0.01) cells(none) stats(upper_bound, fmt(%9.3f)) nomtitles nolines nonumbers
+esttab blank1 blank2 blank3 blank4 reg24_School  using "asym_ols_regressions", append star(* 0.10 ** 0.05 *** 0.01) cells(none) stats(upper_bound, fmt(%9.3f)) nomtitles nolines nonumbers ///
 postfoot("Cook county, Illinois data from 2008 through 2023. Cell entries record the upper bound which is the maximum value of the elasticity"  ///
 "that we fail to reject with 95 percent confidence. All estimates are derived from OLS regressions that allow for asymmetric reactions to postive and negative changes in EAV." ///
 "Row 1 is based on an ols regression with no controls. Rows 2 and 3 also include year dummies; row 3 includes unit dummies." ///
@@ -767,13 +965,13 @@ postfoot("Cook county, Illinois data from 2008 through 2023. Cell entries record
 "Row 6 is based on an ols regression using the same sample as in rows 4 and 5 and including the percentage change in enrollments as well as year and unit dummies" )
 
 * Create table A4
-esttab reg19_Other reg19_Township reg19_HR_muni reg19_NonHR_muni reg19_School using "asym_ols_regressions_appendix", replace cells(none) stats(p_equal, fmt(%9.3f)) mtitles(Other Township HR_muni NonHR_muni School ) ///
+esttab reg19_Other reg19_Township reg19_HR_muni reg19_NonHR_muni reg19_School using "asym_ols_regressions_appendix", replace star(* 0.10 ** 0.05 *** 0.01) cells(none) stats(p_equal, fmt(%9.3f)) mtitles(Other Township HR_muni NonHR_muni School ) ///
 nolines title(Table A4: P_stats for OLS tests of symmetry)
-esttab reg20_Other reg20_Township reg20_HR_muni reg20_NonHR_muni reg20_School using "asym_ols_regressions_appendix", append cells(none) stats(p_equal, fmt(%9.3f)) nomtitles nolines nonumbers
-esttab reg21_Other reg21_Township reg21_HR_muni reg21_NonHR_muni reg21_School using "asym_ols_regressions_appendix", append cells(none) stats(p_equal, fmt(%9.3f)) nomtitles nolines nonumbers 
-esttab blank1 blank2 reg22_HR_muni reg22_NonHR_muni reg22_School  using "asym_ols_regressions_appendix", append cells(none) stats(p_equal, fmt(%9.3f)) nomtitles nolines nonumbers
-esttab blank1 blank2 reg23_HR_muni reg23_NonHR_muni reg23_School  using "asym_ols_regressions_appendix", append cells(none) stats(p_equal, fmt(%9.3f)) nomtitles nolines nonumbers
-esttab blank1 blank2 blank3 blank4 reg24_School  using "asym_ols_regressions_appendix", append cells(none) stats(p_equal, fmt(%9.3f)) nomtitles nolines nonumbers ///
+esttab reg20_Other reg20_Township reg20_HR_muni reg20_NonHR_muni reg20_School using "asym_ols_regressions_appendix", append star(* 0.10 ** 0.05 *** 0.01) cells(none) stats(p_equal, fmt(%9.3f)) nomtitles nolines nonumbers
+esttab reg21_Other reg21_Township reg21_HR_muni reg21_NonHR_muni reg21_School using "asym_ols_regressions_appendix", append star(* 0.10 ** 0.05 *** 0.01) cells(none) stats(p_equal, fmt(%9.3f)) nomtitles nolines nonumbers 
+esttab blank1 blank2 reg22_HR_muni reg22_NonHR_muni reg22_School  using "asym_ols_regressions_appendix", append star(* 0.10 ** 0.05 *** 0.01) cells(none) stats(p_equal, fmt(%9.3f)) nomtitles nolines nonumbers
+esttab blank1 blank2 reg23_HR_muni reg23_NonHR_muni reg23_School  using "asym_ols_regressions_appendix", append star(* 0.10 ** 0.05 *** 0.01) cells(none) stats(p_equal, fmt(%9.3f)) nomtitles nolines nonumbers
+esttab blank1 blank2 blank3 blank4 reg24_School  using "asym_ols_regressions_appendix", append star(* 0.10 ** 0.05 *** 0.01) cells(none) stats(p_equal, fmt(%9.3f)) nomtitles nolines nonumbers ///
 postfoot("Cook county, Illinois data from 2008 through 2023. Cell entries record the p value for the hypothesis that the elasticity of the levy with respect to d_eav is symmetric"  ///
 "All estimates are derived from the same OLS regressions used to estimate the upper bounds reported in Table 8." )
 
@@ -781,22 +979,22 @@ postfoot("Cook county, Illinois data from 2008 through 2023. Cell entries record
 * create  table A5  
 ******************************************************************************
 esttab reg19_Other reg19_Township reg19_HR_muni reg19_NonHR_muni reg19_School ///
-    using "ols_asym_regressions_appendix_point", replace cells(b(star fmt(%9.3f))) collabels("b") noobs noconstant keep(pos_d_eav) mtitles(Other Township HR_muni NonHR_muni School) ///
-    nolines title(Table A5 By agency type: OLS point estimate of ε_b for EAV increases)
+    using "ols_asym_regressions_appendix_point", replace star(* 0.10 ** 0.05 *** 0.01) cells(b(star fmt(%9.3f))) collabels("b") noobs noconstant keep(pos_d_eav neg_d_eav) mtitles(Other Township HR_muni NonHR_muni School) ///
+    nolines title(Table A5 By agency type: OLS point estimate of ε_b for EAV increases and decreases)
 
-esttab reg20_Other reg20_Township reg20_HR_muni reg20_NonHR_muni reg20_School using "ols_asym_regressions_appendix_point", append cells(b(star fmt(%9.3f))) noobs noconstant keep(pos_d_eav) ///
+esttab reg20_Other reg20_Township reg20_HR_muni reg20_NonHR_muni reg20_School using "ols_asym_regressions_appendix_point", append star(* 0.10 ** 0.05 *** 0.01) cells(b(star fmt(%9.3f))) noobs noconstant keep(pos_d_eav neg_d_eav) ///
     nomtitles nolines nonumbers  collabels(none)
 
-esttab reg21_Other reg21_Township reg21_HR_muni reg21_NonHR_muni reg21_School using "ols_asym_regressions_appendix_point", append cells(b(star fmt(%9.3f))) noobs noconstant keep(pos_d_eav) ///
+esttab reg21_Other reg21_Township reg21_HR_muni reg21_NonHR_muni reg21_School using "ols_asym_regressions_appendix_point", append star(* 0.10 ** 0.05 *** 0.01) cells(b(star fmt(%9.3f))) noobs noconstant keep(pos_d_eav neg_d_eav) ///
     nomtitles nolines nonumbers  collabels(none)
 
-esttab blank1 blank2 reg22_HR_muni reg22_NonHR_muni reg22_School using "ols_asym_regressions_appendix_point", append cells(b(star fmt(%9.3f))) noobs noconstant keep(pos_d_eav) ///
+esttab blank1 blank2 reg22_HR_muni reg22_NonHR_muni reg22_School using "ols_asym_regressions_appendix_point", append star(* 0.10 ** 0.05 *** 0.01) cells(b(star fmt(%9.3f))) noobs noconstant keep(pos_d_eav neg_d_eav) ///
     nomtitles nolines nonumbers  collabels(none)
 
-esttab blank1 blank2 reg23_HR_muni reg23_NonHR_muni reg23_School using "ols_asym_regressions_appendix_point", append cells(b(star fmt(%9.3f))) noobs noconstant keep(pos_d_eav) ///
+esttab blank1 blank2 reg23_HR_muni reg23_NonHR_muni reg23_School using "ols_asym_regressions_appendix_point", append star(* 0.10 ** 0.05 *** 0.01) cells(b(star fmt(%9.3f))) noobs noconstant keep(pos_d_eav neg_d_eav) ///
     nomtitles nolines nonumbers  collabels(none)
 
-esttab blank1 blank2 blank3 blank4 reg24_School using "ols_asym_regressions_appendix_point", append cells(b(star fmt(%9.3f))) noobs noconstant keep(pos_d_eav) ///
+esttab blank1 blank2 blank3 blank4 reg24_School using "ols_asym_regressions_appendix_point", append star(* 0.10 ** 0.05 *** 0.01) cells(b(star fmt(%9.3f))) noobs noconstant keep(pos_d_eav neg_d_eav) ///
     nomtitles nolines nonumbers  collabels(none) ///
 postfoot("Cook county, Illinois data from 2008 through 2023. All estimates are derived from OLS regressions that allow for asymmetric reactions to postive and negative changes in EAV."  ///
 "Cell entries record a point estimate of the elasticity Row 1 is based on an ols regression  d_eav with no controls. Rows 2 and 3 are based on OLS regressions" ///
@@ -821,21 +1019,24 @@ local gov_types "Other Township HR_muni NonHR_muni School "
     keep if type_2 == "`gov'"
     
     * Run and store regressions
-ivreg2 d_levy (neg_d_eav pos_d_eav= reassess_year pos_d_eav_hat) , cluster(n_uniqueid) small partial(_cons) endog(neg_d_eav pos_d_eav) ffirst
+levy_sample d_levy neg_d_eav pos_d_eav reassess_year pos_d_eav_hat
+ivreg2 d_levy (neg_d_eav pos_d_eav= reassess_year pos_d_eav_hat) if model_sample, cluster(n_uniqueid) small partial(_cons) endog(neg_d_eav pos_d_eav) ffirst
 levy_iv_diagnostics
 			test neg_d_eav = pos_d_eav
 			estadd scalar p_equal = r(p)
 			estadd scalar upper_bound=_b[pos_d_eav]+(1.645 * _se[pos_d_eav])
 	estimates store ivreg25_`gov'
 
-ivreg2 d_levy i.year (neg_d_eav pos_d_eav= reassess_year pos_d_eav_hat) , cluster(n_uniqueid) small partial(i.year) endog(neg_d_eav pos_d_eav) ffirst
+levy_sample d_levy neg_d_eav pos_d_eav reassess_year pos_d_eav_hat, fe(year)
+ivreg2 d_levy i.year (neg_d_eav pos_d_eav= reassess_year pos_d_eav_hat) if model_sample, cluster(n_uniqueid) small partial(i.year) endog(neg_d_eav pos_d_eav) ffirst
 levy_iv_diagnostics
 			test neg_d_eav = pos_d_eav
 			estadd scalar p_equal = r(p)
 			estadd scalar upper_bound=_b[pos_d_eav]+(1.645 * _se[pos_d_eav])
 	estimates store ivreg26_`gov'
 
-ivreg2 d_levy i.year i.n_uniqueid (neg_d_eav pos_d_eav= reassess_year pos_d_eav_hat) , cluster(n_uniqueid) small partial(i.year i.n_uniqueid) endog(neg_d_eav pos_d_eav) ffirst
+levy_sample d_levy neg_d_eav pos_d_eav reassess_year pos_d_eav_hat, fe(year n_uniqueid)
+ivreg2 d_levy i.year i.n_uniqueid (neg_d_eav pos_d_eav= reassess_year pos_d_eav_hat) if model_sample, cluster(n_uniqueid) small partial(i.year i.n_uniqueid) endog(neg_d_eav pos_d_eav) ffirst
 levy_iv_diagnostics
 			test neg_d_eav = pos_d_eav
 			estadd scalar p_equal = r(p)
@@ -855,7 +1056,8 @@ foreach gov in `gov_types_B' {
     keep if type_2 == "`gov'"
 	count 
 
-ivreg2 d_levy d_total_ig_revenue i.year i.n_uniqueid (neg_d_eav pos_d_eav= reassess_year pos_d_eav_hat) , cluster(n_uniqueid) small partial(i.year i.n_uniqueid) endog(neg_d_eav pos_d_eav) ffirst
+levy_sample d_levy d_total_ig_revenue neg_d_eav pos_d_eav reassess_year pos_d_eav_hat, fe(year n_uniqueid)
+ivreg2 d_levy d_total_ig_revenue i.year i.n_uniqueid (neg_d_eav pos_d_eav= reassess_year pos_d_eav_hat) if model_sample, cluster(n_uniqueid) small partial(i.year i.n_uniqueid) endog(neg_d_eav pos_d_eav) ffirst
 levy_iv_diagnostics
 	test neg_d_eav = pos_d_eav
 		estadd scalar p_equal = r(p)
@@ -863,7 +1065,8 @@ levy_iv_diagnostics
 		estimates store ivreg28_`gov'
 		gen byte used_in_reg_x = e(sample)
 
-ivreg2 d_levy i.year i.n_uniqueid (neg_d_eav pos_d_eav= reassess_year pos_d_eav_hat) if used_in_reg_x==1 , cluster(n_uniqueid) small partial(i.year i.n_uniqueid) endog(neg_d_eav pos_d_eav) ffirst
+levy_sample d_levy neg_d_eav pos_d_eav reassess_year pos_d_eav_hat if used_in_reg_x==1, fe(year n_uniqueid)
+ivreg2 d_levy i.year i.n_uniqueid (neg_d_eav pos_d_eav= reassess_year pos_d_eav_hat) if model_sample, cluster(n_uniqueid) small partial(i.year i.n_uniqueid) endog(neg_d_eav pos_d_eav) ffirst
 levy_iv_diagnostics
 		test neg_d_eav = pos_d_eav
 		estadd scalar p_equal = r(p)
@@ -875,7 +1078,8 @@ levy_iv_diagnostics
 
 
 
-ivreg2 d_levy d_enrollment i.year i.n_uniqueid  (neg_d_eav pos_d_eav= reassess_year pos_d_eav_hat) if type_2=="School", cluster(n_uniqueid) small partial(i.year i.n_uniqueid) endog(neg_d_eav pos_d_eav) ffirst
+levy_sample d_levy d_enrollment neg_d_eav pos_d_eav reassess_year pos_d_eav_hat if type_2=="School", fe(year n_uniqueid)
+ivreg2 d_levy d_enrollment i.year i.n_uniqueid  (neg_d_eav pos_d_eav= reassess_year pos_d_eav_hat) if model_sample, cluster(n_uniqueid) small partial(i.year i.n_uniqueid) endog(neg_d_eav pos_d_eav) ffirst
 levy_iv_diagnostics
 		test neg_d_eav = pos_d_eav 
 		estadd scalar p_equal = r(p)
@@ -883,13 +1087,13 @@ levy_iv_diagnostics
 		estimates store ivreg30_School
 
 
-esttab ivreg25_* using "iv_by_agency_asym", replace mtitles(Other Township HR_muni NonHR_muni School ) cells(none) stats(N upper_bound, fmt(%5.0fc %9.3f))  nolines nonumbers ///
+esttab ivreg25_* using "iv_by_agency_asym", replace mtitles(Other Township HR_muni NonHR_muni School ) star(* 0.10 ** 0.05 *** 0.01) cells(none) stats(N upper_bound, fmt(%5.0fc %9.3f))  nolines nonumbers ///
  title(Table 9: By agency type: IV upper bounds estimate of ε_b allowing for asymmetry)
-esttab ivreg26_* using "iv_by_agency_asym", append  cells(none) stats(upper_bound, fmt(%9.3f))  nomtitles nolines nonumbers
-esttab ivreg27_* using "iv_by_agency_asym", append  cells(none) stats(upper_bound, fmt(%9.3f))  nomtitles nolines nonumbers
-esttab blank1 blank2 ivreg28_HR_muni ivreg28_NonHR_muni ivreg28_School  using "iv_by_agency_asym", append cells(none) stats(N upper_bound, fmt(%5.0fc %9.3f)) nomtitles nolines nonumbers
-esttab blank1 blank2 ivreg29_HR_muni ivreg29_NonHR_muni ivreg29_School  using "iv_by_agency_asym", append cells(none) stats(upper_bound, fmt(%9.3f)) nomtitles nolines nonumbers 
-esttab blank1 blank2 blank3 blank4 ivreg30_School  using "iv_by_agency_asym", append cells(none) stats(upper_bound, fmt(%9.3f)) nomtitles nolines nonumbers ///
+esttab ivreg26_* using "iv_by_agency_asym", append  star(* 0.10 ** 0.05 *** 0.01) cells(none) stats(upper_bound, fmt(%9.3f))  nomtitles nolines nonumbers
+esttab ivreg27_* using "iv_by_agency_asym", append  star(* 0.10 ** 0.05 *** 0.01) cells(none) stats(upper_bound, fmt(%9.3f))  nomtitles nolines nonumbers
+esttab blank1 blank2 ivreg28_HR_muni ivreg28_NonHR_muni ivreg28_School  using "iv_by_agency_asym", append star(* 0.10 ** 0.05 *** 0.01) cells(none) stats(N upper_bound, fmt(%5.0fc %9.3f)) nomtitles nolines nonumbers
+esttab blank1 blank2 ivreg29_HR_muni ivreg29_NonHR_muni ivreg29_School  using "iv_by_agency_asym", append star(* 0.10 ** 0.05 *** 0.01) cells(none) stats(upper_bound, fmt(%9.3f)) nomtitles nolines nonumbers 
+esttab blank1 blank2 blank3 blank4 ivreg30_School  using "iv_by_agency_asym", append star(* 0.10 ** 0.05 *** 0.01) cells(none) stats(upper_bound, fmt(%9.3f)) nomtitles nolines nonumbers ///
 postfoot("Cook county, Illinois data from 2008 through 2023. Cell entries in rows labeled N record the number of observations used in the rows" /// 
 "immediately below. Cell entries in rows labeled upper bound record the maximum value of the elasticity that we fail to reject with" ///
 "95 percent confidence. All estimates are derived from IV regressions that allow for asymmetric reactions to postive and negative changes in EAV." ///
@@ -899,30 +1103,30 @@ postfoot("Cook county, Illinois data from 2008 through 2023. Cell entries in row
 "Row 6 is based on an IV regression using the same sample as in rows 4 and 5 and including the percentage change in enrollments as well as year and unit dummies" )
 
 *Create Table A6
-esttab ivreg25_* using "iv_by_agency_asym_appendix", replace cells(none) stats(p_equal, fmt(%9.3f)) mtitles(Other Township HR_muni NonHR_muni School ) nolines ///
+esttab ivreg25_* using "iv_by_agency_asym_appendix", replace star(* 0.10 ** 0.05 *** 0.01) cells(none) stats(p_equal, fmt(%9.3f)) mtitles(Other Township HR_muni NonHR_muni School ) nolines ///
   title(Table A6: P_stats for IV tests of symmetry)
-esttab ivreg26_* using "iv_by_agency_asym_appendix", append cells(none) stats(p_equal, fmt(%9.3f)) nomtitles nolines nonumbers
-esttab ivreg27_* using "iv_by_agency_asym_appendix", append cells(none) stats(p_equal, fmt(%9.3f)) nomtitles nolines nonumbers
-esttab blank1 blank2 ivreg28_HR_muni ivreg28_NonHR_muni ivreg28_School  using "iv_by_agency_asym_appendix", append cells(none) stats(N p_equal, fmt(%5.0fc %9.3f)) nomtitles nolines nonumbers
-esttab blank1 blank2 ivreg29_HR_muni ivreg29_NonHR_muni ivreg29_School  using "iv_by_agency_asym_appendix", append cells(none) stats(p_equal, fmt(%9.3f)) nomtitles nolines nonumbers 
-esttab blank1 blank2 blank3 blank4 ivreg30_School  using "iv_by_agency_asym_appendix", append cells(none) stats(p_equal, fmt(%9.3f)) nomtitles nolines nonumbers ///
+esttab ivreg26_* using "iv_by_agency_asym_appendix", append star(* 0.10 ** 0.05 *** 0.01) cells(none) stats(p_equal, fmt(%9.3f)) nomtitles nolines nonumbers
+esttab ivreg27_* using "iv_by_agency_asym_appendix", append star(* 0.10 ** 0.05 *** 0.01) cells(none) stats(p_equal, fmt(%9.3f)) nomtitles nolines nonumbers
+esttab blank1 blank2 ivreg28_HR_muni ivreg28_NonHR_muni ivreg28_School  using "iv_by_agency_asym_appendix", append star(* 0.10 ** 0.05 *** 0.01) cells(none) stats(N p_equal, fmt(%5.0fc %9.3f)) nomtitles nolines nonumbers
+esttab blank1 blank2 ivreg29_HR_muni ivreg29_NonHR_muni ivreg29_School  using "iv_by_agency_asym_appendix", append star(* 0.10 ** 0.05 *** 0.01) cells(none) stats(p_equal, fmt(%9.3f)) nomtitles nolines nonumbers 
+esttab blank1 blank2 blank3 blank4 ivreg30_School  using "iv_by_agency_asym_appendix", append star(* 0.10 ** 0.05 *** 0.01) cells(none) stats(p_equal, fmt(%9.3f)) nomtitles nolines nonumbers ///
 postfoot("Cook county, Illinois data from 2008 through 2023. Cell entries record the p value for the hypothesis that the elasticity of the levy with respect to d_eav is symmetric"  ///
 "All estimates are derived from the same IV regressions used to estimate the upper bounds reported in Table 9." )
 
 
 *Create Table A7
 esttab ivreg25_Other ivreg25_Township ivreg25_HR_muni ivreg25_NonHR_muni ivreg25_School ///
-    using "iv_async_regressions_appendix_point", replace cells(b(star fmt(%9.3f))) collabels("b") noobs noconstant keep(pos_d_eav) mtitles(Other Township HR_muni NonHR_muni School) ///
-    nolines title(Table A7 By agency type: IV point estimate of ε_b for EAV increases)
-esttab ivreg26_Other ivreg26_Township ivreg26_HR_muni ivreg26_NonHR_muni ivreg26_School using "iv_async_regressions_appendix_point", append cells(b(star fmt(%9.3f)) se(par fmt(%9.3f))) noobs noconstant keep(pos_d_eav) ///
+    using "iv_async_regressions_appendix_point", replace star(* 0.10 ** 0.05 *** 0.01) cells(b(star fmt(%9.3f))) collabels("b") noobs noconstant keep(pos_d_eav neg_d_eav) mtitles(Other Township HR_muni NonHR_muni School) ///
+    nolines title(Table A7 By agency type: IV point estimate of ε_b for EAV increases and decreases)
+esttab ivreg26_Other ivreg26_Township ivreg26_HR_muni ivreg26_NonHR_muni ivreg26_School using "iv_async_regressions_appendix_point", append star(* 0.10 ** 0.05 *** 0.01) cells(b(star fmt(%9.3f)) se(par fmt(%9.3f))) noobs noconstant keep(pos_d_eav neg_d_eav) ///
     nomtitles nolines nonumbers  collabels(none)
-esttab ivreg27_Other ivreg27_Township ivreg27_HR_muni ivreg27_NonHR_muni ivreg27_School using "iv_async_regressions_appendix_point", append cells(b(star fmt(%9.3f)) se(par fmt(%9.3f))) noobs noconstant keep(pos_d_eav) ///
+esttab ivreg27_Other ivreg27_Township ivreg27_HR_muni ivreg27_NonHR_muni ivreg27_School using "iv_async_regressions_appendix_point", append star(* 0.10 ** 0.05 *** 0.01) cells(b(star fmt(%9.3f)) se(par fmt(%9.3f))) noobs noconstant keep(pos_d_eav neg_d_eav) ///
     nomtitles nolines nonumbers  collabels(none)
-esttab blank1 blank2 ivreg28_HR_muni ivreg28_NonHR_muni ivreg28_School using "iv_async_regressions_appendix_point", append cells(b(star fmt(%9.3f)) se(par fmt(%9.3f))) noobs noconstant keep(pos_d_eav) ///
+esttab blank1 blank2 ivreg28_HR_muni ivreg28_NonHR_muni ivreg28_School using "iv_async_regressions_appendix_point", append star(* 0.10 ** 0.05 *** 0.01) cells(b(star fmt(%9.3f)) se(par fmt(%9.3f))) noobs noconstant keep(pos_d_eav neg_d_eav) ///
     nomtitles nolines nonumbers  collabels(none)
-esttab blank1 blank2 ivreg29_HR_muni ivreg29_NonHR_muni ivreg29_School using "iv_async_regressions_appendix_point", append cells(b(star fmt(%9.3f)) se(par fmt(%9.3f))) noobs noconstant keep(pos_d_eav) ///
+esttab blank1 blank2 ivreg29_HR_muni ivreg29_NonHR_muni ivreg29_School using "iv_async_regressions_appendix_point", append star(* 0.10 ** 0.05 *** 0.01) cells(b(star fmt(%9.3f)) se(par fmt(%9.3f))) noobs noconstant keep(pos_d_eav neg_d_eav) ///
     nomtitles nolines nonumbers  collabels(none)
-esttab blank1 blank2 blank3 blank4 ivreg30_School using "iv_async_regressions_appendix_point", append cells(b(star fmt(%9.3f)) se(par fmt(%9.3f))) noobs noconstant keep(pos_d_eav) ///
+esttab blank1 blank2 blank3 blank4 ivreg30_School using "iv_async_regressions_appendix_point", append star(* 0.10 ** 0.05 *** 0.01) cells(b(star fmt(%9.3f)) se(par fmt(%9.3f))) noobs noconstant keep(pos_d_eav neg_d_eav) ///
     nomtitles nolines nonumbers  collabels(none) ///
 postfoot("Cook county, Illinois data from 2008 through 2023. Cell entries record a point estimate of the elasticity Row 1 is based on " ///
 "an IV regression on d_eav with no controls. Rows 2 and 3 are based on IV regressions that also include year dummies; row 3 includes unit dummies." ///
@@ -937,41 +1141,56 @@ postfoot("Cook county, Illinois data from 2008 through 2023. Cell entries record
 * study response to lagged changes in EAV
 *****************************************************************************
 
-gen d_2_eav=100*log((lag_av*lag_eq_factor_final)/(lag2_av*lag2_eq_factor_final))
-gen d_3_eav=100*log((lag2_av*lag2_eq_factor_final)/(lag3_av*lag3_eq_factor_final))
+gen double d_2_eav=100*log((lag_av*lag_eq_factor_final)/(lag2_av*lag2_eq_factor_final))
+gen double d_3_eav=100*log((lag2_av*lag2_eq_factor_final)/(lag3_av*lag3_eq_factor_final))
 
-reg  d_levy d_eav d_2_eav d_3_eav, vce(cluster n_uniqueid) 
+levy_sample d_levy d_eav d_2_eav d_3_eav
+reg  d_levy d_eav d_2_eav d_3_eav if model_sample, vce(cluster n_uniqueid) 
 						test d_2_eav+d_3_eav=0
 						estadd scalar p_stat = r(p)
+                        test d_2_eav d_3_eav
+                        estadd scalar joint_lag_F = r(F)
+                        estadd scalar joint_lag_p = r(p)
 					lincom d_eav+d_2_eav+d_3_eav
 						estadd scalar lagged_magnitude=r(estimate)
+                        estadd scalar cumulative_p=r(p)
 						estadd scalar A_upper_bound=r(estimate)+(1.645 * r(se))
 						
 estimates store lag_all_ols_31
 
 					
-reg d_levy d_eav d_2_eav d_3_eav i.year##i.home_rule_ind, vce(cluster n_uniqueid)
+levy_sample d_levy d_eav d_2_eav d_3_eav, fe(year_hr)
+reg d_levy d_eav d_2_eav d_3_eav i.year##i.home_rule_for_fe if model_sample, vce(cluster n_uniqueid)
 						test d_2_eav+d_3_eav=0
 						estadd scalar p_stat = r(p)
+                        test d_2_eav d_3_eav
+                        estadd scalar joint_lag_F = r(F)
+                        estadd scalar joint_lag_p = r(p)
 					lincom d_eav+d_2_eav+d_3_eav
 						estadd scalar lagged_magnitude=r(estimate)
+                        estadd scalar cumulative_p=r(p)
 						estadd scalar A_upper_bound=r(estimate)+(1.645 * r(se))
 estimates store lag_all_ols_32
 
-reg d_levy d_eav d_2_eav d_3_eav i.year##i.home_rule_ind i.n_uniqueid, vce(cluster n_uniqueid)
+levy_sample d_levy d_eav d_2_eav d_3_eav, fe(year_hr n_uniqueid)
+reg d_levy d_eav d_2_eav d_3_eav i.year##i.home_rule_for_fe i.n_uniqueid if model_sample, vce(cluster n_uniqueid)
 						test d_2_eav+d_3_eav=0
 						estadd scalar p_stat = r(p)
+                        test d_2_eav d_3_eav
+                        estadd scalar joint_lag_F = r(F)
+                        estadd scalar joint_lag_p = r(p)
 					lincom d_eav+d_2_eav+d_3_eav
 						estadd scalar lagged_magnitude=r(estimate)
+                        estadd scalar cumulative_p=r(p)
 						estadd scalar A_upper_bound=r(estimate)+(1.645 * r(se))
 estimates store lag_all_ols_33
 
 esttab lag_all_ols_31 lag_all_ols_32 lag_all_ols_33 using "OLS all agencies_lag", replace ///
-	cells(b(star fmt(%9.3f)) se(par)) stats(r2 N p_stat lagged_magnitude A_upper_bound, fmt(%4.3f %5.0fc %9.3f %9.3f) labels(R-squared N p_stat point_est upper_bound)) ///
+	star(* 0.10 ** 0.05 *** 0.01) cells(b(star fmt(%9.3f)) se(par)) stats(r2 N p_stat joint_lag_F joint_lag_p lagged_magnitude cumulative_p A_upper_bound, fmt(%4.3f %5.0fc %9.3f %9.3f %9.3f %9.3f %9.3f %9.3f) labels(R-squared N p_lags joint_lag_F joint_lag_p cumulative_effect cumulative_p upper_bound)) ///
 	mtitles(M1 M2 M3) keep(d_eav d_2_eav d_3_eav) ///
 	postfoot("Cook county, Illinois data from 2008 through 2023. Columns 2 and 3 include two sets of year dummies. One for home rule governments" ///
 	"and another for non-home rule governments, columns 3 includes unit dummies" ///
-	"p_no_lag is the p value for the hypothesis that lags of the elasticity of the levy with" "respect to d_eav sum to zero. point_est is the sum of coefficient on d_eav and lags." ///
+	"joint_lag_p tests whether BOTH lag coefficients are zero. The cumulative effect and upper bound include current EAV and both lags." "p_lags is the p value for the hypothesis that lags of the elasticity of the levy with" "respect to d_eav sum to zero. point_est is the sum of coefficient on d_eav and lags." ///
 	"Upper bound is the maximum value of the summed elasticity that we fail to reject with 95 percent confidence") ///
 	title(Table 10: All agencies OLS Predict levy using d_eav allowing for two lags of d_eav)
 	
@@ -991,29 +1210,44 @@ foreach gov in `gov_types' {
     preserve
     keep if type_2 == "`gov'"
 	
-regress d_levy d_eav d_2_eav d_3_eav , vce(cluster n_uniqueid)
+levy_sample d_levy d_eav d_2_eav d_3_eav
+regress d_levy d_eav d_2_eav d_3_eav if model_sample, vce(cluster n_uniqueid)
 						test d_2_eav+d_3_eav=0
 						estadd scalar p_stat = r(p)
+                        test d_2_eav d_3_eav
+                        estadd scalar joint_lag_F = r(F)
+                        estadd scalar joint_lag_p = r(p)
 					lincom d_eav+d_2_eav+d_3_eav
 						estadd scalar lagged_magnitude=r(estimate)
+                        estadd scalar cumulative_p=r(p)
 						estadd scalar lagged_p = r(p)
 						estadd scalar A_upper_bound=r(estimate)+(1.645 * r(se))
 estimates store lag_all_ols_34_`gov'
 
-regress d_levy d_eav d_2_eav d_3_eav  i.year , vce(cluster n_uniqueid)
+levy_sample d_levy d_eav d_2_eav d_3_eav, fe(year)
+regress d_levy d_eav d_2_eav d_3_eav  i.year if model_sample, vce(cluster n_uniqueid)
 						test d_2_eav+d_3_eav=0
 						estadd scalar p_stat = r(p)
+                        test d_2_eav d_3_eav
+                        estadd scalar joint_lag_F = r(F)
+                        estadd scalar joint_lag_p = r(p)
 					lincom d_eav+d_2_eav+d_3_eav
 						estadd scalar lagged_magnitude=r(estimate)
+                        estadd scalar cumulative_p=r(p)
 						estadd scalar lagged_p = r(p)
 						estadd scalar A_upper_bound=r(estimate)+(1.645 * r(se))
 estimates store lag_all_ols_35_`gov'
 		
-regress d_levy d_eav d_2_eav d_3_eav  i.year i.n_uniqueid, vce(cluster n_uniqueid)
+levy_sample d_levy d_eav d_2_eav d_3_eav, fe(year n_uniqueid)
+regress d_levy d_eav d_2_eav d_3_eav  i.year i.n_uniqueid if model_sample, vce(cluster n_uniqueid)
 						test d_2_eav+d_3_eav=0
 						estadd scalar p_stat = r(p)
+                        test d_2_eav d_3_eav
+                        estadd scalar joint_lag_F = r(F)
+                        estadd scalar joint_lag_p = r(p)
 					lincom d_eav+d_2_eav+d_3_eav
 						estadd scalar lagged_magnitude=r(estimate)
+                        estadd scalar cumulative_p=r(p)
 						estadd scalar lagged_p = r(p)
 						estadd scalar A_upper_bound=r(estimate)+(1.645 * r(se))
 estimates store lag_all_ols_36_`gov'
@@ -1031,22 +1265,32 @@ foreach gov in `gov_types_B' {
     keep if type_2 == "`gov'"
 	count 
 
-regress d_levy d_eav d_2_eav d_3_eav d_total_ig_revenue i.year i.n_uniqueid, vce(cluster n_uniqueid)
+levy_sample d_levy d_eav d_2_eav d_3_eav d_total_ig_revenue, fe(year n_uniqueid)
+regress d_levy d_eav d_2_eav d_3_eav d_total_ig_revenue i.year i.n_uniqueid if model_sample, vce(cluster n_uniqueid)
 					test d_2_eav+d_3_eav=0
 					estadd scalar p_stat = r(p)
+                        test d_2_eav d_3_eav
+                        estadd scalar joint_lag_F = r(F)
+                        estadd scalar joint_lag_p = r(p)
 					lincom d_eav+d_2_eav+d_3_eav
 					estadd scalar lagged_magnitude=r(estimate)
+                        estadd scalar cumulative_p=r(p)
 					estadd scalar lagged_p = r(p)
 					estadd scalar A_upper_bound=r(estimate)+(1.645 * r(se))
 		
 		estimates store lag_all_ols_37_`gov'
 		gen byte used_in_reg_x = e(sample)
 
-regress d_levy d_eav d_2_eav d_3_eav i.year i.n_uniqueid if used_in_reg_x==1, vce(cluster n_uniqueid)
+levy_sample d_levy d_eav d_2_eav d_3_eav if used_in_reg_x==1, fe(year n_uniqueid)
+regress d_levy d_eav d_2_eav d_3_eav i.year i.n_uniqueid if model_sample, vce(cluster n_uniqueid)
 					test d_2_eav+d_3_eav=0
 					estadd scalar p_stat = r(p)
+                        test d_2_eav d_3_eav
+                        estadd scalar joint_lag_F = r(F)
+                        estadd scalar joint_lag_p = r(p)
 					lincom d_eav+d_2_eav+d_3_eav
 					estadd scalar lagged_magnitude=r(estimate)
+                        estadd scalar cumulative_p=r(p)
 					estadd scalar lagged_p = r(p)
 					estadd scalar A_upper_bound=r(estimate)+(1.645 * r(se))
 				estimates store lag_all_ols_38_`gov'
@@ -1054,26 +1298,31 @@ regress d_levy d_eav d_2_eav d_3_eav i.year i.n_uniqueid if used_in_reg_x==1, vc
 		restore
 }
 
-regress d_levy d_eav d_2_eav d_3_eav  d_enrollment i.year i.n_uniqueid if type_2=="School", vce(cluster n_uniqueid)
+levy_sample d_levy d_eav d_2_eav d_3_eav d_enrollment if type_2=="School", fe(year n_uniqueid)
+regress d_levy d_eav d_2_eav d_3_eav  d_enrollment i.year i.n_uniqueid if model_sample, vce(cluster n_uniqueid)
 					test d_2_eav+d_3_eav=0
 					estadd scalar p_stat = r(p)
+                        test d_2_eav d_3_eav
+                        estadd scalar joint_lag_F = r(F)
+                        estadd scalar joint_lag_p = r(p)
 					lincom d_eav+d_2_eav+d_3_eav
 					estadd scalar lagged_magnitude=r(estimate)
+                        estadd scalar cumulative_p=r(p)
 					estadd scalar lagged_p = r(p)
 					estadd scalar A_upper_bound=r(estimate)+(1.645 * r(se))
 				estimates store lag_all_ols_39_School
 
 * Create table with all results
-esttab lag_all_ols_34_Other lag_all_ols_34_Township lag_all_ols_34_HR_muni lag_all_ols_34_NonHR_muni lag_all_ols_34_School using "by_type_lag_ols_regressions", replace cells(none)  ///
+esttab lag_all_ols_34_Other lag_all_ols_34_Township lag_all_ols_34_HR_muni lag_all_ols_34_NonHR_muni lag_all_ols_34_School using "by_type_lag_ols_regressions", replace star(* 0.10 ** 0.05 *** 0.01) cells(none)  ///
 		stats(N A_upper_bound, fmt(%5.0fc %9.3f) labels(N upper_bound)) mtitles(Other Township HR_muni NonHR_muni School ) nolines /// 
 		title(Table 11: By agency type: OLS upper bounds estimate of ε_b allowing for two lags of d_eav)
-esttab lag_all_ols_35_Other lag_all_ols_35_Township lag_all_ols_35_HR_muni lag_all_ols_35_NonHR_muni lag_all_ols_35_School using "by_type_lag_ols_regressions", append cells(none) stats(A_upper_bound, fmt(%9.3f) labels(upper_bound)) ///
+esttab lag_all_ols_35_Other lag_all_ols_35_Township lag_all_ols_35_HR_muni lag_all_ols_35_NonHR_muni lag_all_ols_35_School using "by_type_lag_ols_regressions", append star(* 0.10 ** 0.05 *** 0.01) cells(none) stats(A_upper_bound, fmt(%9.3f) labels(upper_bound)) ///
 	nomtitles nolines nonumbers 
-esttab lag_all_ols_36_Other lag_all_ols_36_Township lag_all_ols_36_HR_muni lag_all_ols_36_NonHR_muni lag_all_ols_36_School using "by_type_lag_ols_regressions", append cells(none) stats(A_upper_bound, fmt(%9.3f) labels(upper_bound)) /// 
+esttab lag_all_ols_36_Other lag_all_ols_36_Township lag_all_ols_36_HR_muni lag_all_ols_36_NonHR_muni lag_all_ols_36_School using "by_type_lag_ols_regressions", append star(* 0.10 ** 0.05 *** 0.01) cells(none) stats(A_upper_bound, fmt(%9.3f) labels(upper_bound)) /// 
 	nomtitles nolines nonumbers
-esttab blank1 blank2 lag_all_ols_37_HR_muni lag_all_ols_37_NonHR_muni lag_all_ols_37_School  using "by_type_lag_ols_regressions", append cells(none) stats(N A_upper_bound, fmt(%5.0fc %9.3f) labels(N upper_bound)) nomtitles nolines nonumbers 
-esttab blank1 blank2 lag_all_ols_38_HR_muni lag_all_ols_38_NonHR_muni lag_all_ols_38_School  using "by_type_lag_ols_regressions", append cells(none) stats(A_upper_bound, fmt(%9.3f) labels(upper_bound)) nomtitles nolines nonumbers 
-esttab blank1 blank2 blank3 blank4 lag_all_ols_39_School  using "by_type_lag_ols_regressions", append cells(none) stats(A_upper_bound, fmt(%9.3f) labels(upper_bound)) nomtitles nolines nonumbers ///
+esttab blank1 blank2 lag_all_ols_37_HR_muni lag_all_ols_37_NonHR_muni lag_all_ols_37_School  using "by_type_lag_ols_regressions", append star(* 0.10 ** 0.05 *** 0.01) cells(none) stats(N A_upper_bound, fmt(%5.0fc %9.3f) labels(N upper_bound)) nomtitles nolines nonumbers 
+esttab blank1 blank2 lag_all_ols_38_HR_muni lag_all_ols_38_NonHR_muni lag_all_ols_38_School  using "by_type_lag_ols_regressions", append star(* 0.10 ** 0.05 *** 0.01) cells(none) stats(A_upper_bound, fmt(%9.3f) labels(upper_bound)) nomtitles nolines nonumbers 
+esttab blank1 blank2 blank3 blank4 lag_all_ols_39_School  using "by_type_lag_ols_regressions", append star(* 0.10 ** 0.05 *** 0.01) cells(none) stats(A_upper_bound, fmt(%9.3f) labels(upper_bound)) nomtitles nolines nonumbers ///
 postfoot("Cook county, Illinois data from 2008 through 2023. Cell entries record the upper bound which is the maximum value of the elasticity"  ///
 "that we fail to reject with 95 percent confidence. All estimates are derived from OLS regressions that allow for contemporaneous and two lags of changes in EAV." ///
 "Row 1 is based on an ols regression with no controls. Rows 2 and 3 also include year dummies; row 3 includes unit dummies." ///
@@ -1083,15 +1332,15 @@ postfoot("Cook county, Illinois data from 2008 through 2023. Cell entries record
 
 
 * Create table A8
-esttab lag_all_ols_34_Other lag_all_ols_34_Township lag_all_ols_34_HR_muni lag_all_ols_34_NonHR_muni lag_all_ols_34_School using "by_type_lag_ols_regressions_appendix", replace cells(none)  ///
+esttab lag_all_ols_34_Other lag_all_ols_34_Township lag_all_ols_34_HR_muni lag_all_ols_34_NonHR_muni lag_all_ols_34_School using "by_type_lag_ols_regressions_appendix", replace star(* 0.10 ** 0.05 *** 0.01) cells(none)  ///
 		stats(p_stat, fmt(%9.3f) labels(p_stat)) mtitles(Other Township HR_muni NonHR_muni School ) nolines title(Table A8: P_stats for OLS tests of lagged effects)
-esttab lag_all_ols_35_Other lag_all_ols_35_Township lag_all_ols_35_HR_muni lag_all_ols_35_NonHR_muni lag_all_ols_35_School using "by_type_lag_ols_regressions_appendix", append cells(none) stats(p_stat, fmt(%9.3f) labels(p_stat)) ///
+esttab lag_all_ols_35_Other lag_all_ols_35_Township lag_all_ols_35_HR_muni lag_all_ols_35_NonHR_muni lag_all_ols_35_School using "by_type_lag_ols_regressions_appendix", append star(* 0.10 ** 0.05 *** 0.01) cells(none) stats(p_stat, fmt(%9.3f) labels(p_stat)) ///
 	nomtitles nolines nonumbers 
-esttab lag_all_ols_36_Other lag_all_ols_36_Township lag_all_ols_36_HR_muni lag_all_ols_36_NonHR_muni lag_all_ols_36_School using "by_type_lag_ols_regressions_appendix", append cells(none) stats(p_stat, fmt(%9.3f) labels(p_stat)) /// 
+esttab lag_all_ols_36_Other lag_all_ols_36_Township lag_all_ols_36_HR_muni lag_all_ols_36_NonHR_muni lag_all_ols_36_School using "by_type_lag_ols_regressions_appendix", append star(* 0.10 ** 0.05 *** 0.01) cells(none) stats(p_stat, fmt(%9.3f) labels(p_stat)) /// 
 	nomtitles nolines nonumbers
-esttab blank1 blank2 lag_all_ols_37_HR_muni lag_all_ols_37_NonHR_muni lag_all_ols_37_School  using "by_type_lag_ols_regressions_appendix", append cells(none) stats(p_stat, fmt(%9.3fc) labels(p_stat)) nomtitles nolines nonumbers 
-esttab blank1 blank2 lag_all_ols_38_HR_muni lag_all_ols_38_NonHR_muni lag_all_ols_38_School  using "by_type_lag_ols_regressions_appendix", append cells(none) stats(p_stat, fmt(%9.3f) labels(p_stat)) nomtitles nolines nonumbers 
-esttab blank1 blank2 blank3 blank4 lag_all_ols_39_School  using "by_type_lag_ols_regressions_appendix", append cells(none) stats(p_stat, fmt(%9.3f) labels(p_stat)) nomtitles nolines nonumbers ///
+esttab blank1 blank2 lag_all_ols_37_HR_muni lag_all_ols_37_NonHR_muni lag_all_ols_37_School  using "by_type_lag_ols_regressions_appendix", append star(* 0.10 ** 0.05 *** 0.01) cells(none) stats(p_stat, fmt(%9.3fc) labels(p_stat)) nomtitles nolines nonumbers 
+esttab blank1 blank2 lag_all_ols_38_HR_muni lag_all_ols_38_NonHR_muni lag_all_ols_38_School  using "by_type_lag_ols_regressions_appendix", append star(* 0.10 ** 0.05 *** 0.01) cells(none) stats(p_stat, fmt(%9.3f) labels(p_stat)) nomtitles nolines nonumbers 
+esttab blank1 blank2 blank3 blank4 lag_all_ols_39_School  using "by_type_lag_ols_regressions_appendix", append star(* 0.10 ** 0.05 *** 0.01) cells(none) stats(p_stat, fmt(%9.3f) labels(p_stat)) nomtitles nolines nonumbers ///
 postfoot("Cook county, Illinois data from 2008 through 2023. Cell entries record the p value for the hypothesis that the elasticity of the levy with respect lags of d_eav sum to zero"  ///
 "All estimates are derived from the same OLS regressions used to estimate the upper bounds reported in Table 11." )
 				
@@ -1101,22 +1350,22 @@ postfoot("Cook county, Illinois data from 2008 through 2023. Cell entries record
 * create  table A9 point estimate for the sum of lags  collabels("sum of lags")
 ******************************************************************************
 esttab lag_all_ols_34_Other lag_all_ols_34_Township lag_all_ols_34_HR_muni lag_all_ols_34_NonHR_muni lag_all_ols_34_School ///
-    using "ols_lag_regressions_appendix_point", replace cells(none)   mtitles(Other Township HR_muni NonHR_muni School) ///
+    using "ols_lag_regressions_appendix_point", replace star(* 0.10 ** 0.05 *** 0.01) cells(none)   mtitles(Other Township HR_muni NonHR_muni School) ///
     nolines title(Table A9 By agency type: OLS point estimate of ε_b allowing for 2 lags)  stats(lagged_magnitude lagged_p, fmt(%9.3f %9.3f) labels(sum_ε_b "    lagged_p")  ) 
 
-esttab lag_all_ols_35_Other lag_all_ols_35_Township lag_all_ols_35_HR_muni lag_all_ols_35_NonHR_muni lag_all_ols_35_School using "ols_lag_regressions_appendix_point", append cells(none) nomtitles nolines nonumbers ///
+esttab lag_all_ols_35_Other lag_all_ols_35_Township lag_all_ols_35_HR_muni lag_all_ols_35_NonHR_muni lag_all_ols_35_School using "ols_lag_regressions_appendix_point", append star(* 0.10 ** 0.05 *** 0.01) cells(none) nomtitles nolines nonumbers ///
 	stats(lagged_magnitude lagged_p, fmt(%9.3f %9.3f) labels(sum_ε_b "   lagged_p")  )  
 
-esttab lag_all_ols_36_Other lag_all_ols_36_Township lag_all_ols_36_HR_muni lag_all_ols_36_NonHR_muni lag_all_ols_36_School using "ols_lag_regressions_appendix_point", append cells(none) nomtitles nolines nonumbers ///
+esttab lag_all_ols_36_Other lag_all_ols_36_Township lag_all_ols_36_HR_muni lag_all_ols_36_NonHR_muni lag_all_ols_36_School using "ols_lag_regressions_appendix_point", append star(* 0.10 ** 0.05 *** 0.01) cells(none) nomtitles nolines nonumbers ///
 	stats(lagged_magnitude lagged_p, fmt(%9.3f %9.3f) labels(sum_ε_b "   lagged_p")  )  
 	
-esttab blank1 blank2 lag_all_ols_37_HR_muni lag_all_ols_37_NonHR_muni lag_all_ols_37_School using "ols_lag_regressions_appendix_point", append cells(none) nomtitles nolines nonumbers ///
+esttab blank1 blank2 lag_all_ols_37_HR_muni lag_all_ols_37_NonHR_muni lag_all_ols_37_School using "ols_lag_regressions_appendix_point", append star(* 0.10 ** 0.05 *** 0.01) cells(none) nomtitles nolines nonumbers ///
 	stats(lagged_magnitude lagged_p, fmt(%9.3f %9.3f) labels(sum_ε_b "   lagged_p")  )  
 
-esttab blank1 blank2 lag_all_ols_38_HR_muni lag_all_ols_38_NonHR_muni lag_all_ols_38_School using "ols_lag_regressions_appendix_point", append cells(none) nomtitles nolines nonumbers ///
+esttab blank1 blank2 lag_all_ols_38_HR_muni lag_all_ols_38_NonHR_muni lag_all_ols_38_School using "ols_lag_regressions_appendix_point", append star(* 0.10 ** 0.05 *** 0.01) cells(none) nomtitles nolines nonumbers ///
 	stats(lagged_magnitude lagged_p, fmt(%9.3f %9.3f) labels(sum_ε_b "   lagged_p")  )  
 	
-esttab blank1 blank2 blank3 blank4 lag_all_ols_39_School using "ols_lag_regressions_appendix_point", append cells(none) nomtitles nolines nonumbers ///
+esttab blank1 blank2 blank3 blank4 lag_all_ols_39_School using "ols_lag_regressions_appendix_point", append star(* 0.10 ** 0.05 *** 0.01) cells(none) nomtitles nolines nonumbers ///
 	stats(lagged_magnitude lagged_p, fmt(%9.3f %9.3f) labels(sum_ε_b "   lagged_p")  )  ///
 postfoot("Cook county, Illinois data from 2008 through 2023. Cell entries give the estimated sum of the coefficients d_eav, d2_eav and d3_eav and (in row below)" ///
 "the p statistics for the hypothesis that those coefficients sum to zero" ///
@@ -1125,17 +1374,17 @@ postfoot("Cook county, Illinois data from 2008 through 2023. Cell entries give t
 
 * Detailed IV review tables and machine-readable validation.
 local review_symmetric "all_iv_1 all_iv_2 all_iv_3 ivreg7_Other ivreg7_Township ivreg7_HR_muni ivreg7_NonHR_muni ivreg7_School ivreg8_Other ivreg8_Township ivreg8_HR_muni ivreg8_NonHR_muni ivreg8_School ivreg9_Other ivreg9_Township ivreg9_HR_muni ivreg9_NonHR_muni ivreg9_School ivreg10_HR_muni ivreg10_NonHR_muni ivreg10_School ivreg11_HR_muni ivreg11_NonHR_muni ivreg11_School ivreg12_School"
-esttab all_iv_1 all_iv_2 all_iv_3 ivreg7_Other ivreg7_Township using "IV_symmetric_full_details.txt", replace cells(b(star fmt(6)) se(par fmt(6))) keep(d_eav) stats(N N_clust regF p_exog idp widstat, fmt(6)) mtitles title("IV symmetric: clustered SEs; endogeneity C test; KP rank diagnostics")
-esttab ivreg7_HR_muni ivreg7_NonHR_muni ivreg7_School ivreg8_Other ivreg8_Township using "IV_symmetric_full_details.txt", append cells(b(star fmt(6)) se(par fmt(6))) keep(d_eav) stats(N N_clust regF p_exog idp widstat, fmt(6)) mtitles title("IV symmetric: clustered SEs; endogeneity C test; KP rank diagnostics")
-esttab ivreg8_HR_muni ivreg8_NonHR_muni ivreg8_School ivreg9_Other ivreg9_Township using "IV_symmetric_full_details.txt", append cells(b(star fmt(6)) se(par fmt(6))) keep(d_eav) stats(N N_clust regF p_exog idp widstat, fmt(6)) mtitles title("IV symmetric: clustered SEs; endogeneity C test; KP rank diagnostics")
-esttab ivreg9_HR_muni ivreg9_NonHR_muni ivreg9_School ivreg10_HR_muni ivreg10_NonHR_muni using "IV_symmetric_full_details.txt", append cells(b(star fmt(6)) se(par fmt(6))) keep(d_eav) stats(N N_clust regF p_exog idp widstat, fmt(6)) mtitles title("IV symmetric: clustered SEs; endogeneity C test; KP rank diagnostics")
-esttab ivreg10_School ivreg11_HR_muni ivreg11_NonHR_muni ivreg11_School ivreg12_School using "IV_symmetric_full_details.txt", append cells(b(star fmt(6)) se(par fmt(6))) keep(d_eav) stats(N N_clust regF p_exog idp widstat, fmt(6)) mtitles title("IV symmetric: clustered SEs; endogeneity C test; KP rank diagnostics")
+esttab all_iv_1 all_iv_2 all_iv_3 ivreg7_Other ivreg7_Township using "IV_symmetric_full_details.txt", replace star(* 0.10 ** 0.05 *** 0.01) cells(b(star fmt(6)) se(par fmt(6))) keep(d_eav) stats(N N_clust regF p_exog idp widstat, fmt(6)) mtitles title("IV symmetric: clustered SEs; endogeneity C test; KP rank diagnostics")
+esttab ivreg7_HR_muni ivreg7_NonHR_muni ivreg7_School ivreg8_Other ivreg8_Township using "IV_symmetric_full_details.txt", append star(* 0.10 ** 0.05 *** 0.01) cells(b(star fmt(6)) se(par fmt(6))) keep(d_eav) stats(N N_clust regF p_exog idp widstat, fmt(6)) mtitles title("IV symmetric: clustered SEs; endogeneity C test; KP rank diagnostics")
+esttab ivreg8_HR_muni ivreg8_NonHR_muni ivreg8_School ivreg9_Other ivreg9_Township using "IV_symmetric_full_details.txt", append star(* 0.10 ** 0.05 *** 0.01) cells(b(star fmt(6)) se(par fmt(6))) keep(d_eav) stats(N N_clust regF p_exog idp widstat, fmt(6)) mtitles title("IV symmetric: clustered SEs; endogeneity C test; KP rank diagnostics")
+esttab ivreg9_HR_muni ivreg9_NonHR_muni ivreg9_School ivreg10_HR_muni ivreg10_NonHR_muni using "IV_symmetric_full_details.txt", append star(* 0.10 ** 0.05 *** 0.01) cells(b(star fmt(6)) se(par fmt(6))) keep(d_eav) stats(N N_clust regF p_exog idp widstat, fmt(6)) mtitles title("IV symmetric: clustered SEs; endogeneity C test; KP rank diagnostics")
+esttab ivreg10_School ivreg11_HR_muni ivreg11_NonHR_muni ivreg11_School ivreg12_School using "IV_symmetric_full_details.txt", append star(* 0.10 ** 0.05 *** 0.01) cells(b(star fmt(6)) se(par fmt(6))) keep(d_eav) stats(N N_clust regF p_exog idp widstat, fmt(6)) mtitles title("IV symmetric: clustered SEs; endogeneity C test; KP rank diagnostics")
 local review_asymmetric "reg_16 reg_17 reg_18 ivreg25_Other ivreg25_Township ivreg25_HR_muni ivreg25_NonHR_muni ivreg25_School ivreg26_Other ivreg26_Township ivreg26_HR_muni ivreg26_NonHR_muni ivreg26_School ivreg27_Other ivreg27_Township ivreg27_HR_muni ivreg27_NonHR_muni ivreg27_School ivreg28_HR_muni ivreg28_NonHR_muni ivreg28_School ivreg29_HR_muni ivreg29_NonHR_muni ivreg29_School ivreg30_School"
-esttab reg_16 reg_17 reg_18 ivreg25_Other ivreg25_Township using "IV_asymmetric_full_details.txt", replace cells(b(star fmt(6)) se(par fmt(6))) keep(neg_d_eav pos_d_eav) stats(N N_clust F_neg F_pos SW_neg SW_pos p_exog p_equal idp widstat, fmt(6)) mtitles title("IV asymmetric: clustered SEs; endogeneity C test; KP rank diagnostics")
-esttab ivreg25_HR_muni ivreg25_NonHR_muni ivreg25_School ivreg26_Other ivreg26_Township using "IV_asymmetric_full_details.txt", append cells(b(star fmt(6)) se(par fmt(6))) keep(neg_d_eav pos_d_eav) stats(N N_clust F_neg F_pos SW_neg SW_pos p_exog p_equal idp widstat, fmt(6)) mtitles title("IV asymmetric: clustered SEs; endogeneity C test; KP rank diagnostics")
-esttab ivreg26_HR_muni ivreg26_NonHR_muni ivreg26_School ivreg27_Other ivreg27_Township using "IV_asymmetric_full_details.txt", append cells(b(star fmt(6)) se(par fmt(6))) keep(neg_d_eav pos_d_eav) stats(N N_clust F_neg F_pos SW_neg SW_pos p_exog p_equal idp widstat, fmt(6)) mtitles title("IV asymmetric: clustered SEs; endogeneity C test; KP rank diagnostics")
-esttab ivreg27_HR_muni ivreg27_NonHR_muni ivreg27_School ivreg28_HR_muni ivreg28_NonHR_muni using "IV_asymmetric_full_details.txt", append cells(b(star fmt(6)) se(par fmt(6))) keep(neg_d_eav pos_d_eav) stats(N N_clust F_neg F_pos SW_neg SW_pos p_exog p_equal idp widstat, fmt(6)) mtitles title("IV asymmetric: clustered SEs; endogeneity C test; KP rank diagnostics")
-esttab ivreg28_School ivreg29_HR_muni ivreg29_NonHR_muni ivreg29_School ivreg30_School using "IV_asymmetric_full_details.txt", append cells(b(star fmt(6)) se(par fmt(6))) keep(neg_d_eav pos_d_eav) stats(N N_clust F_neg F_pos SW_neg SW_pos p_exog p_equal idp widstat, fmt(6)) mtitles title("IV asymmetric: clustered SEs; endogeneity C test; KP rank diagnostics")
+esttab reg_16 reg_17 reg_18 ivreg25_Other ivreg25_Township using "IV_asymmetric_full_details.txt", replace star(* 0.10 ** 0.05 *** 0.01) cells(b(star fmt(6)) se(par fmt(6))) keep(neg_d_eav pos_d_eav) stats(N N_clust F_neg F_pos SW_neg SW_pos p_exog p_equal idp widstat, fmt(6)) mtitles title("IV asymmetric: clustered SEs; endogeneity C test; KP rank diagnostics")
+esttab ivreg25_HR_muni ivreg25_NonHR_muni ivreg25_School ivreg26_Other ivreg26_Township using "IV_asymmetric_full_details.txt", append star(* 0.10 ** 0.05 *** 0.01) cells(b(star fmt(6)) se(par fmt(6))) keep(neg_d_eav pos_d_eav) stats(N N_clust F_neg F_pos SW_neg SW_pos p_exog p_equal idp widstat, fmt(6)) mtitles title("IV asymmetric: clustered SEs; endogeneity C test; KP rank diagnostics")
+esttab ivreg26_HR_muni ivreg26_NonHR_muni ivreg26_School ivreg27_Other ivreg27_Township using "IV_asymmetric_full_details.txt", append star(* 0.10 ** 0.05 *** 0.01) cells(b(star fmt(6)) se(par fmt(6))) keep(neg_d_eav pos_d_eav) stats(N N_clust F_neg F_pos SW_neg SW_pos p_exog p_equal idp widstat, fmt(6)) mtitles title("IV asymmetric: clustered SEs; endogeneity C test; KP rank diagnostics")
+esttab ivreg27_HR_muni ivreg27_NonHR_muni ivreg27_School ivreg28_HR_muni ivreg28_NonHR_muni using "IV_asymmetric_full_details.txt", append star(* 0.10 ** 0.05 *** 0.01) cells(b(star fmt(6)) se(par fmt(6))) keep(neg_d_eav pos_d_eav) stats(N N_clust F_neg F_pos SW_neg SW_pos p_exog p_equal idp widstat, fmt(6)) mtitles title("IV asymmetric: clustered SEs; endogeneity C test; KP rank diagnostics")
+esttab ivreg28_School ivreg29_HR_muni ivreg29_NonHR_muni ivreg29_School ivreg30_School using "IV_asymmetric_full_details.txt", append star(* 0.10 ** 0.05 *** 0.01) cells(b(star fmt(6)) se(par fmt(6))) keep(neg_d_eav pos_d_eav) stats(N N_clust F_neg F_pos SW_neg SW_pos p_exog p_equal idp widstat, fmt(6)) mtitles title("IV asymmetric: clustered SEs; endogeneity C test; KP rank diagnostics")
 tempname audit
 postfile `audit' str32 model str20 term double b se N clusters first_F SW_F p_endog p_underid KP_F using "iv_model_audit.dta", replace
 foreach model in `review_symmetric' `review_asymmetric' {
@@ -1163,7 +1412,7 @@ use "iv_model_audit.dta", clear
 export delimited using "iv_model_audit.csv", replace
 restore
 
-di as result "DFM ALIGNED IV RUN COMPLETED SUCCESSFULLY"
+di as result "DFM ALIGNED MAIN TABLES RUN COMPLETED SUCCESSFULLY"
 exit
 
 

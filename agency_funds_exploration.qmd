@@ -15,7 +15,7 @@ library(DBI)
 #| eval: false
 
 ptaxsim_db_conn <- DBI::dbConnect(RSQLite::SQLite(), 
-  "C:/Users/aleaw/OneDrive/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/ptaxsim.db/ptaxsim-2023.0.0.db")
+  "C:/Users/aleaw/Documents/PhD Fall 2021 - Spring 2022/Merriman RA/ptax/ptaxsim.db/ptaxsim-2024.0.0.db")
 
 agency_fund <- DBI::dbGetQuery(
   ptaxsim_db_conn,
@@ -44,11 +44,11 @@ agency_funds <- left_join(agency_fund, agency_fund_info)
 
 agency_funds <- left_join(agency_funds, agency_names)
 
-agency_funds %>% write_csv("agency_funds.csv")
+agency_funds %>% write_csv("agency_funds_db2024.csv")
 ```
 
 ```{r}
-agency_funds <- read_csv("agency_funds.csv")
+agency_funds <- read_csv("agency_funds_db2024.csv")
 
 table(agency_funds$fund_name, agency_funds$year)
 
@@ -79,6 +79,7 @@ agency_funds %>%
   summarize(n = n(),
             amount = sum(levy, na.rm = TRUE))
 ```
+
 Inspect Library funds - are they library agencies or muni agencies?
 
 ```{r}
