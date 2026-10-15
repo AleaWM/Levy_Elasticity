@@ -545,7 +545,7 @@ df <- df %>%
 # confirmed they have same obsevations
 #df |> write_rds("NTA_data_2026_03_01.RDS")
 
-df |> write_csv("NTA_data_2026_10_02.cvs")
+df |> write_csv("./NTA_2026_Pittsburg/NTA_data_2026_10_02.csv")
 
 ```
 
@@ -554,7 +554,7 @@ df |> write_csv("NTA_data_2026_10_02.cvs")
 #| warning: false
 #| message: false
 
-df <- read_csv("./NTA_2026_Pittsburg/replicate_2026_03_01.csv")
+df <- read_csv("./NTA_2026_Pittsburg/NTA_data_2026_10_02.csv")
 
 df %>% 
   filter(is.na(assess_year_eav)) %>% 
